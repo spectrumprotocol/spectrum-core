@@ -1,0 +1,2 @@
+8dd34f29d12250330c66190da8b4ca4ce22889f34346d73d7ad0b64d45af966e  target/wasm32-unknown-unknown/release/spectrum_astroport_farm.wasm
+0091ded0b60f36d88d6812527c8956e7577af221eab5dac6dd3ac650c39b2f63  target/wasm32-unknown-unknown/release/spectrum_fees_collector.wasm

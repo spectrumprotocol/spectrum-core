@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# Text file backups
+**/*.rs.bk
+
+# Build results
+target/
+debug/
+
+# IDEs
+.vscode/
+.idea/
+*.iml

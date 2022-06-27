@@ -1,0 +1,2 @@
+7479f832d5a8ee578b40241f84a1cb992c8756b8e446deacbebc313cc74eebcc  spectrum_astroport_farm.wasm
+cedfeb51dfc64d88a58e6d7e889b7b45c87225c5400328da8866952442208d71  spectrum_fees_collector.wasm
