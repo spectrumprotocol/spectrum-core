@@ -1,8 +1,10 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "QueryMsg",
+  "description": "This structure describes the query functions available in the contract.",
   "oneOf": [
     {
+      "description": "Returns information about the maker configs that contains in the [`ConfigResponse`]",
       "type": "object",
       "required": [
         "config"
@@ -15,6 +17,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Returns the balance for each asset in the specified input parameters",
       "type": "object",
       "required": [
         "balances"
@@ -36,6 +39,18 @@
         }
       },
       "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "bridges"
+      ],
+      "properties": {
+        "bridges": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
     }
   ],
   "definitions": {
@@ -44,8 +59,10 @@
       "type": "string"
     },
     "AssetInfo": {
+      "description": "This enum describes available Token types. ## Examples ``` # use cosmwasm_std::Addr; # use astroport::asset::AssetInfo::{NativeToken, Token}; Token { contract_addr: Addr::unchecked(\"terra...\") }; NativeToken { denom: String::from(\"uluna\") }; ```",
       "oneOf": [
         {
+          "description": "Non-native Token",
           "type": "object",
           "required": [
             "token"
@@ -66,6 +83,7 @@
           "additionalProperties": false
         },
         {
+          "description": "Native token",
           "type": "object",
           "required": [
             "native_token"
