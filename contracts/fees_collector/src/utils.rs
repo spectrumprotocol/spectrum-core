@@ -1,10 +1,10 @@
 use crate::error::ContractError;
 use crate::state::{Config, BRIDGES};
 use astroport::asset::{Asset, AssetInfo, PairInfo};
-use astroport::maker::ExecuteMsg;
 use astroport::pair::Cw20HookMsg;
 use astroport::querier::query_pair_info;
 use cosmwasm_std::{to_binary, Coin, Deps, Env, StdResult, SubMsg, Uint128, WasmMsg};
+use spectrum::fees_collector::ExecuteMsg;
 
 /// The default bridge depth for a fee token
 pub const BRIDGES_INITIAL_DEPTH: u64 = 0;
@@ -92,7 +92,7 @@ pub fn build_distribute_msg(
         // Update balances and distribute rewards
         SubMsg::new(WasmMsg::Execute {
             contract_addr: env.contract.address.to_string(),
-            msg: to_binary(&ExecuteMsg::DistributeAstro {})?,
+            msg: to_binary(&ExecuteMsg::DistributeFees {})?,
             funds: vec![],
         })
     };

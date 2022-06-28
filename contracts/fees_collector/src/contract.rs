@@ -487,9 +487,8 @@ fn distribute(
     } else {
         let send_msg = CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: cfg.stablecoin_token_contract.to_string(),
-            msg: to_binary(&Cw20ExecuteMsg::Send {
-                contract: cfg.beneficiary.to_string(),
-                msg: Binary::default(),
+            msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                recipient: cfg.beneficiary.to_string(),
                 amount,
             })?,
             funds: vec![],
