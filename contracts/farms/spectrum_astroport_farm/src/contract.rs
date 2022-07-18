@@ -1,3 +1,5 @@
+use astroport::asset::addr_validate_to_lower;
+
 use cosmwasm_std::{
     attr, entry_point, from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo,
     Response, StdError, StdResult, Uint128,
@@ -5,17 +7,18 @@ use cosmwasm_std::{
 
 use crate::{
     bond::bond,
-    compound::compound,
+    compound::{compound, stake},
+    error::ContractError,
     state::{Config, PoolInfo, State, CONFIG},
 };
 
 use cw20::Cw20ReceiveMsg;
 
 use crate::bond::{query_reward_info, unbond};
-use crate::compound::send_fee;
 use crate::state::{POOL_INFO, STATE};
 use spectrum::astroport_farm::{
-    ConfigInfo, Cw20HookMsg, ExecuteMsg, MigrateMsg, PoolItem, PoolResponse, QueryMsg, StateInfo,
+    CallbackMsg, ConfigInfo, Cw20HookMsg, ExecuteMsg, MigrateMsg, PoolItem, PoolResponse, QueryMsg,
+    StateInfo,
 };
 
 /// (we require 0-1)
@@ -33,7 +36,7 @@ pub fn instantiate(
     _env: Env,
     _info: MessageInfo,
     msg: ConfigInfo,
-) -> StdResult<Response> {
+) -> Result<Response, ContractError> {
     validate_percentage(msg.community_fee, "community_fee")?;
     validate_percentage(msg.platform_fee, "platform_fee")?;
     validate_percentage(msg.controller_fee, "controller_fee")?;
@@ -41,21 +44,27 @@ pub fn instantiate(
     CONFIG.save(
         deps.storage,
         &Config {
-            owner: deps.api.addr_validate(&msg.owner)?,
-            spectrum_gov: deps.api.addr_validate(&msg.spectrum_gov)?,
-            astroport_generator: deps.api.addr_validate(&msg.astroport_generator)?,
-            astro_token: deps.api.addr_validate(&msg.astro_token)?,
-            compound_proxy: deps.api.addr_validate(&msg.compound_proxy)?,
-            platform: deps.api.addr_validate(&msg.platform)?,
-            controller: deps.api.addr_validate(&msg.controller)?,
+            owner: addr_validate_to_lower(deps.api, &msg.owner)?,
+            spectrum_gov: addr_validate_to_lower(deps.api, &msg.spectrum_gov)?,
+            astroport_generator: addr_validate_to_lower(deps.api, &msg.astroport_generator)?,
+            astro_token: addr_validate_to_lower(deps.api, &msg.astro_token)?,
+            compound_proxy: addr_validate_to_lower(deps.api, &msg.compound_proxy)?,
+            platform: addr_validate_to_lower(deps.api, &msg.platform)?,
+            controller: addr_validate_to_lower(deps.api, &msg.controller)?,
             base_denom: msg.base_denom,
             community_fee: msg.community_fee,
             platform_fee: msg.platform_fee,
             controller_fee: msg.controller_fee,
-            community_fee_collector: deps.api.addr_validate(&msg.community_fee_collector)?,
-            platform_fee_collector: deps.api.addr_validate(&msg.platform_fee_collector)?,
-            controller_fee_collector: deps.api.addr_validate(&msg.controller_fee_collector)?,
-            pair_contract: deps.api.addr_validate(&msg.pair_contract)?,
+            community_fee_collector: addr_validate_to_lower(
+                deps.api,
+                &msg.community_fee_collector,
+            )?,
+            platform_fee_collector: addr_validate_to_lower(deps.api, &msg.platform_fee_collector)?,
+            controller_fee_collector: addr_validate_to_lower(
+                deps.api,
+                &msg.controller_fee_collector,
+            )?,
+            pair_contract: addr_validate_to_lower(deps.api, &msg.pair_contract)?,
         },
     )?;
 
@@ -70,7 +79,12 @@ pub fn instantiate(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
+pub fn execute(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    msg: ExecuteMsg,
+) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
         ExecuteMsg::UpdateConfig {
@@ -92,11 +106,9 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             asset_token,
             staking_token,
         } => register_asset(deps, env, info, asset_token, staking_token),
-        ExecuteMsg::Unbond {
-            amount,
-        } => unbond(deps, env, info, amount),
-        ExecuteMsg::Compound {} => compound(deps, env, info),
-        ExecuteMsg::SendFee {} => send_fee(deps, env, info),
+        ExecuteMsg::Unbond { amount } => unbond(deps, env, info, amount),
+        ExecuteMsg::Compound { minimum_receive } => compound(deps, env, info, minimum_receive),
+        ExecuteMsg::Callback(msg) => handle_callback(deps, env, info, msg),
     }
 }
 
@@ -105,7 +117,7 @@ fn receive_cw20(
     env: Env,
     info: MessageInfo,
     cw20_msg: Cw20ReceiveMsg,
-) -> StdResult<Response> {
+) -> Result<Response, ContractError> {
     match from_binary(&cw20_msg.msg) {
         Ok(Cw20HookMsg::Bond { staker_addr }) => bond(
             deps,
@@ -114,7 +126,7 @@ fn receive_cw20(
             staker_addr.unwrap_or(cw20_msg.sender),
             cw20_msg.amount,
         ),
-        Err(_) => Err(StdError::generic_err("data should be given")),
+        Err(_) => Err(ContractError::InvalidMessage {}),
     }
 }
 
@@ -127,22 +139,22 @@ pub fn update_config(
     community_fee: Option<Decimal>,
     platform_fee: Option<Decimal>,
     controller_fee: Option<Decimal>,
-) -> StdResult<Response> {
+) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
-    if deps.api.addr_validate(info.sender.as_str())? != config.owner {
-        return Err(StdError::generic_err("unauthorized"));
+    if addr_validate_to_lower(deps.api, info.sender.as_str())? != config.owner {
+        return Err(ContractError::Unauthorized {});
     }
 
     if let Some(owner) = owner {
         if config.owner == config.spectrum_gov {
-            return Err(StdError::generic_err("cannot update owner"));
+            return Err(ContractError::CannotUpdateOwner {});
         }
-        config.owner = deps.api.addr_validate(&owner)?;
+        config.owner = addr_validate_to_lower(deps.api, &owner)?;
     }
 
     if let Some(controller) = controller {
-        config.controller = deps.api.addr_validate(&controller)?;
+        config.controller = addr_validate_to_lower(deps.api, &controller)?;
     }
 
     if let Some(community_fee) = community_fee {
@@ -171,23 +183,23 @@ fn register_asset(
     info: MessageInfo,
     asset_token: String,
     staking_token: String,
-) -> StdResult<Response> {
+) -> Result<Response, ContractError> {
     let config: Config = CONFIG.load(deps.storage)?;
 
-    if config.owner != deps.api.addr_validate(info.sender.as_str())? {
-        return Err(StdError::generic_err("unauthorized"));
+    if config.owner != info.sender {
+        return Err(ContractError::Unauthorized {});
     }
 
     let pool = POOL_INFO.may_load(deps.storage)?;
 
     if pool.is_some() {
-        return Err(StdError::generic_err("Already registered one asset"));
+        return Err(ContractError::AssetRegistered {});
     } else {
         let pool_info = POOL_INFO
             .may_load(deps.storage)?
             .unwrap_or_else(|| PoolInfo {
-                asset_token: deps.api.addr_validate(&asset_token).unwrap(),
-                staking_token: deps.api.addr_validate(&staking_token).unwrap(),
+                asset_token: addr_validate_to_lower(deps.api, &asset_token).unwrap(),
+                staking_token: addr_validate_to_lower(deps.api, &staking_token).unwrap(),
                 total_bond_share: Uint128::zero(),
             });
 
@@ -196,6 +208,35 @@ fn register_asset(
             attr("action", "register_asset"),
             attr("asset_token", asset_token),
         ]))
+    }
+}
+
+/// # Description
+/// Handle the callbacks describes in the [`CallbackMsg`]. Returns an [`ContractError`] on failure, otherwise returns the [`Response`]
+/// object with the specified submessages if the operation was successful.
+/// # Params
+/// * **deps** is the object of type [`DepsMut`].
+///
+/// * **env** is the object of type [`Env`].
+///
+/// * **info** is the object of type [`MessageInfo`].
+///
+/// * **msg** is the object of type [`CallbackMsg`]. Sets the callback action.
+///
+/// ## Executor
+/// Callback functions can only be called this contract itself
+pub fn handle_callback(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    msg: CallbackMsg,
+) -> Result<Response, ContractError> {
+    // Callback functions can only be called this contract itself
+    if info.sender != env.contract.address {
+        return Err(ContractError::Unauthorized {});
+    }
+    match msg {
+        CallbackMsg::Stake {} => stake(deps, env, info),
     }
 }
 

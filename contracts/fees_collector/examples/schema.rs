@@ -3,7 +3,7 @@ use std::fs::create_dir_all;
 
 use cosmwasm_schema::{export_schema_with_title, remove_schemas, schema_for};
 
-use astroport::maker::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
+use spectrum::fees_collector::{ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
 
 fn main() {
     let mut out_dir = current_dir().unwrap();

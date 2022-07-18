@@ -179,3 +179,87 @@ terra167dsqkh2alurx997wmycw9ydkyu54gyswe3ygmrs4lwume3vmwks8ruqnv
     "msg": "eyJzd2FwIjp7Im1heF9zcHJlYWQiOiIwLjAwNSIsImJlbGllZl9wcmljZSI6IjEyMy43MDI2NjgyNjY1NTQ1MDk1ODAifX0="
   }
 }
+
+{
+    "asset_infos": [
+        {
+            "token": {
+                "contract_addr": "terra1s50rr0vz05xmmkz5wnc2kqkjq5ldwjrdv4sqzf983pzfxuj7jgsq4ehcu2"
+            }
+        },
+        {
+            "token": {
+                "contract_addr": "terra167dsqkh2alurx997wmycw9ydkyu54gyswe3ygmrs4lwume3vmwks8ruqnv"
+            }
+        }
+    ],
+    "factory_addr": "terra1z3y69xas85r7egusa0c7m5sam0yk97gsztqmh8f2cc6rr4s4anysudp7k0",
+    "operations": [
+        {
+            "astro_swap": {
+                "offer_asset_info": {
+                    "token": {
+                        "contract_addr": "terra1s50rr0vz05xmmkz5wnc2kqkjq5ldwjrdv4sqzf983pzfxuj7jgsq4ehcu2"
+                    }
+                },
+                "ask_asset_info": {
+                    "native_token": {
+                        "denom": "uluna"
+                    }
+                }
+            }
+        },
+        {
+            "astro_swap": {
+                "offer_asset_info": {
+                    "native_token": {
+                        "denom": "uluna"
+                    }
+                },
+                "ask_asset_info": {
+                    "token": {
+                        "contract_addr": "terra167dsqkh2alurx997wmycw9ydkyu54gyswe3ygmrs4lwume3vmwks8ruqnv"
+                    }
+                }
+            }
+        }
+    ]
+}
+
+{
+    "execute_swap_operations": {
+        "offer_amount": "1000000",
+        "operations": [
+            {
+                "astro_swap": {
+                    "offer_asset_info": {
+                        "token": {
+                            "contract_addr": "terra167dsqkh2alurx997wmycw9ydkyu54gyswe3ygmrs4lwume3vmwks8ruqnv"
+                        }
+                    },
+                    "ask_asset_info": {
+                        "native_token": {
+                            "denom": "uluna"
+                        }
+                    }
+                }
+            },
+            {
+                "astro_swap": {
+                    "offer_asset_info": {
+                        "native_token": {
+                            "denom": "uluna"
+                        }
+                    },
+                    "ask_asset_info": {
+                        "token": {
+                            "contract_addr": "terra1s50rr0vz05xmmkz5wnc2kqkjq5ldwjrdv4sqzf983pzfxuj7jgsq4ehcu2"
+                        }
+                    }
+                }
+            }
+        ],
+        "minimum_receive": "1656343",
+        "max_spread": "0.15"
+    }
+}

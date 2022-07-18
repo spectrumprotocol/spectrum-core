@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "InstantiateMsg",
+  "description": "This structure describes the basic settings for creating a contract.",
+  "type": "object",
+  "required": [
+    "commission_bps",
+    "pair_contract",
+    "pair_proxy_contract"
+  ],
+  "properties": {
+    "commission_bps": {
+      "description": "the swap commission",
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "pair_contract": {
+      "description": "the pair contract address",
+      "type": "string"
+    },
+    "pair_proxy_contract": {
+      "description": "the pair proxy contract address to perform swap",
+      "type": "string"
+    }
+  }
+}

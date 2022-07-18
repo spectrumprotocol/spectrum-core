@@ -7,15 +7,16 @@
     "astroport_generator",
     "base_denom",
     "community_fee",
+    "community_fee_collector",
     "compound_proxy",
     "controller",
     "controller_fee",
-    "deposit_fee",
-    "fees_collector",
+    "controller_fee_collector",
     "owner",
     "pair_contract",
     "platform",
     "platform_fee",
+    "platform_fee_collector",
     "spectrum_gov"
   ],
   "properties": {
@@ -31,6 +32,9 @@
     "community_fee": {
       "$ref": "#/definitions/Decimal"
     },
+    "community_fee_collector": {
+      "type": "string"
+    },
     "compound_proxy": {
       "type": "string"
     },
@@ -40,10 +44,7 @@
     "controller_fee": {
       "$ref": "#/definitions/Decimal"
     },
-    "deposit_fee": {
-      "$ref": "#/definitions/Decimal"
-    },
-    "fees_collector": {
+    "controller_fee_collector": {
       "type": "string"
     },
     "owner": {
@@ -57,6 +58,9 @@
     },
     "platform_fee": {
       "$ref": "#/definitions/Decimal"
+    },
+    "platform_fee_collector": {
+      "type": "string"
     },
     "spectrum_gov": {
       "type": "string"

@@ -4,7 +4,7 @@
   "description": "This structure describes the functions that can be executed in this contract.",
   "oneOf": [
     {
-      "description": "Collects and swaps fee tokens to ASTRO",
+      "description": "Collects and swaps fee tokens to stablecoin",
       "type": "object",
       "required": [
         "collect"
@@ -17,7 +17,7 @@
           ],
           "properties": {
             "assets": {
-              "description": "The assets to swap to ASTRO",
+              "description": "The assets to swap to stablecoin",
               "type": "array",
               "items": {
                 "$ref": "#/definitions/AssetWithLimit"
@@ -38,6 +38,13 @@
         "update_config": {
           "type": "object",
           "properties": {
+            "beneficiary": {
+              "description": "The beneficiary address",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "factory_contract": {
               "description": "The factory contract address",
               "type": [
@@ -45,30 +52,8 @@
                 "null"
               ]
             },
-            "governance_contract": {
-              "description": "The governance contract address (fee distributor for vxASTRO)",
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/UpdateAddr"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "governance_percent": {
-              "description": "The percentage of fees that go to governance_contract",
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/Uint64"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
             "max_spread": {
-              "description": "The maximum spread used when swapping fee tokens to ASTRO",
+              "description": "The maximum spread used when swapping fee tokens to stablecoin",
               "anyOf": [
                 {
                   "$ref": "#/definitions/Decimal"
@@ -77,13 +62,6 @@
                   "type": "null"
                 }
               ]
-            },
-            "staking_contract": {
-              "description": "The xASTRO staking contract address",
-              "type": [
-                "string",
-                "null"
-              ]
             }
           }
         }
@@ -91,7 +69,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Add bridge tokens used to swap specific fee tokens to ASTRO (effectively declaring a swap route)",
+      "description": "Add bridge tokens used to swap specific fee tokens to stablecoin (effectively declaring a swap route)",
       "type": "object",
       "required": [
         "update_bridges"
@@ -164,13 +142,13 @@
       "additionalProperties": false
     },
     {
-      "description": "Distribute ASTRO to stakers and to governance",
+      "description": "Distribute stablecoin to beneficiary",
       "type": "object",
       "required": [
-        "distribute_astro"
+        "distribute_fees"
       ],
       "properties": {
-        "distribute_astro": {
+        "distribute_fees": {
           "type": "object"
         }
       },
@@ -227,29 +205,6 @@
       "properties": {
         "claim_ownership": {
           "type": "object"
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "description": "Enables the distribution of current fees accrued in the contract over \"blocks\" number of blocks",
-      "type": "object",
-      "required": [
-        "enable_rewards"
-      ],
-      "properties": {
-        "enable_rewards": {
-          "type": "object",
-          "required": [
-            "blocks"
-          ],
-          "properties": {
-            "blocks": {
-              "type": "integer",
-              "format": "uint64",
-              "minimum": 0.0
-            }
-          }
         }
       },
       "additionalProperties": false
@@ -342,42 +297,6 @@
     "Uint128": {
       "description": "A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u128` to get the value out:\n\n``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);\n\nlet b = Uint128::from(42u64); assert_eq!(b.u128(), 42);\n\nlet c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```",
       "type": "string"
-    },
-    "Uint64": {
-      "description": "A thin wrapper around u64 that is using strings for JSON encoding/decoding, such that the full u64 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u64` to get the value out:\n\n``` # use cosmwasm_std::Uint64; let a = Uint64::from(42u64); assert_eq!(a.u64(), 42);\n\nlet b = Uint64::from(70u32); assert_eq!(b.u64(), 70); ```",
-      "type": "string"
-    },
-    "UpdateAddr": {
-      "title": "Description",
-      "description": "This is an enumeration for setting and unsetting a contract address.",
-      "oneOf": [
-        {
-          "description": "Sets a new contract address.",
-          "type": "object",
-          "required": [
-            "set"
-          ],
-          "properties": {
-            "set": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "description": "Removes contract address.",
-          "type": "object",
-          "required": [
-            "remove"
-          ],
-          "properties": {
-            "remove": {
-              "type": "object"
-            }
-          },
-          "additionalProperties": false
-        }
-      ]
     }
   }
 }

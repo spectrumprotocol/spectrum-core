@@ -1,8 +1,10 @@
+use astroport::asset::addr_validate_to_lower;
 use cosmwasm_std::{
-    attr, to_binary, Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdError,
+    attr, to_binary, Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response,
     StdResult, Uint128, WasmMsg,
 };
 
+use crate::error::ContractError;
 use crate::state::{Config, PoolInfo, RewardInfo, CONFIG, POOL_INFO, REWARD};
 
 use cw20::Cw20ExecuteMsg;
@@ -20,14 +22,14 @@ pub fn bond(
     info: MessageInfo,
     sender_addr: String,
     amount: Uint128,
-) -> StdResult<Response> {
-    let staker_addr = deps.api.addr_validate(&sender_addr)?;
+) -> Result<Response, ContractError> {
+    let staker_addr = addr_validate_to_lower(deps.api, &sender_addr)?;
 
     let pool_info = POOL_INFO.load(deps.storage)?;
 
     // only staking token contract can execute this message
-    if pool_info.staking_token != deps.api.addr_validate(info.sender.as_str())? {
-        return Err(StdError::generic_err("unauthorized"));
+    if pool_info.staking_token != addr_validate_to_lower(deps.api, info.sender.as_str())? {
+        return Err(ContractError::Unauthorized {});
     }
 
     let config = CONFIG.load(deps.storage)?;
@@ -51,6 +53,7 @@ pub fn bond(
     if reward_info.deposit_amount.is_zero() && (!reward_info.bond_share.is_zero()) {
         reward_info.deposit_amount = amount;
         reward_info.deposit_time = env.block.time.seconds();
+        
         //TODO: deposit cost
     }
 
@@ -102,7 +105,7 @@ fn increase_bond_amount(
     new_bond_amount
 }
 
-pub fn unbond(deps: DepsMut, env: Env, info: MessageInfo, amount: Uint128) -> StdResult<Response> {
+pub fn unbond(deps: DepsMut, env: Env, info: MessageInfo, amount: Uint128) -> Result<Response, ContractError> {
     let staker_addr = info.sender;
 
     let config = CONFIG.load(deps.storage)?;
@@ -121,9 +124,7 @@ pub fn unbond(deps: DepsMut, env: Env, info: MessageInfo, amount: Uint128) -> St
     let user_balance = pool_info.calc_user_balance(lp_balance, reward_info.bond_share);
 
     if user_balance < amount {
-        return Err(StdError::generic_err(
-            "Cannot unbond more than available balance",
-        ));
+        return Err(ContractError::UnbondExceedBalance {});
     }
 
     // add 1 to share, otherwise there will always be a fraction
@@ -173,7 +174,7 @@ pub fn query_reward_info(
     env: Env,
     staker_addr: String,
 ) -> StdResult<RewardInfoResponse> {
-    let staker_addr_validated = deps.api.addr_validate(&staker_addr)?;
+    let staker_addr_validated = addr_validate_to_lower(deps.api, &staker_addr)?;
 
     let config = CONFIG.load(deps.storage)?;
     let reward_info = read_reward_info(deps, env, &config, &staker_addr_validated)?;

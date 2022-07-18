@@ -1,4 +1,4 @@
-use cosmwasm_std::{Decimal, Uint128};
+use cosmwasm_std::{to_binary, Addr, CosmosMsg, Decimal, StdResult, Uint128, WasmMsg};
 use cw20::Cw20ReceiveMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -43,23 +43,44 @@ pub enum ExecuteMsg {
         asset_token: String,
         staking_token: String,
     },
-    Compound {},
-    SendFee {},
+    Compound {
+        minimum_receive: Option<Uint128>,
+    },
+    /// the callback of type [`CallbackMsg`]
+    Callback(CallbackMsg),
+}
+
+/// ## Description
+/// This structure describes the callback messages of the contract.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum CallbackMsg {
+    Stake {},
+}
+
+// Modified from
+// https://github.com/CosmWasm/cw-plus/blob/v0.8.0/packages/cw20/src/receiver.rs#L23
+impl CallbackMsg {
+    pub fn into_cosmos_msg(&self, contract_addr: &Addr) -> StdResult<CosmosMsg> {
+        Ok(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: String::from(contract_addr),
+            msg: to_binary(&ExecuteMsg::Callback(self.clone()))?,
+            funds: vec![],
+        }))
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Cw20HookMsg {
-    Bond {
-        staker_addr: Option<String>,
-    },
+    Bond { staker_addr: Option<String> },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     // get config
-    Config {}, 
+    Config {},
     // get vault setting
     Pool {},
     // get deposited balances
@@ -75,8 +96,8 @@ pub struct PoolResponse {
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct PoolItem {
-    pub asset_token: String, // asset token
-    pub staking_token: String, // LP staking token
+    pub asset_token: String,       // asset token
+    pub staking_token: String,     // LP staking token
     pub total_bond_share: Uint128, // total share
 }
 
