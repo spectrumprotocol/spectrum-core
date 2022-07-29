@@ -10,8 +10,6 @@ use serde::{Deserialize, Serialize};
 pub struct Config {
     /// the pair info
     pub pair_info: PairInfo,
-    /// the pair proxy contract address to perform swap
-    pub pair_proxy_contract: Addr,
     /// the swap commission
     pub commission_bps: u64,
 }

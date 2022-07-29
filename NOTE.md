@@ -3,11 +3,10 @@
     "spectrum_gov": "terra18fcnhg9u3puwycy54875d2e0atadhdwgnu5vrc",
     "astroport_generator": "terra1gc4d4v82vjgkz0ag28lrmlxx3tf6sq69tmaujjpe7jwmnqakkx0qm28j2l",
     "astro_token": "terra167dsqkh2alurx997wmycw9ydkyu54gyswe3ygmrs4lwume3vmwks8ruqnv",
-    "compound_proxy": "terra18fcnhg9u3puwycy54875d2e0atadhdwgnu5vrc",
+    "compound_proxy": "terra14k6mxaapwf4qcv2yunmzrjrw4yrgpjc376xc80rd4k3cjmwwtjfs4wq6ym",
     "platform": "terra18fcnhg9u3puwycy54875d2e0atadhdwgnu5vrc",
     "controller": "terra18fcnhg9u3puwycy54875d2e0atadhdwgnu5vrc",
     "fees_collector": "terra18fcnhg9u3puwycy54875d2e0atadhdwgnu5vrc",
-    "base_denom": "uluna",
     "community_fee": "0.03",
     "platform_fee": "0.01",
     "controller_fee": "0.01",
@@ -20,7 +19,7 @@ Contract: terra1fgs2nwdm9aqjujxtx9xsmuu63w27cc4s0cfxuz8gpr6t2ef9zxss00qj0c
 
 {
     "register_asset": {
-        "asset_token": "terra1gc4d4v82vjgkz0ag28lrmlxx3tf6sq69tmaujjpe7jwmnqakkx0qm28j2l",
+        "asset_token": "terra167dsqkh2alurx997wmycw9ydkyu54gyswe3ygmrs4lwume3vmwks8ruqnv",
         "staking_token": "terra1886vn036tc9e7ejx8pe4nkhts3gwpdfegwc4n3u77n0q76fjdthqarl8uc"
     }
 }
@@ -262,4 +261,41 @@ terra167dsqkh2alurx997wmycw9ydkyu54gyswe3ygmrs4lwume3vmwks8ruqnv
         "minimum_receive": "1656343",
         "max_spread": "0.15"
     }
+}
+
+Compound Proxy
+
+{
+    "pair_contract": "terra1udsua9w6jljwxwgwsegvt6v657rg3ayfvemupnes7lrggd28s0wq7g8azm",
+    "commission_bps": 30
+}
+
+{
+    "compound": {
+        "rewards": [
+            {
+                "info": {
+                    "native_token": {
+                        "denom": "uluna"
+                    }
+                },
+                "amount": "1000000"
+            }
+        ]
+    }
+}
+
+{
+    "owner": "terra18fcnhg9u3puwycy54875d2e0atadhdwgnu5vrc",
+    "spectrum_gov": "terra18fcnhg9u3puwycy54875d2e0atadhdwgnu5vrc",
+    "astroport_generator": "terra1gc4d4v82vjgkz0ag28lrmlxx3tf6sq69tmaujjpe7jwmnqakkx0qm28j2l",
+    "compound_proxy": "terra14k6mxaapwf4qcv2yunmzrjrw4yrgpjc376xc80rd4k3cjmwwtjfs4wq6ym",
+    "controller": "terra18fcnhg9u3puwycy54875d2e0atadhdwgnu5vrc",
+    "community_fee": "0.03",
+    "platform_fee": "0.01",
+    "controller_fee": "0.01",
+    "community_fee_collector": "terra18fcnhg9u3puwycy54875d2e0atadhdwgnu5vrc",
+    "platform_fee_collector": "terra18fcnhg9u3puwycy54875d2e0atadhdwgnu5vrc",
+    "controller_fee_collector": "terra18fcnhg9u3puwycy54875d2e0atadhdwgnu5vrc",
+    "pair_contract": "terra1udsua9w6jljwxwgwsegvt6v657rg3ayfvemupnes7lrggd28s0wq7g8azm"
 }

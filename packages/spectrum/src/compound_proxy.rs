@@ -9,8 +9,6 @@ use cosmwasm_std::{to_binary, Addr, CosmosMsg, StdResult, Uint128, WasmMsg};
 pub struct InstantiateMsg {
     /// the pair contract address
     pub pair_contract: String,
-    /// the pair proxy contract address to perform swap
-    pub pair_proxy_contract: String,
     /// the swap commission
     pub commission_bps: u64,
 }
@@ -65,7 +63,6 @@ pub enum QueryMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
     pub pair_info: PairInfo,
-    pub pair_proxy_contract: Addr,
 }
 
 /// This structure describes a migration message.

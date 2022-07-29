@@ -17,7 +17,7 @@ use astroport::asset::{addr_validate_to_lower, Asset, AssetInfo};
 use astroport::pair::{
     Cw20HookMsg as AstroportPairCw20HookMsg, ExecuteMsg as AstroportPairExecuteMsg,
 };
-use astroport::querier::query_balance;
+use astroport::querier::{query_token_balance};
 use cw2::set_contract_version;
 
 /// Contract name that is used for migration.
@@ -60,7 +60,6 @@ pub fn instantiate(
 
     let config = Config {
         pair_info: pair_info,
-        pair_proxy_contract: addr_validate_to_lower(deps.api, msg.pair_proxy_contract.as_str())?,
         commission_bps,
     };
     CONFIG.save(deps.storage, &config)?;
@@ -166,37 +165,39 @@ pub fn compound(
     // Swap reward to asset in the pair
     for reward in rewards {
         deposit_asset(&env,&info, &mut messages, &reward)?;
-        let pair_proxy = PAIR_PROXY.load(deps.storage, reward.info.to_string())?;
-        let swap_reward = if reward.is_native_token() {
-            CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: pair_proxy.to_string(),
-                msg: to_binary(&AstroportPairExecuteMsg::Swap {
-                    offer_asset: reward.clone(),
-                    belief_price: None,
-                    max_spread: Some(Decimal::percent(50u64)),
-                    to: None,
-                })?,
-                funds: vec![Coin {
-                    denom: reward.info.to_string(),
-                    amount: reward.amount,
-                }],
-            })
-        } else {
-            CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: reward.info.to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::Send {
-                    contract: pair_proxy.to_string(),
-                    amount: reward.amount,
-                    msg: to_binary(&AstroportPairCw20HookMsg::Swap {
-                        max_spread: Some(Decimal::percent(50u64)),
+        let pair_proxy = PAIR_PROXY.may_load(deps.storage, reward.info.to_string())?;
+        if let Some(pair_proxy) = pair_proxy {
+            let swap_reward = if reward.is_native_token() {
+                CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: pair_proxy.to_string(),
+                    msg: to_binary(&AstroportPairExecuteMsg::Swap {
+                        offer_asset: reward.clone(),
                         belief_price: None,
+                        max_spread: Some(Decimal::percent(50u64)),
                         to: None,
                     })?,
-                })?,
-                funds: vec![],
-            })
-        };
-        messages.push(swap_reward);
+                    funds: vec![Coin {
+                        denom: reward.info.to_string(),
+                        amount: reward.amount,
+                    }],
+                })
+            } else {
+                CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: reward.info.to_string(),
+                    msg: to_binary(&Cw20ExecuteMsg::Send {
+                        contract: pair_proxy.to_string(),
+                        amount: reward.amount,
+                        msg: to_binary(&AstroportPairCw20HookMsg::Swap {
+                            max_spread: Some(Decimal::percent(50u64)),
+                            belief_price: None,
+                            to: None,
+                        })?,
+                    })?,
+                    funds: vec![],
+                })
+            };
+            messages.push(swap_reward);
+        }
     }
 
     messages.push(CallbackMsg::OptimalSwap {}.into_cosmos_msg(&env.contract.address)?);
@@ -350,7 +351,10 @@ fn calculate_optimal_swap(
             config.commission_bps,
         )?;
         if !swap_amount.is_zero() {
-            let swap_asset = asset_a;
+            let swap_asset = Asset {
+                info: asset_a.info,
+                amount: swap_amount,
+            };
             let return_amount = simulate(
                 pool_a_amount,
                 pool_b_amount,
@@ -376,7 +380,10 @@ fn calculate_optimal_swap(
             config.commission_bps,
         )?;
         if !swap_amount.is_zero() {
-            let swap_asset = asset_b;
+            let swap_asset = Asset {
+                info: asset_b.info,
+                amount: swap_amount,
+            };
             let return_amount = simulate(
                 pool_b_amount,
                 pool_a_amount,
@@ -478,10 +485,10 @@ pub fn send_liquidity_token(
 ) -> Result<Response, ContractError> {
     let config: Config = CONFIG.load(deps.storage)?;
     let liquidity_token = config.pair_info.liquidity_token;
-    let lp_balance = query_balance(
+    let lp_balance = query_token_balance(
         &deps.querier,
+        liquidity_token.clone(),
         env.contract.address,
-        liquidity_token.to_string(),
     )?;
 
     if let Some(minimum_receive) = minimum_receive {
@@ -533,7 +540,6 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     let config: Config = CONFIG.load(deps.storage)?;
     Ok(ConfigResponse {
         pair_info: config.pair_info,
-        pair_proxy_contract: config.pair_proxy_contract,
     })
 }
 
