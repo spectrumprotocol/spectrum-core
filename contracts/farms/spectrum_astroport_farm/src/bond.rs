@@ -1,7 +1,7 @@
 use astroport::asset::addr_validate_to_lower;
 use cosmwasm_std::{
-    attr, to_binary, Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response,
-    StdResult, Uint128, WasmMsg,
+    attr, to_binary, Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
+    Uint128, WasmMsg,
 };
 
 use crate::error::ContractError;
@@ -53,12 +53,11 @@ pub fn bond(
     if reward_info.deposit_amount.is_zero() && (!reward_info.bond_share.is_zero()) {
         reward_info.deposit_amount = amount;
         reward_info.deposit_time = env.block.time.seconds();
-        
+
         //TODO: deposit cost
     }
 
-    let deposit_amount =
-        increase_bond_amount(&mut pool_info, &mut reward_info, amount, lp_balance);
+    let deposit_amount = increase_bond_amount(&mut pool_info, &mut reward_info, amount, lp_balance);
 
     let last_deposit_amount = reward_info.deposit_amount;
     reward_info.deposit_amount = last_deposit_amount + deposit_amount;
@@ -105,7 +104,12 @@ fn increase_bond_amount(
     new_bond_amount
 }
 
-pub fn unbond(deps: DepsMut, env: Env, info: MessageInfo, amount: Uint128) -> Result<Response, ContractError> {
+pub fn unbond(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    amount: Uint128,
+) -> Result<Response, ContractError> {
     let staker_addr = info.sender;
 
     let config = CONFIG.load(deps.storage)?;
@@ -191,7 +195,14 @@ fn read_reward_info(
     config: &Config,
     staker_addr: &Addr,
 ) -> StdResult<RewardInfoResponseItem> {
-    let reward_info = REWARD.load(deps.storage, staker_addr)?;
+    let reward_info = REWARD
+        .load(deps.storage, staker_addr)
+        .unwrap_or(RewardInfo {
+            bond_share: Uint128::zero(),
+            deposit_amount: Uint128::zero(),
+            deposit_cost: Uint128::zero(),
+            deposit_time: 0,
+        });
     let pool_info = POOL_INFO.load(deps.storage)?;
 
     let has_deposit_amount = !reward_info.deposit_amount.is_zero();
