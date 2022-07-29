@@ -1,6 +1,6 @@
 use astroport::{
     asset::{addr_validate_to_lower, Asset, AssetInfo},
-    generator::Cw20HookMsg as AstroportCw20HookMsg,
+    generator::{Cw20HookMsg as AstroportCw20HookMsg, ExecuteMsg as AstroportExecuteMsg},
 };
 use cosmwasm_std::{
     attr, to_binary, Addr, Attribute, CosmosMsg, DepsMut, Env, MessageInfo, Response, Uint128,
@@ -9,7 +9,7 @@ use cosmwasm_std::{
 
 use crate::{
     error::ContractError,
-    querier::{query_astroport_pool_balance, query_astroport_reward_info},
+    querier::{query_astroport_pool_balance, query_astroport_reward_info, query_astroport_pending_token},
     state::{CONFIG, POOL_INFO},
 };
 
@@ -35,6 +35,13 @@ pub fn compound(
         &config.astroport_generator,
     )?;
 
+    let pending_token_response = query_astroport_pending_token(
+        deps.as_ref(),
+        &pool_info.staking_token,
+        &env.contract.address,
+        &config.astroport_generator
+    )?;
+    
     let lp_balance = query_astroport_pool_balance(
         deps.as_ref(),
         &pool_info.staking_token,
@@ -52,20 +59,31 @@ pub fn compound(
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut attributes: Vec<Attribute> = vec![];
 
-    let mut rewards: Vec<(String, Addr)> = vec![];
+    let mut rewards: Vec<(String, Addr, Uint128)> = vec![];
     let mut compound_rewards: Vec<(Addr, Uint128)> = vec![];
 
-    rewards.push(("base".to_string(), reward_info.base_reward_token));
+    let manual_claim_pending_token = CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: config.astroport_generator.to_string(),
+        funds: vec![],
+        msg: to_binary(&AstroportExecuteMsg::Withdraw {
+            lp_token: pool_info.staking_token.to_string(),
+            amount: Uint128::zero(),
+        })?,
+    });
+    messages.push(manual_claim_pending_token);
+
+    rewards.push(("base".to_string(), reward_info.base_reward_token, pending_token_response.pending));
     if let Some(proxy_reward_token) = reward_info.proxy_reward_token {
-        rewards.push(("proxy".to_string(), proxy_reward_token));
+        let pending_on_proxy = pending_token_response.pending_on_proxy.unwrap_or_else(Uint128::zero);
+        rewards.push(("proxy".to_string(), proxy_reward_token, pending_on_proxy));
     }
 
-    for (label, reward_token) in rewards {
+    for (label, reward_token, pending_amount) in rewards {
         let reward_amount = query_token_balance(
             &deps.querier,
             reward_token.clone(),
             env.contract.address.clone(),
-        )?;
+        )? + pending_amount;
         if !reward_amount.is_zero() && !lp_balance.is_zero() {
             let commission_amount = reward_amount * total_fee;
             let compound_amount = reward_amount.checked_sub(commission_amount)?;
