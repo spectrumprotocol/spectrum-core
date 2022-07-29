@@ -5,10 +5,9 @@ use serde::{Deserialize, Serialize};
 
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct ConfigInfo {
+pub struct InstantiateMsg {
     pub owner: String,
-    pub spectrum_gov: String,
-    pub astroport_generator: String,
+    pub staking_contract: String,
     pub compound_proxy: String,
     pub controller: String,
     pub community_fee: Decimal,
@@ -26,23 +25,33 @@ pub enum ExecuteMsg {
     Receive(Cw20ReceiveMsg), // Bond lp token
     // Update config
     UpdateConfig {
-        owner: Option<String>,
         controller: Option<String>,
         community_fee: Option<Decimal>,
         platform_fee: Option<Decimal>,
         controller_fee: Option<Decimal>,
+        compound_proxy: Option<String>,
+        platform_fee_collector: Option<String>,
+        community_fee_collector: Option<String>,
+        controller_fee_collector: Option<String>,
     },
     // Unbond lp token
     Unbond {
         amount: Uint128,
     },
-    RegisterAsset {
-        asset_token: String,
-        staking_token: String,
-    },
     Compound {
         minimum_receive: Option<Uint128>,
     },
+    /// Creates a request to change the contract's ownership
+    ProposeNewOwner {
+        /// The newly proposed owner
+        owner: String,
+        /// The validity period of the proposal to change the owner
+        expires_in: u64,
+    },
+    /// Removes a request to change contract ownership
+    DropOwnershipProposal {},
+    /// Claims contract ownership
+    ClaimOwnership {},
     /// the callback of type [`CallbackMsg`]
     Callback(CallbackMsg),
 }
@@ -52,7 +61,10 @@ pub enum ExecuteMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum CallbackMsg {
-    Stake {},
+    Stake {
+        prev_balance: Uint128,
+        minimum_receive: Option<Uint128>,
+    },
 }
 
 // Modified from
@@ -78,24 +90,10 @@ pub enum Cw20HookMsg {
 pub enum QueryMsg {
     // get config
     Config {},
-    // get vault setting
-    Pool {},
     // get deposited balances
     RewardInfo { staker_addr: String },
     // get global state
     State {},
-}
-
-// We define a custom struct for each query response
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct PoolResponse {
-    pub pool: PoolItem,
-}
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct PoolItem {
-    pub asset_token: String,       // asset token
-    pub staking_token: String,     // LP staking token
-    pub total_bond_share: Uint128, // total share
 }
 
 // We define a custom struct for each query response
@@ -107,7 +105,7 @@ pub struct RewardInfoResponse {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct RewardInfoResponseItem {
-    pub asset_token: String,
+    pub staking_token: String,
     pub bond_amount: Uint128,
     pub bond_share: Uint128,
     pub deposit_amount: Option<Uint128>,
@@ -116,6 +114,7 @@ pub struct RewardInfoResponseItem {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
 pub struct StateInfo {
+    pub total_bond_share: Uint128,
     pub earning: Uint128,
 }
 

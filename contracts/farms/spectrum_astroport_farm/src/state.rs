@@ -1,14 +1,16 @@
+use astroport::asset::PairInfo;
 use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::{Addr, Decimal, Uint128};
 
+use crate::ownership::OwnershipProposal;
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
     pub owner: Addr,
-    pub spectrum_gov: Addr,
-    pub astroport_generator: Addr,
+    pub staking_contract: Addr,
     pub compound_proxy: Addr,
     pub controller: Addr,
     pub community_fee: Decimal,
@@ -17,26 +19,20 @@ pub struct Config {
     pub platform_fee_collector: Addr,
     pub community_fee_collector: Addr,
     pub controller_fee_collector: Addr,
-    pub pair_contract: Addr,
+    pub pair_info: PairInfo, // Store PairInfo instead
 }
 
 pub const CONFIG: Item<Config> = Item::new("config");
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
 pub struct State {
+    pub total_bond_share: Uint128,
     pub earning: Uint128,
 }
 
 pub const STATE: Item<State> = Item::new("state");
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct PoolInfo {
-    pub asset_token: Addr,
-    pub staking_token: Addr,
-    pub total_bond_share: Uint128,
-}
-
-impl PoolInfo {
+impl State {
     pub fn calc_bond_share(&self, bond_amount: Uint128, lp_balance: Uint128) -> Uint128 {
         if self.total_bond_share.is_zero() || lp_balance.is_zero() {
             bond_amount
@@ -55,9 +51,6 @@ impl PoolInfo {
         }
     }
 }
-
-
-pub const POOL_INFO: Item<PoolInfo> = Item::new("pool_info");
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct RewardInfo {
@@ -79,3 +72,7 @@ impl RewardInfo {
         }
     }
 }
+
+/// ## Description
+/// Stores the latest proposal to change contract ownership
+pub const OWNERSHIP_PROPOSAL: Item<OwnershipProposal> = Item::new("ownership_proposal");

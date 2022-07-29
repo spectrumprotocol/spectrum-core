@@ -1,9 +1,9 @@
-use schemars::JsonSchema;
+use schemars::{JsonSchema};
 use serde::{Deserialize, Serialize};
 
 use astroport::asset::{Asset, PairInfo};
 
-use cosmwasm_std::{to_binary, Addr, CosmosMsg, StdResult, Uint128, WasmMsg};
+use cosmwasm_std::{to_binary, Addr, CosmosMsg, StdResult, WasmMsg, Decimal};
 /// This structure describes the basic settings for creating a contract.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -11,6 +11,8 @@ pub struct InstantiateMsg {
     pub pair_contract: String,
     /// the swap commission
     pub commission_bps: u64,
+    pub pair_proxies: Vec<(String, String)>,
+    pub slippage_tolerance: Decimal,
 }
 
 /// This structure describes the execute messages of the contract.
@@ -20,7 +22,6 @@ pub enum ExecuteMsg {
     /// Compound rewards to staking token
     Compound {
         rewards: Vec<Asset>,
-        minimum_receive: Option<Uint128>,
         to: Option<String>,
     },
     /// the callback of type [`CallbackMsg`]
@@ -32,10 +33,8 @@ pub enum ExecuteMsg {
 #[serde(rename_all = "snake_case")]
 pub enum CallbackMsg {
     OptimalSwap {},
-    ProvideLiquidity {},
-    SendLiquidityToken {
-        minimum_receive: Option<Uint128>,
-        to: Addr,
+    ProvideLiquidity {
+        receiver: String,
     },
 }
 

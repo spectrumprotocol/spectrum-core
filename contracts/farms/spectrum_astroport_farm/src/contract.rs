@@ -9,15 +9,17 @@ use crate::{
     bond::bond,
     compound::{compound, stake},
     error::ContractError,
-    state::{Config, PoolInfo, State, CONFIG},
+    ownership::{claim_ownership, drop_ownership_proposal, propose_new_owner},
+    querier::query_pair_info,
+    state::{Config, State, CONFIG, OWNERSHIP_PROPOSAL},
 };
 
 use cw20::Cw20ReceiveMsg;
 
 use crate::bond::{query_reward_info, unbond};
-use crate::state::{POOL_INFO, STATE};
+use crate::state::STATE;
 use spectrum::astroport_farm::{
-    CallbackMsg, ConfigInfo, Cw20HookMsg, ExecuteMsg, MigrateMsg, PoolItem, PoolResponse, QueryMsg,
+    CallbackMsg, InstantiateMsg, Cw20HookMsg, ExecuteMsg, MigrateMsg, QueryMsg,
     StateInfo,
 };
 
@@ -35,18 +37,22 @@ pub fn instantiate(
     deps: DepsMut,
     _env: Env,
     _info: MessageInfo,
-    msg: ConfigInfo,
+    msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     validate_percentage(msg.community_fee, "community_fee")?;
     validate_percentage(msg.platform_fee, "platform_fee")?;
     validate_percentage(msg.controller_fee, "controller_fee")?;
 
+    let pair_info = query_pair_info(
+        deps.as_ref(),
+        &addr_validate_to_lower(deps.api, &msg.pair_contract).unwrap(),
+    )?;
+
     CONFIG.save(
         deps.storage,
         &Config {
             owner: addr_validate_to_lower(deps.api, &msg.owner)?,
-            spectrum_gov: addr_validate_to_lower(deps.api, &msg.spectrum_gov)?,
-            astroport_generator: addr_validate_to_lower(deps.api, &msg.astroport_generator)?,
+            staking_contract: addr_validate_to_lower(deps.api, &msg.staking_contract)?,
             compound_proxy: addr_validate_to_lower(deps.api, &msg.compound_proxy)?,
             controller: addr_validate_to_lower(deps.api, &msg.controller)?,
             community_fee: msg.community_fee,
@@ -61,7 +67,7 @@ pub fn instantiate(
                 deps.api,
                 &msg.controller_fee_collector,
             )?,
-            pair_contract: addr_validate_to_lower(deps.api, &msg.pair_contract)?,
+            pair_info,
         },
     )?;
 
@@ -69,6 +75,7 @@ pub fn instantiate(
         deps.storage,
         &State {
             earning: Uint128::zero(),
+            total_bond_share: Uint128::zero(),
         },
     )?;
 
@@ -85,26 +92,59 @@ pub fn execute(
     match msg {
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
         ExecuteMsg::UpdateConfig {
-            owner,
             controller,
             community_fee,
             platform_fee,
             controller_fee,
+            compound_proxy,
+            platform_fee_collector,
+            community_fee_collector,
+            controller_fee_collector,
         } => update_config(
             deps,
             info,
-            owner,
             controller,
             community_fee,
             platform_fee,
             controller_fee,
+            compound_proxy,
+            platform_fee_collector,
+            community_fee_collector,
+            controller_fee_collector,
         ),
-        ExecuteMsg::RegisterAsset {
-            asset_token,
-            staking_token,
-        } => register_asset(deps, env, info, asset_token, staking_token),
         ExecuteMsg::Unbond { amount } => unbond(deps, env, info, amount),
         ExecuteMsg::Compound { minimum_receive } => compound(deps, env, info, minimum_receive),
+        ExecuteMsg::ProposeNewOwner { owner, expires_in } => {
+            let config: Config = CONFIG.load(deps.storage)?;
+
+            propose_new_owner(
+                deps,
+                info,
+                env,
+                owner,
+                expires_in,
+                config.owner,
+                OWNERSHIP_PROPOSAL,
+            )
+            .map_err(|e| e.into())
+        }
+        ExecuteMsg::DropOwnershipProposal {} => {
+            let config: Config = CONFIG.load(deps.storage)?;
+
+            drop_ownership_proposal(deps, info, config.owner, OWNERSHIP_PROPOSAL)
+                .map_err(|e| e.into())
+        }
+        ExecuteMsg::ClaimOwnership {} => {
+            claim_ownership(deps, info, env, OWNERSHIP_PROPOSAL, |deps, new_owner| {
+                CONFIG.update::<_, StdError>(deps.storage, |mut v| {
+                    v.owner = new_owner;
+                    Ok(v)
+                })?;
+
+                Ok(())
+            })
+            .map_err(|e| e.into())
+        }
         ExecuteMsg::Callback(msg) => handle_callback(deps, env, info, msg),
     }
 }
@@ -131,23 +171,19 @@ fn receive_cw20(
 pub fn update_config(
     deps: DepsMut,
     info: MessageInfo,
-    owner: Option<String>,
     controller: Option<String>,
     community_fee: Option<Decimal>,
     platform_fee: Option<Decimal>,
     controller_fee: Option<Decimal>,
+    compound_proxy: Option<String>,
+    platform_fee_collector: Option<String>,
+    community_fee_collector: Option<String>,
+    controller_fee_collector: Option<String>,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
     if addr_validate_to_lower(deps.api, info.sender.as_str())? != config.owner {
         return Err(ContractError::Unauthorized {});
-    }
-
-    if let Some(owner) = owner {
-        if config.owner == config.spectrum_gov {
-            return Err(ContractError::CannotUpdateOwner {});
-        }
-        config.owner = addr_validate_to_lower(deps.api, &owner)?;
     }
 
     if let Some(controller) = controller {
@@ -169,43 +205,25 @@ pub fn update_config(
         config.controller_fee = controller_fee;
     }
 
+    if let Some(compound_proxy) = compound_proxy {
+        config.compound_proxy = addr_validate_to_lower(deps.api, &compound_proxy)?;
+    }
+
+    if let Some(platform_fee_collector) = platform_fee_collector {
+        config.platform_fee_collector = addr_validate_to_lower(deps.api, &platform_fee_collector)?;
+    }
+
+    if let Some(community_fee_collector) = community_fee_collector {
+        config.community_fee_collector = addr_validate_to_lower(deps.api, &community_fee_collector)?;
+    }
+
+    if let Some(controller_fee_collector) = controller_fee_collector {
+        config.controller_fee_collector = addr_validate_to_lower(deps.api, &controller_fee_collector)?;
+    }
+
     CONFIG.save(deps.storage, &config)?;
 
     Ok(Response::new().add_attributes(vec![attr("action", "update_config")]))
-}
-
-fn register_asset(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
-    asset_token: String,
-    staking_token: String,
-) -> Result<Response, ContractError> {
-    let config: Config = CONFIG.load(deps.storage)?;
-
-    if config.owner != info.sender {
-        return Err(ContractError::Unauthorized {});
-    }
-
-    let pool = POOL_INFO.may_load(deps.storage)?;
-
-    if pool.is_some() {
-        return Err(ContractError::AssetRegistered {});
-    } else {
-        let pool_info = POOL_INFO
-            .may_load(deps.storage)?
-            .unwrap_or_else(|| PoolInfo {
-                asset_token: addr_validate_to_lower(deps.api, &asset_token).unwrap(),
-                staking_token: addr_validate_to_lower(deps.api, &staking_token).unwrap(),
-                total_bond_share: Uint128::zero(),
-            });
-
-        POOL_INFO.save(deps.storage, &pool_info)?;
-        Ok(Response::new().add_attributes(vec![
-            attr("action", "register_asset"),
-            attr("asset_token", asset_token),
-        ]))
-    }
 }
 
 /// # Description
@@ -233,7 +251,10 @@ pub fn handle_callback(
         return Err(ContractError::Unauthorized {});
     }
     match msg {
-        CallbackMsg::Stake {} => stake(deps, env, info),
+        CallbackMsg::Stake {
+            prev_balance,
+            minimum_receive,
+        } => stake(deps, env, info, prev_balance, minimum_receive),
     }
 }
 
@@ -241,7 +262,6 @@ pub fn handle_callback(
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
-        QueryMsg::Pool {} => to_binary(&query_pools(deps)?),
         QueryMsg::RewardInfo { staker_addr } => {
             to_binary(&query_reward_info(deps, env, staker_addr)?)
         }
@@ -249,40 +269,15 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     }
 }
 
-fn query_config(deps: Deps) -> StdResult<ConfigInfo> {
+fn query_config(deps: Deps) -> StdResult<Config> {
     let config = CONFIG.load(deps.storage)?;
-    let resp = ConfigInfo {
-        owner: config.owner.to_string(),
-        astroport_generator: config.astroport_generator.to_string(),
-        spectrum_gov: config.spectrum_gov.to_string(),
-        compound_proxy: config.compound_proxy.to_string(),
-        controller: config.controller.to_string(),
-        community_fee: config.community_fee,
-        platform_fee: config.platform_fee,
-        controller_fee: config.controller_fee,
-        community_fee_collector: config.community_fee_collector.to_string(),
-        platform_fee_collector: config.platform_fee_collector.to_string(),
-        controller_fee_collector: config.controller_fee_collector.to_string(),
-        pair_contract: config.pair_contract.to_string(),
-    };
-
-    Ok(resp)
-}
-
-fn query_pools(deps: Deps) -> StdResult<PoolResponse> {
-    let pool = POOL_INFO.load(deps.storage)?;
-    Ok(PoolResponse {
-        pool: PoolItem {
-            asset_token: pool.asset_token.to_string(),
-            staking_token: pool.staking_token.to_string(),
-            total_bond_share: pool.total_bond_share,
-        },
-    })
+    Ok(config)
 }
 
 fn query_state(deps: Deps) -> StdResult<StateInfo> {
     let state = STATE.load(deps.storage)?;
     Ok(StateInfo {
+        total_bond_share: state.total_bond_share,
         earning: state.earning,
     })
 }

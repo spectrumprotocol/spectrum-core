@@ -15,19 +15,19 @@ pub const BRIDGES_EXECUTION_MAX_DEPTH: u64 = 3;
 
 pub fn try_build_swap_msg(
     deps: Deps,
-    cfg: &Config,
+    config: &Config,
     from: AssetInfo,
     to: AssetInfo,
     amount_in: Uint128,
 ) -> Result<SubMsg, ContractError> {
-    let pool = get_pool(deps, cfg, from.clone(), to)?;
-    let msg = build_swap_msg(deps, cfg, pool, from, amount_in)?;
+    let pool = get_pool(deps, config, from.clone(), to)?;
+    let msg = build_swap_msg(deps, config, pool, from, amount_in)?;
     Ok(msg)
 }
 
 pub fn build_swap_msg(
     deps: Deps,
-    cfg: &Config,
+    config: &Config,
     pool: PairInfo,
     from: AssetInfo,
     amount_in: Uint128,
@@ -48,7 +48,7 @@ pub fn build_swap_msg(
             msg: to_binary(&astroport::pair::ExecuteMsg::Swap {
                 offer_asset,
                 belief_price: None,
-                max_spread: Some(cfg.max_spread),
+                max_spread: Some(config.max_spread),
                 to: None,
             })?,
             funds: vec![Coin {
@@ -64,7 +64,7 @@ pub fn build_swap_msg(
                 amount: amount_in,
                 msg: to_binary(&Cw20HookMsg::Swap {
                     belief_price: None,
-                    max_spread: Some(cfg.max_spread),
+                    max_spread: Some(config.max_spread),
                     to: None,
                 })?,
             })?,
@@ -102,17 +102,17 @@ pub fn build_distribute_msg(
 
 pub fn validate_bridge(
     deps: Deps,
-    cfg: &Config,
+    config: &Config,
     from_token: AssetInfo,
     bridge_token: AssetInfo,
     stablecoin_token: AssetInfo,
     depth: u64,
 ) -> Result<PairInfo, ContractError> {
     // Check if the bridge pool exists
-    let bridge_pool = get_pool(deps, cfg, from_token.clone(), bridge_token.clone())?;
+    let bridge_pool = get_pool(deps, config, from_token.clone(), bridge_token.clone())?;
 
     // Check if the bridge token - stablecoin pool exists
-    let stablecoin_pool = get_pool(deps, cfg, bridge_token.clone(), stablecoin_token.clone());
+    let stablecoin_pool = get_pool(deps, config, bridge_token.clone(), stablecoin_token.clone());
     if stablecoin_pool.is_err() {
         if depth >= BRIDGES_MAX_DEPTH {
             return Err(ContractError::MaxBridgeDepth(depth));
@@ -125,7 +125,7 @@ pub fn validate_bridge(
 
         validate_bridge(
             deps,
-            cfg,
+            config,
             bridge_token,
             next_bridge_token,
             stablecoin_token,
@@ -138,13 +138,13 @@ pub fn validate_bridge(
 
 pub fn get_pool(
     deps: Deps,
-    cfg: &Config,
+    config: &Config,
     from: AssetInfo,
     to: AssetInfo,
 ) -> Result<PairInfo, ContractError> {
     query_pair_info(
         &deps.querier,
-        cfg.factory_contract.clone(),
+        config.factory_contract.clone(),
         &[from.clone(), to.clone()],
     )
     .map_err(|_| ContractError::InvalidBridgeNoPool(from.clone(), to.clone()))

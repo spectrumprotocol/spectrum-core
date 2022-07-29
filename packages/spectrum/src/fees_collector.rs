@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 /// This structure stores general parameters for the contract.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
-    /// Address that's allowed to change contract parameters
-    pub owner: String,
+    /// Address that's allowed to update bridge assets
+    pub operator: String,
     /// The factory contract address
     pub factory_contract: String,
     /// The stablecoin token contract address
@@ -27,15 +27,6 @@ pub enum ExecuteMsg {
         /// The assets to swap to stablecoin
         assets: Vec<AssetWithLimit>,
     },
-    /// Updates general settings
-    UpdateConfig {
-        /// The factory contract address
-        factory_contract: Option<String>,
-        /// The beneficiary address
-        beneficiary: Option<String>,
-        /// The maximum spread used when swapping fee tokens to stablecoin
-        max_spread: Option<Decimal>,
-    },
     /// Add bridge tokens used to swap specific fee tokens to stablecoin (effectively declaring a swap route)
     UpdateBridges {
         add: Option<Vec<(AssetInfo, AssetInfo)>>,
@@ -45,17 +36,6 @@ pub enum ExecuteMsg {
     SwapBridgeAssets { assets: Vec<AssetInfo>, depth: u64 },
     /// Distribute stablecoin to beneficiary
     DistributeFees {},
-    /// Creates a request to change the contract's ownership
-    ProposeNewOwner {
-        /// The newly proposed owner
-        owner: String,
-        /// The validity period of the proposal to change the owner
-        expires_in: u64,
-    },
-    /// Removes a request to change contract ownership
-    DropOwnershipProposal {},
-    /// Claims contract ownership
-    ClaimOwnership {},
 }
 
 /// This structure describes the query functions available in the contract.
@@ -74,15 +54,15 @@ pub enum QueryMsg {
 /// A custom struct that holds contract parameters and is used to retrieve them.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
-    /// Address that is allowed to update contract parameters
-    pub owner: Addr,
+    /// Address that's allowed to update bridge assets
+    pub operator: Addr,
     /// The factory contract address
     pub factory_contract: Addr,
     /// The stablecoin token contract address
     pub stablecoin_token_contract: Addr,
     /// The beneficiary address to received fees in stablecoin
     pub beneficiary: Addr,
-    /// The maximum spread used when swapping fee tokens to ASTRO
+    /// The maximum spread used when swapping fee tokens to stablecoin
     pub max_spread: Decimal,
 }
 

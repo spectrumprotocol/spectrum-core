@@ -1,4 +1,4 @@
-use cosmwasm_std::{OverflowError, StdError};
+use cosmwasm_std::{OverflowError, StdError, Uint128};
 use thiserror::Error;
 
 /// ## Description
@@ -23,6 +23,8 @@ pub enum ContractError {
     #[error("Cannot unbond more than balance")]
     UnbondExceedBalance {},
 
+    #[error("Assertion failed; minimum receive amount: {minimum_receive}, actual amount: {amount}")]
+    AssertionMinimumReceive { minimum_receive: Uint128, amount: Uint128 },
 }
 
 impl From<OverflowError> for ContractError {

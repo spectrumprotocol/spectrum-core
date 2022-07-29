@@ -8,7 +8,7 @@ use cosmwasm_std::{
     entry_point, to_binary, Addr, Binary, Coin, CosmosMsg, Decimal, Decimal256, Deps, DepsMut, Env,
     Isqrt, MessageInfo, QuerierWrapper, Response, StdError, StdResult, Uint128, Uint256, WasmMsg,
 };
-use cw20::Cw20ExecuteMsg;
+use cw20::{Cw20ExecuteMsg, Expiration};
 use spectrum::compound_proxy::{
     CallbackMsg, ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg,
 };
@@ -17,7 +17,6 @@ use astroport::asset::{addr_validate_to_lower, Asset, AssetInfo};
 use astroport::pair::{
     Cw20HookMsg as AstroportPairCw20HookMsg, ExecuteMsg as AstroportPairExecuteMsg,
 };
-use astroport::querier::{query_token_balance};
 use cw2::set_contract_version;
 
 /// Contract name that is used for migration.
@@ -32,6 +31,15 @@ fn validate_commission(commission_bps: u64) -> StdResult<u64> {
         Err(StdError::generic_err("commission rate must be 0 to 9999"))
     } else {
         Ok(commission_bps)
+    }
+}
+
+/// (we require 0-1)
+fn validate_percentage(value: Decimal, field: &str) -> StdResult<Decimal> {
+    if value > Decimal::one() {
+        Err(StdError::generic_err(field.to_string() + " must be 0 to 1"))
+    } else {
+        Ok(value)
     }
 }
 
@@ -55,15 +63,17 @@ pub fn instantiate(
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     let commission_bps = validate_commission(msg.commission_bps)?;
+    let slippage_tolerance = validate_percentage(msg.slippage_tolerance, "slippage_tolerance")?;
     let pair_contract = addr_validate_to_lower(deps.api, msg.pair_contract.as_str())?;
     let pair_info = query_pair_info(deps.as_ref(), &pair_contract)?;
 
     let config = Config {
-        pair_info: pair_info,
+        pair_info,
         commission_bps,
+        slippage_tolerance,
     };
     CONFIG.save(deps.storage, &config)?;
-
+    //TODO: init pair proxies
     Ok(Response::new())
 }
 
@@ -105,25 +115,13 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::Compound {
-            rewards,
-            minimum_receive,
-            to,
-        } => {
+        ExecuteMsg::Compound { rewards, to } => {
             let to_addr = if let Some(to_addr) = to {
                 Some(addr_validate_to_lower(deps.api, &to_addr)?)
             } else {
                 None
             };
-            compound(
-                deps,
-                env,
-                info.clone(),
-                info.sender,
-                rewards,
-                minimum_receive,
-                to_addr,
-            )
+            compound(deps, env, info.clone(), info.sender, rewards, to_addr)
         }
         ExecuteMsg::Callback(msg) => handle_callback(deps, env, info, msg),
     }
@@ -155,7 +153,6 @@ pub fn compound(
     info: MessageInfo,
     sender: Addr,
     rewards: Vec<Asset>,
-    minimum_receive: Option<Uint128>,
     to: Option<Addr>,
 ) -> Result<Response, ContractError> {
     let receiver = to.unwrap_or_else(|| sender.clone());
@@ -164,7 +161,7 @@ pub fn compound(
 
     // Swap reward to asset in the pair
     for reward in rewards {
-        deposit_asset(&env,&info, &mut messages, &reward)?;
+        deposit_asset(&env, &info, &mut messages, &reward)?;
         let pair_proxy = PAIR_PROXY.may_load(deps.storage, reward.info.to_string())?;
         if let Some(pair_proxy) = pair_proxy {
             let swap_reward = if reward.is_native_token() {
@@ -201,11 +198,9 @@ pub fn compound(
     }
 
     messages.push(CallbackMsg::OptimalSwap {}.into_cosmos_msg(&env.contract.address)?);
-    messages.push(CallbackMsg::ProvideLiquidity {}.into_cosmos_msg(&env.contract.address)?);
     messages.push(
-        CallbackMsg::SendLiquidityToken {
-            minimum_receive,
-            to: receiver,
+        CallbackMsg::ProvideLiquidity {
+            receiver: receiver.to_string(),
         }
         .into_cosmos_msg(&env.contract.address)?,
     );
@@ -241,11 +236,7 @@ pub fn handle_callback(
     }
     match msg {
         CallbackMsg::OptimalSwap {} => optimal_swap(deps, env, info),
-        CallbackMsg::ProvideLiquidity {} => provide_liquidity(deps, env, info),
-        CallbackMsg::SendLiquidityToken {
-            minimum_receive,
-            to,
-        } => send_liquidity_token(deps, env, info, minimum_receive, to),
+        CallbackMsg::ProvideLiquidity { receiver } => provide_liquidity(deps, env, info, receiver),
     }
 }
 
@@ -409,6 +400,7 @@ pub fn provide_liquidity(
     deps: DepsMut,
     env: Env,
     _info: MessageInfo,
+    receiver: String,
 ) -> Result<Response, ContractError> {
     let config: Config = CONFIG.load(deps.storage)?;
 
@@ -441,7 +433,7 @@ pub fn provide_liquidity(
                 msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
                     spender: pair_contract.to_string(),
                     amount: asset.amount,
-                    expires: None,
+                    expires: Some(Expiration::AtHeight(env.block.height + 1)),
                 })
                 .unwrap(),
                 funds: vec![],
@@ -463,8 +455,8 @@ pub fn provide_liquidity(
         contract_addr: pair_contract.to_string(),
         msg: to_binary(&AstroportPairExecuteMsg::ProvideLiquidity {
             assets,
-            slippage_tolerance: None,
-            receiver: None,
+            slippage_tolerance: Some(config.slippage_tolerance),
+            receiver: Some(receiver.to_string()),
             auto_stake: None,
         })?,
         funds,
@@ -473,44 +465,8 @@ pub fn provide_liquidity(
 
     Ok(Response::new()
         .add_messages(messages)
-        .add_attribute("action", "provide_liquidity"))
-}
-
-pub fn send_liquidity_token(
-    deps: DepsMut,
-    env: Env,
-    _info: MessageInfo,
-    minimum_receive: Option<Uint128>,
-    to: Addr,
-) -> Result<Response, ContractError> {
-    let config: Config = CONFIG.load(deps.storage)?;
-    let liquidity_token = config.pair_info.liquidity_token;
-    let lp_balance = query_token_balance(
-        &deps.querier,
-        liquidity_token.clone(),
-        env.contract.address,
-    )?;
-
-    if let Some(minimum_receive) = minimum_receive {
-        if lp_balance < minimum_receive {
-            return Err(ContractError::AssertionMinimumReceive {
-                minimum_receive,
-                amount: lp_balance,
-            });
-        }
-    }
-
-    let liquidity_token_asset = Asset {
-        info: AssetInfo::Token {
-            contract_addr: liquidity_token,
-        },
-        amount: lp_balance,
-    };
-
-    Ok(Response::new()
-        .add_attribute("action", "send_liquidity_token")
-        .add_attribute("lp_balance", lp_balance)
-        .add_message(liquidity_token_asset.into_msg(&deps.querier, to)?))
+        .add_attribute("action", "provide_liquidity")
+        .add_attribute("receiver", receiver))
 }
 
 /// ## Description
@@ -641,15 +597,15 @@ fn deposit_asset(
     }
 
     match asset.info {
-        AssetInfo::Token {
-            ..
-        } => {
-            messages.push(transfer_from_msg(asset, &info.sender, &env.contract.address)?);
+        AssetInfo::Token { .. } => {
+            messages.push(transfer_from_msg(
+                asset,
+                &info.sender,
+                &env.contract.address,
+            )?);
             Ok(())
         }
-        AssetInfo::NativeToken {
-            ..
-        } => {
+        AssetInfo::NativeToken { .. } => {
             asset.assert_sent_native_token_balance(&info)?;
             Ok(())
         }
@@ -658,9 +614,7 @@ fn deposit_asset(
 
 fn transfer_from_msg(asset: &Asset, from: &Addr, to: &Addr) -> StdResult<CosmosMsg> {
     match &asset.info {
-        AssetInfo::Token {
-            contract_addr,
-        } => Ok(CosmosMsg::Wasm(WasmMsg::Execute {
+        AssetInfo::Token { contract_addr } => Ok(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: contract_addr.to_string(),
             msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
                 owner: from.to_string(),
@@ -669,9 +623,9 @@ fn transfer_from_msg(asset: &Asset, from: &Addr, to: &Addr) -> StdResult<CosmosM
             })?,
             funds: vec![],
         })),
-        AssetInfo::NativeToken {
-            ..
-        } => Err(StdError::generic_err("TransferFrom does not apply to native tokens")),
+        AssetInfo::NativeToken { .. } => Err(StdError::generic_err(
+            "TransferFrom does not apply to native tokens",
+        )),
     }
 }
 

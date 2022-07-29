@@ -5,7 +5,7 @@ use cosmwasm_std::{
 };
 
 use crate::error::ContractError;
-use crate::state::{Config, PoolInfo, RewardInfo, CONFIG, POOL_INFO, REWARD};
+use crate::state::{RewardInfo, CONFIG, REWARD, STATE, State};
 
 use cw20::Cw20ExecuteMsg;
 
@@ -25,10 +25,11 @@ pub fn bond(
 ) -> Result<Response, ContractError> {
     let staker_addr = addr_validate_to_lower(deps.api, &sender_addr)?;
 
-    let pool_info = POOL_INFO.load(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?;
+    let staking_token = config.pair_info.liquidity_token;
 
     // only staking token contract can execute this message
-    if pool_info.staking_token != addr_validate_to_lower(deps.api, info.sender.as_str())? {
+    if staking_token != addr_validate_to_lower(deps.api, info.sender.as_str())? {
         return Err(ContractError::Unauthorized {});
     }
 
@@ -36,14 +37,14 @@ pub fn bond(
 
     let lp_balance = query_astroport_pool_balance(
         deps.as_ref(),
-        &pool_info.staking_token,
+        &staking_token,
         &env.contract.address,
-        &config.astroport_generator,
+        &config.staking_contract,
     )?;
 
     let mut messages: Vec<CosmosMsg> = vec![];
 
-    let mut pool_info = POOL_INFO.load(deps.storage)?;
+    let mut state = STATE.load(deps.storage)?;
 
     // withdraw reward to pending reward; before changing share
     let mut reward_info = REWARD
@@ -57,7 +58,7 @@ pub fn bond(
         //TODO: deposit cost
     }
 
-    let deposit_amount = increase_bond_amount(&mut pool_info, &mut reward_info, amount, lp_balance);
+    let deposit_amount = increase_bond_amount(&mut state, &mut reward_info, amount, lp_balance);
 
     let last_deposit_amount = reward_info.deposit_amount;
     reward_info.deposit_amount = last_deposit_amount + deposit_amount;
@@ -69,20 +70,20 @@ pub fn bond(
     )?;
 
     REWARD.save(deps.storage, &staker_addr, &reward_info)?;
-    POOL_INFO.save(deps.storage, &pool_info)?;
+    STATE.save(deps.storage, &state)?;
 
     messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: pool_info.staking_token.to_string(),
+        contract_addr: staking_token.to_string(),
         funds: vec![],
         msg: to_binary(&Cw20ExecuteMsg::Send {
-            contract: config.astroport_generator.to_string(),
+            contract: config.staking_contract.to_string(),
             amount,
             msg: to_binary(&AstroportCw20HookMsg::Deposit {})?,
         })?,
     }));
     Ok(Response::new().add_messages(messages).add_attributes(vec![
         attr("action", "bond"),
-        attr("lp_token", pool_info.staking_token.to_string()),
+        attr("lp_token", staking_token.to_string()),
         attr("amount", amount),
         attr("bond_amount", amount),
     ]))
@@ -90,17 +91,17 @@ pub fn bond(
 
 // increase share amount in pool and reward info
 fn increase_bond_amount(
-    pool_info: &mut PoolInfo,
+    state: &mut State,
     reward_info: &mut RewardInfo,
     bond_amount: Uint128,
     lp_balance: Uint128,
 ) -> Uint128 {
     // convert amount to share & update
-    let bond_share = pool_info.calc_bond_share(bond_amount, lp_balance);
-    pool_info.total_bond_share += bond_share;
+    let bond_share = state.calc_bond_share(bond_amount, lp_balance);
+    state.total_bond_share += bond_share;
     reward_info.bond_share += bond_share;
 
-    let new_bond_amount = pool_info.calc_user_balance(lp_balance + bond_amount, bond_share);
+    let new_bond_amount = state.calc_user_balance(lp_balance + bond_amount, bond_share);
     new_bond_amount
 }
 
@@ -113,52 +114,52 @@ pub fn unbond(
     let staker_addr = info.sender;
 
     let config = CONFIG.load(deps.storage)?;
-    let pool_info = POOL_INFO.load(deps.storage)?;
+    let staking_token = config.pair_info.liquidity_token;
 
     let lp_balance = query_astroport_pool_balance(
         deps.as_ref(),
-        &pool_info.staking_token,
+        &staking_token,
         &env.contract.address,
-        &config.astroport_generator,
+        &config.staking_contract,
     )?;
 
-    let mut pool_info = POOL_INFO.load(deps.storage)?;
+    let mut state = STATE.load(deps.storage)?;
     let mut reward_info = REWARD.load(deps.storage, &staker_addr)?;
 
-    let user_balance = pool_info.calc_user_balance(lp_balance, reward_info.bond_share);
+    let user_balance = state.calc_user_balance(lp_balance, reward_info.bond_share);
 
     if user_balance < amount {
         return Err(ContractError::UnbondExceedBalance {});
     }
 
     // add 1 to share, otherwise there will always be a fraction
-    let mut bond_share = pool_info.calc_bond_share(amount, lp_balance);
-    if pool_info.calc_user_balance(lp_balance, bond_share) < amount {
+    let mut bond_share = state.calc_bond_share(amount, lp_balance);
+    if state.calc_user_balance(lp_balance, bond_share) < amount {
         bond_share += Uint128::new(1u128);
     }
 
-    pool_info.total_bond_share = pool_info.total_bond_share.checked_sub(bond_share)?;
+    state.total_bond_share = state.total_bond_share.checked_sub(bond_share)?;
     reward_info.bond_share = reward_info.bond_share.checked_sub(bond_share)?;
 
     reward_info.deposit_amount = reward_info
         .deposit_amount
         .multiply_ratio(user_balance.checked_sub(amount)?, user_balance);
 
-    // update pool info
-    POOL_INFO.save(deps.storage, &pool_info)?;
+    // update state
+    STATE.save(deps.storage, &state)?;
 
     Ok(Response::new()
         .add_messages(vec![
             CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: config.astroport_generator.to_string(),
+                contract_addr: config.staking_contract.to_string(),
                 funds: vec![],
                 msg: to_binary(&AstroportExecuteMsg::Withdraw {
-                    lp_token: pool_info.staking_token.to_string(),
+                    lp_token: staking_token.to_string(),
                     amount,
                 })?,
             }),
             CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: pool_info.staking_token.to_string(),
+                contract_addr: staking_token.to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: staker_addr.to_string(),
                     amount,
@@ -179,9 +180,7 @@ pub fn query_reward_info(
     staker_addr: String,
 ) -> StdResult<RewardInfoResponse> {
     let staker_addr_validated = addr_validate_to_lower(deps.api, &staker_addr)?;
-
-    let config = CONFIG.load(deps.storage)?;
-    let reward_info = read_reward_info(deps, env, &config, &staker_addr_validated)?;
+    let reward_info = read_reward_info(deps, env, &staker_addr_validated)?;
 
     Ok(RewardInfoResponse {
         staker_addr,
@@ -192,7 +191,6 @@ pub fn query_reward_info(
 fn read_reward_info(
     deps: Deps,
     env: Env,
-    config: &Config,
     staker_addr: &Addr,
 ) -> StdResult<RewardInfoResponseItem> {
     let reward_info = REWARD
@@ -203,20 +201,22 @@ fn read_reward_info(
             deposit_cost: Uint128::zero(),
             deposit_time: 0,
         });
-    let pool_info = POOL_INFO.load(deps.storage)?;
+    let state = STATE.load(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?;
+    let staking_token = config.pair_info.liquidity_token;
 
     let has_deposit_amount = !reward_info.deposit_amount.is_zero();
 
     let lp_balance = query_astroport_pool_balance(
         deps,
-        &pool_info.staking_token,
+        &staking_token,
         &env.contract.address,
-        &config.astroport_generator,
+        &config.staking_contract,
     )?;
 
-    let bond_amount = pool_info.calc_user_balance(lp_balance, reward_info.bond_share);
+    let bond_amount = state.calc_user_balance(lp_balance, reward_info.bond_share);
     Ok(RewardInfoResponseItem {
-        asset_token: pool_info.asset_token.to_string(),
+        staking_token: staking_token.to_string(),
         bond_share: reward_info.bond_share,
         bond_amount,
         deposit_amount: if has_deposit_amount {
