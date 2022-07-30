@@ -1,7 +1,7 @@
 use schemars::{JsonSchema};
 use serde::{Deserialize, Serialize};
 
-use astroport::asset::{Asset, PairInfo};
+use astroport::asset::{Asset, PairInfo, AssetInfo};
 
 use cosmwasm_std::{to_binary, Addr, CosmosMsg, StdResult, WasmMsg, Decimal};
 /// This structure describes the basic settings for creating a contract.
@@ -11,7 +11,7 @@ pub struct InstantiateMsg {
     pub pair_contract: String,
     /// the swap commission
     pub commission_bps: u64,
-    pub pair_proxies: Vec<(String, String)>,
+    pub pair_proxies: Vec<(AssetInfo, String)>,
     pub slippage_tolerance: Decimal,
 }
 

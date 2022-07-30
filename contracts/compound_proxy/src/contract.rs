@@ -73,7 +73,13 @@ pub fn instantiate(
         slippage_tolerance,
     };
     CONFIG.save(deps.storage, &config)?;
-    //TODO: init pair proxies
+
+    for (asset_info, pair_proxy) in msg.pair_proxies {
+        asset_info.check(deps.api)?;
+        let pair_proxy_addr = addr_validate_to_lower(deps.api, &pair_proxy)?;
+        PAIR_PROXY.save(deps.storage, asset_info.to_string(), &pair_proxy_addr)?;
+    }
+
     Ok(Response::new())
 }
 
@@ -254,32 +260,8 @@ pub fn optimal_swap(
             //Do nothing for stable pair
         }
         _ => {
-            let asset_a_info = if config.pair_info.asset_infos[0].is_native_token() {
-                AssetInfo::NativeToken {
-                    denom: config.pair_info.asset_infos[0].to_string(),
-                }
-            } else {
-                AssetInfo::Token {
-                    contract_addr: addr_validate_to_lower(
-                        deps.api,
-                        &config.pair_info.asset_infos[0].to_string(),
-                    )
-                    .unwrap(),
-                }
-            };
-            let asset_b_info = if config.pair_info.asset_infos[1].is_native_token() {
-                AssetInfo::NativeToken {
-                    denom: config.pair_info.asset_infos[1].to_string(),
-                }
-            } else {
-                AssetInfo::Token {
-                    contract_addr: addr_validate_to_lower(
-                        deps.api,
-                        &config.pair_info.asset_infos[1].to_string(),
-                    )
-                    .unwrap(),
-                }
-            };
+            let asset_a_info = config.pair_info.asset_infos[0].clone();
+            let asset_b_info = config.pair_info.asset_infos[1].clone();
 
             let asset_a_amount =
                 asset_a_info.query_pool(&deps.querier, env.contract.address.clone())?;
@@ -411,14 +393,12 @@ pub fn provide_liquidity(
         Asset {
             info: asset_infos[0].clone(),
             amount: asset_infos[0]
-                .query_pool(&deps.querier, env.contract.address.clone())
-                .unwrap(),
+                .query_pool(&deps.querier, env.contract.address.clone())?,
         },
         Asset {
             info: asset_infos[1].clone(),
             amount: asset_infos[1]
-                .query_pool(&deps.querier, env.contract.address)
-                .unwrap(),
+                .query_pool(&deps.querier, env.contract.address)?,
         },
     ];
 
