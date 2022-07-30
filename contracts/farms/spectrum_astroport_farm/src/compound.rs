@@ -25,10 +25,16 @@ use spectrum::compound_proxy::ExecuteMsg as CompoundProxyExecuteMsg;
 pub fn compound(
     deps: DepsMut,
     env: Env,
-    _info: MessageInfo,
+    info: MessageInfo,
     minimum_receive: Option<Uint128>,
 ) -> Result<Response, ContractError> {
+
     let config = CONFIG.load(deps.storage)?;
+
+    if info.sender != config.controller {
+        return Err(ContractError::Unauthorized {});
+    }
+
     let staking_token = config.pair_info.liquidity_token;
 
     let reward_info =

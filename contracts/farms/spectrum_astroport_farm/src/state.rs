@@ -3,7 +3,7 @@ use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Addr, Decimal, Uint128};
+use cosmwasm_std::{Addr, Decimal, StdResult, Uint128, Uint256};
 
 use crate::ownership::OwnershipProposal;
 
@@ -33,21 +33,43 @@ pub struct State {
 pub const STATE: Item<State> = Item::new("state");
 
 impl State {
-    pub fn calc_bond_share(&self, bond_amount: Uint128, lp_balance: Uint128) -> Uint128 {
+    pub fn calc_bond_share(
+        &self,
+        bond_amount: Uint128,
+        lp_balance: Uint128,
+        scaling_operation: ScalingOperation,
+    ) -> Uint128 {
         if self.total_bond_share.is_zero() || lp_balance.is_zero() {
             bond_amount
         } else {
-            bond_amount.multiply_ratio(self.total_bond_share, lp_balance)
+            match scaling_operation {
+                ScalingOperation::Truncate => {
+                    bond_amount.multiply_ratio(self.total_bond_share, lp_balance)
+                }
+                ScalingOperation::Ceil => bond_amount
+                    .multiply_ratio_and_ceil(self.total_bond_share, lp_balance)
+                    .unwrap(),
+            }
         }
     }
 
-
-    pub fn calc_user_balance(&self, lp_balance: Uint128, bond_share: Uint128) -> Uint128 {
+    pub fn calc_user_balance(
+        &self,
+        lp_balance: Uint128,
+        bond_share: Uint128,
+        scaling_operation: ScalingOperation,
+    ) -> Uint128 {
         if self.total_bond_share.is_zero() {
             Uint128::zero()
         } else {
-            lp_balance
-                .multiply_ratio(bond_share, self.total_bond_share)
+            match scaling_operation {
+                ScalingOperation::Truncate => {
+                    lp_balance.multiply_ratio(bond_share, self.total_bond_share)
+                }
+                ScalingOperation::Ceil => lp_balance
+                    .multiply_ratio_and_ceil(bond_share, self.total_bond_share)
+                    .unwrap(),
+            }
         }
     }
 }
@@ -76,3 +98,51 @@ impl RewardInfo {
 /// ## Description
 /// Stores the latest proposal to change contract ownership
 pub const OWNERSHIP_PROPOSAL: Item<OwnershipProposal> = Item::new("ownership_proposal");
+
+pub enum ScalingOperation {
+    Truncate,
+    Ceil,
+}
+
+trait ScalingUint128 {
+    fn multiply_ratio_and_ceil(
+        &self,
+        numerator: Uint128,
+        denominator: Uint128,
+    ) -> StdResult<Uint128>;
+}
+
+impl ScalingUint128 for Uint128 {
+    /// Multiply Uint128 by Decimal, rounding up to the nearest integer.
+    fn multiply_ratio_and_ceil(
+        self: &Uint128,
+        numerator: Uint128,
+        denominator: Uint128,
+    ) -> StdResult<Uint128> {
+        let numerator_u256 = self.full_mul(numerator);
+        let denominator_u256 = Uint256::from(denominator);
+
+        let mut result_u256 = numerator_u256 / denominator_u256;
+
+        if numerator_u256.checked_rem(denominator_u256)? > Uint256::zero() {
+            result_u256 += Uint256::from(1_u32);
+        }
+
+        let result = result_u256.try_into()?;
+        Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn multiply_ratio_and_ceil() {
+        let a = Uint128::new(124);
+        let b = a
+            .multiply_ratio_and_ceil(Uint128::new(1), Uint128::new(3))
+            .unwrap();
+        assert_eq!(b, Uint128::new(42));
+    }
+}

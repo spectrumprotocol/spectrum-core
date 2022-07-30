@@ -5,7 +5,7 @@ use cosmwasm_std::{
 };
 
 use crate::error::ContractError;
-use crate::state::{RewardInfo, CONFIG, REWARD, STATE, State};
+use crate::state::{RewardInfo, CONFIG, REWARD, STATE, State, ScalingOperation};
 
 use cw20::Cw20ExecuteMsg;
 
@@ -97,11 +97,11 @@ fn increase_bond_amount(
     lp_balance: Uint128,
 ) -> Uint128 {
     // convert amount to share & update
-    let bond_share = state.calc_bond_share(bond_amount, lp_balance);
+    let bond_share = state.calc_bond_share(bond_amount, lp_balance, ScalingOperation::Truncate);
     state.total_bond_share += bond_share;
     reward_info.bond_share += bond_share;
 
-    let new_bond_amount = state.calc_user_balance(lp_balance + bond_amount, bond_share);
+    let new_bond_amount = state.calc_user_balance(lp_balance + bond_amount, bond_share, ScalingOperation::Truncate);
     new_bond_amount
 }
 
@@ -126,17 +126,13 @@ pub fn unbond(
     let mut state = STATE.load(deps.storage)?;
     let mut reward_info = REWARD.load(deps.storage, &staker_addr)?;
 
-    let user_balance = state.calc_user_balance(lp_balance, reward_info.bond_share);
+    let user_balance = state.calc_user_balance(lp_balance, reward_info.bond_share, ScalingOperation::Truncate);
 
     if user_balance < amount {
         return Err(ContractError::UnbondExceedBalance {});
     }
 
-    // add 1 to share, otherwise there will always be a fraction
-    let mut bond_share = state.calc_bond_share(amount, lp_balance);
-    if state.calc_user_balance(lp_balance, bond_share) < amount {
-        bond_share += Uint128::new(1u128);
-    }
+    let bond_share = state.calc_bond_share(amount, lp_balance, ScalingOperation::Ceil);
 
     state.total_bond_share = state.total_bond_share.checked_sub(bond_share)?;
     reward_info.bond_share = reward_info.bond_share.checked_sub(bond_share)?;
@@ -212,7 +208,7 @@ fn read_reward_info(
         &config.staking_contract,
     )?;
 
-    let bond_amount = state.calc_user_balance(lp_balance, reward_info.bond_share);
+    let bond_amount = state.calc_user_balance(lp_balance, reward_info.bond_share, ScalingOperation::Truncate);
     Ok(RewardInfoResponseItem {
         staking_token: staking_token.to_string(),
         bond_share: reward_info.bond_share,

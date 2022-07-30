@@ -45,7 +45,7 @@ pub fn instantiate(
 
     let pair_info = query_pair_info(
         deps.as_ref(),
-        &addr_validate_to_lower(deps.api, &msg.pair_contract).unwrap(),
+        &addr_validate_to_lower(deps.api, &msg.pair_contract)?,
     )?;
 
     CONFIG.save(
@@ -182,7 +182,7 @@ pub fn update_config(
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
-    if addr_validate_to_lower(deps.api, info.sender.as_str())? != config.owner {
+    if info.sender != config.owner {
         return Err(ContractError::Unauthorized {});
     }
 
