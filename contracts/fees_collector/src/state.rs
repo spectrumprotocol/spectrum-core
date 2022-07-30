@@ -1,5 +1,4 @@
 use astroport::asset::AssetInfo;
-use astroport::common::OwnershipProposal;
 use cosmwasm_std::{Addr, Decimal};
 use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;

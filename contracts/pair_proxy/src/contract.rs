@@ -1,22 +1,21 @@
 use crate::error::ContractError;
-use crate::operations::execute_swap_operation;
 use crate::state::{Config, CONFIG};
 use std::collections::HashMap;
-use std::convert::TryInto;
 
+use astroport::router::{ExecuteMsg as RouterExecuteMsg, SwapOperation};
 use cosmwasm_std::{
-    entry_point, from_binary, to_binary, Addr, Binary, Coin, CosmosMsg, Decimal, Decimal256,
-    Deps, DepsMut, Env, Fraction, MessageInfo,  Response, StdError, StdResult,
-     Uint128, Uint256, WasmMsg, Api,
+    entry_point, from_binary, to_binary, Addr, Api, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
+    MessageInfo, Response, StdError, StdResult, Uint128, WasmMsg,
 };
-use spectrum::pair_proxy::{InstantiateMsg, ExecuteMsg, Cw20HookMsg, QueryMsg, SimulationResponse, ReverseSimulationResponse, ConfigResponse, DEFAULT_SLIPPAGE, MAX_ALLOWED_SLIPPAGE, MigrateMsg, SwapOperation, MAX_SWAP_OPERATIONS};
+use spectrum::pair_proxy::{
+    ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg,
+    MAX_SWAP_OPERATIONS,
+};
 
 use astroport::asset::{addr_validate_to_lower, Asset, AssetInfo, PairInfo};
 use astroport::factory::PairType;
-use astroport::querier::{query_fee_info, query_supply};
 use cw2::set_contract_version;
-use cw20::{Cw20ReceiveMsg};
-use std::str::FromStr;
+use cw20::Cw20ReceiveMsg;
 use std::vec;
 
 /// Contract name that is used for migration.
@@ -62,7 +61,6 @@ pub fn instantiate(
     // Assert the operations are properly set
     assert_operations(deps.api, &msg.operations)?;
 
-
     let config = Config {
         pair_info: PairInfo {
             contract_addr: env.contract.address.clone(),
@@ -70,7 +68,7 @@ pub fn instantiate(
             asset_infos: msg.asset_infos.clone(),
             pair_type: PairType::Xyk {},
         },
-        factory_addr: addr_validate_to_lower(deps.api, msg.factory_addr.as_str())?,
+        router_addr: addr_validate_to_lower(deps.api, msg.router_addr.as_str())?,
         operations: msg.operations,
     };
 
@@ -117,7 +115,6 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::UpdateConfig { .. } => Err(ContractError::NonSupported {}),
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
         ExecuteMsg::Swap {
             offer_asset,
@@ -146,23 +143,6 @@ pub fn execute(
                 to_addr,
             )
         }
-        ExecuteMsg::ExecuteSwapOperation {
-            operation,
-            to,
-            max_spread,
-        } => execute_swap_operation(deps, env, info, operation, to, max_spread),
-        ExecuteMsg::AssertMinimumReceive {
-            asset_info,
-            prev_balance,
-            minimum_receive,
-            receiver,
-        } => assert_minimum_receive(
-            deps.as_ref(),
-            asset_info,
-            prev_balance,
-            minimum_receive,
-            addr_validate_to_lower(deps.api, &receiver)?,
-        ),
     }
 }
 
@@ -280,7 +260,7 @@ pub fn get_share_in_assets(
 #[allow(clippy::too_many_arguments)]
 pub fn swap(
     deps: DepsMut,
-    env: Env,
+    _env: Env,
     info: MessageInfo,
     sender: Addr,
     offer_asset: Asset,
@@ -289,123 +269,55 @@ pub fn swap(
     to: Option<Addr>,
 ) -> Result<Response, ContractError> {
     offer_asset.assert_sent_native_token_balance(&info)?;
-    
+
     let config: Config = CONFIG.load(deps.storage)?;
 
-
-
-    let operations = if offer_asset.info.equal(&config.operations.first().unwrap().get_offer_asset_info()) {
+    let operations = if offer_asset
+        .info
+        .equal(&config.operations.first().unwrap().get_offer_asset_info())
+    {
         config.operations
-    } else if offer_asset.info.equal(&config.operations.last().unwrap().get_target_asset_info()) {
-        config.operations.into_iter().rev().map(|a|
-           SwapOperation::AstroSwap {
+    } else if offer_asset
+        .info
+        .equal(&config.operations.last().unwrap().get_target_asset_info())
+    {
+        config
+            .operations
+            .into_iter()
+            .rev()
+            .map(|a| SwapOperation::AstroSwap {
                 offer_asset_info: a.get_target_asset_info(),
                 ask_asset_info: a.get_offer_asset_info(),
-            }
-        ).collect()
+            })
+            .collect()
     } else {
-        return Err(ContractError::InvalidAsset {})
+        return Err(ContractError::InvalidAsset {});
     };
 
-    let operations_len = operations.len();
-    
     let to = if let Some(to) = to {
         addr_validate_to_lower(deps.api, to.as_str())?
     } else {
         sender.clone()
     };
 
-    let target_asset_info = operations.last().unwrap().get_target_asset_info();
-
-    let mut operation_index = 0;
-    let mut messages: Vec<CosmosMsg> = operations
-        .into_iter()
-        .map(|op| {
-            operation_index += 1;
-            Ok(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: env.contract.address.to_string(),
-                funds: vec![],
-                msg: to_binary(&ExecuteMsg::ExecuteSwapOperation {
-                    operation: op,
-                    to: if operation_index == operations_len {
-                        Some(to.to_string())
-                    } else {
-                        None
-                    },
-                    max_spread,
-                })?,
-            }))
-        })
-        .collect::<StdResult<Vec<CosmosMsg>>>()?;
-
-    // TODO: calculate minimum_receive
-    let minimum_receive = Some(Uint128::zero());
-    
-    // Execute minimum amount assertion
-    if let Some(minimum_receive) = minimum_receive {
-        let receiver_balance = target_asset_info.query_pool(&deps.querier, to.clone())?;
-        messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: env.contract.address.to_string(),
-            funds: vec![],
-            msg: to_binary(&ExecuteMsg::AssertMinimumReceive {
-                asset_info: target_asset_info,
-                prev_balance: receiver_balance,
-                minimum_receive,
-                receiver: to.to_string(),
-            })?,
-        }));
-    }
-   
+    let message = CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: config.router_addr.to_string(),
+        funds: vec![],
+        msg: to_binary(&RouterExecuteMsg::ExecuteSwapOperations {
+            operations,
+            to: Some(to.clone()),
+            max_spread,
+            minimum_receive: None, //TODO: calculate minimum receive
+        })?,
+    });
 
     Ok(Response::new()
-        .add_messages(
-            // 1. send collateral token from the contract to a user
-            // 2. send inactive commission to collector
-            messages,
-        )
+        .add_message(message)
         .add_attribute("action", "swap")
         .add_attribute("sender", sender.as_str())
         .add_attribute("receiver", to.as_str())
-        .add_attribute("offer_asset", offer_asset.info.to_string())
-    )
+        .add_attribute("offer_asset", offer_asset.info.to_string()))
 }
-
-
-/// ## Description
-/// Performs minimum receive amount assertion.
-/// Returns an [`ContractError`] on failure, otherwise returns default object of type [`Response`]
-/// if the operation is successful.
-/// ## Params
-/// * **deps** is the object of type [`DepsMut`].
-///
-/// * **asset_info** is the object of type [`AssetInfo`].
-///
-/// * **prev_balance** is the object of type [`Uint128`].
-///
-/// * **minimum_receive** is the object of type [`Uint128`].
-///
-/// * **receiver** is the object of type [`Addr`]. Sets recipient for which the receive minimum amount assertion will be performed.
-fn assert_minimum_receive(
-    deps: Deps,
-    asset_info: AssetInfo,
-    prev_balance: Uint128,
-    minimum_receive: Uint128,
-    receiver: Addr,
-) -> Result<Response, ContractError> {
-    asset_info.check(deps.api)?;
-    let receiver_balance = asset_info.query_pool(&deps.querier, receiver)?;
-    let swap_amount = receiver_balance.checked_sub(prev_balance)?;
-
-    if swap_amount < minimum_receive {
-        return Err(ContractError::AssertionMinimumReceive {
-            receive: minimum_receive,
-            amount: swap_amount,
-        });
-    }
-
-    Ok(Response::default())
-}
-
 
 /// ## Description
 /// Validates assets in operations. Returns an [`ContractError`] on failure, otherwise returns [`Ok`].
@@ -476,30 +388,12 @@ pub fn calculate_maker_fee(
 /// ## Queries
 /// * **QueryMsg::Pair {}** Returns information about a pair in an object of type [`PairInfo`].
 ///
-/// * **QueryMsg::Pool {}** Returns information about a pool in an object of type [`PoolResponse`].
-///
-/// * **QueryMsg::Share { amount }** Returns information about the share of the pool in a vector
-/// that contains objects of type [`Asset`].
-///
-/// * **QueryMsg::Simulation { offer_asset }** Returns information about the simulation of the
-/// swap in a [`SimulationResponse`] object.
-///
-/// * **QueryMsg::ReverseSimulation { ask_asset }** Returns information about the reverse simulation
-/// in a [`ReverseSimulationResponse`] object.
-///
-/// * **QueryMsg::CumulativePrices {}** Returns information about the cumulative prices in a
-/// [`CumulativePricesResponse`] object.
-///
 /// * **QueryMsg::Config {}** Returns information about the controls settings in a
 /// [`ConfigResponse`] object.
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Pair {} => to_binary(&query_pair_info(deps)?),
-        QueryMsg::Simulation { offer_asset } => to_binary(&query_simulation(deps, offer_asset)?),
-        QueryMsg::ReverseSimulation { ask_asset } => {
-            to_binary(&query_reverse_simulation(deps, ask_asset)?)
-        }
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
     }
 }
@@ -514,103 +408,6 @@ pub fn query_pair_info(deps: Deps) -> StdResult<PairInfo> {
 }
 
 /// ## Description
-/// Returns information about the simulation of the swap in a [`SimulationResponse`] object.
-/// ## Params
-/// * **deps** is the object of type [`Deps`].
-///
-/// * **offer_asset** is the object of type [`Asset`].
-pub fn query_simulation(deps: Deps, offer_asset: Asset) -> StdResult<SimulationResponse> {
-    let config: Config = CONFIG.load(deps.storage)?;
-    let contract_addr = config.pair_info.contract_addr.clone();
-
-    let pools: [Asset; 2] = config.pair_info.query_pools(&deps.querier, contract_addr)?;
-
-    let offer_pool: Asset;
-    let ask_pool: Asset;
-    if offer_asset.info.equal(&pools[0].info) {
-        offer_pool = pools[0].clone();
-        ask_pool = pools[1].clone();
-    } else if offer_asset.info.equal(&pools[1].info) {
-        offer_pool = pools[1].clone();
-        ask_pool = pools[0].clone();
-    } else {
-        return Err(StdError::generic_err(
-            "Given offer asset doesn't belong to pairs",
-        ));
-    }
-
-    // Get fee info from factory
-    let fee_info = query_fee_info(
-        &deps.querier,
-        config.factory_addr,
-        config.pair_info.pair_type,
-    )?;
-
-    let (return_amount, spread_amount, commission_amount) = compute_swap(
-        offer_pool.amount,
-        ask_pool.amount,
-        offer_asset.amount,
-        fee_info.total_fee_rate,
-    )?;
-
-    Ok(SimulationResponse {
-        return_amount,
-        spread_amount,
-        commission_amount,
-    })
-}
-
-/// ## Description
-/// Returns information about the reverse simulation in a [`ReverseSimulationResponse`] object.
-/// ## Params
-/// * **deps** is the object of type [`Deps`].
-///
-/// * **ask_asset** is the object of type [`Asset`].
-pub fn query_reverse_simulation(
-    deps: Deps,
-    ask_asset: Asset,
-) -> StdResult<ReverseSimulationResponse> {
-    let config: Config = CONFIG.load(deps.storage)?;
-    let contract_addr = config.pair_info.contract_addr.clone();
-
-    let pools: [Asset; 2] = config.pair_info.query_pools(&deps.querier, contract_addr)?;
-
-    let offer_pool: Asset;
-    let ask_pool: Asset;
-    if ask_asset.info.equal(&pools[0].info) {
-        ask_pool = pools[0].clone();
-        offer_pool = pools[1].clone();
-    } else if ask_asset.info.equal(&pools[1].info) {
-        ask_pool = pools[1].clone();
-        offer_pool = pools[0].clone();
-    } else {
-        return Err(StdError::generic_err(
-            "Given ask asset doesn't belong to pairs",
-        ));
-    }
-
-    // Get fee info from factory
-    let fee_info = query_fee_info(
-        &deps.querier,
-        config.factory_addr,
-        config.pair_info.pair_type,
-    )?;
-
-    let (offer_amount, spread_amount, commission_amount) = compute_offer_amount(
-        offer_pool.amount,
-        ask_pool.amount,
-        ask_asset.amount,
-        fee_info.total_fee_rate,
-    )?;
-
-    Ok(ReverseSimulationResponse {
-        offer_amount,
-        spread_amount,
-        commission_amount,
-    })
-}
-
-/// ## Description
 /// Returns information about the controls settings in a [`ConfigResponse`] object.
 /// ## Params
 /// * **deps** is the object of type [`Deps`].
@@ -621,186 +418,21 @@ pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
     })
 }
 
-/// ## Description
-/// Returns an amount in the coin if the coin is found, otherwise returns [`zero`].
-/// ## Params
-/// * **coins** are an array of [`Coin`] type items. Sets the list of coins.
-///
-/// * **denom** is the object of type [`String`]. Sets the name of coin.
-pub fn amount_of(coins: &[Coin], denom: String) -> Uint128 {
-    match coins.iter().find(|x| x.denom == denom) {
-        Some(coin) => coin.amount,
-        None => Uint128::zero(),
-    }
+trait PairProxySwapOperation {
+    fn get_offer_asset_info(&self) -> AssetInfo;
 }
 
-/// ## Description
-/// Returns computed swap for the pool with specified parameters
-/// ## Params
-/// * **offer_pool** is the object of type [`Uint128`]. Sets the offer pool.
-///
-/// * **ask_pool** is the object of type [`Uint128`]. Sets the ask pool.
-///
-/// * **offer_amount** is the object of type [`Uint128`]. Sets the offer amount.
-///
-/// * **commission_rate** is the object of type [`Decimal`]. Sets the commission rate.
-pub fn compute_swap(
-    offer_pool: Uint128,
-    ask_pool: Uint128,
-    offer_amount: Uint128,
-    commission_rate: Decimal,
-) -> StdResult<(Uint128, Uint128, Uint128)> {
-    let offer_pool: Uint256 = offer_pool.into();
-    let ask_pool: Uint256 = ask_pool.into();
-    let offer_amount: Uint256 = offer_amount.into();
-    let commission_rate = decimal2decimal256(commission_rate)?;
-
-    // offer => ask
-    // ask_amount = (ask_pool - cp / (offer_pool + offer_amount))
-    let cp: Uint256 = offer_pool * ask_pool;
-    let return_amount: Uint256 = (Decimal256::from_ratio(ask_pool, 1u8)
-        - Decimal256::from_ratio(cp, offer_pool + offer_amount))
-        * Uint256::from(1u8);
-
-    // calculate spread & commission
-    let spread_amount: Uint256 =
-        (offer_amount * Decimal256::from_ratio(ask_pool, offer_pool)) - return_amount;
-    let commission_amount: Uint256 = return_amount * commission_rate;
-
-    // commission will be absorbed to pool
-    let return_amount: Uint256 = return_amount - commission_amount;
-    Ok((
-        return_amount.try_into()?,
-        spread_amount.try_into()?,
-        commission_amount.try_into()?,
-    ))
-}
-
-/// ## Description
-/// Returns computed offer amount for the pool with specified parameters.
-/// ## Params
-/// * **offer_pool** is the object of type [`Uint128`]. Sets the offer pool.
-///
-/// * **ask_pool** is the object of type [`Uint128`]. Sets the ask pool.
-///
-/// * **offer_amount** is the object of type [`Uint128`]. Sets the ask amount.
-///
-/// * **commission_rate** is the object of type [`Decimal`]. Sets the commission rate.
-fn compute_offer_amount(
-    offer_pool: Uint128,
-    ask_pool: Uint128,
-    ask_amount: Uint128,
-    commission_rate: Decimal,
-) -> StdResult<(Uint128, Uint128, Uint128)> {
-    // ask => offer
-    // offer_amount = cp / (ask_pool - ask_amount / (1 - commission_rate)) - offer_pool
-    let cp = Uint256::from(offer_pool) * Uint256::from(ask_pool);
-    let one_minus_commission = Decimal256::one() - decimal2decimal256(commission_rate)?;
-    let inv_one_minus_commission = Decimal256::one() / one_minus_commission;
-
-    let offer_amount: Uint128 = cp
-        .multiply_ratio(
-            Uint256::from(1u8),
-            Uint256::from(
-                ask_pool.checked_sub(
-                    (Uint256::from(ask_amount) * inv_one_minus_commission).try_into()?,
-                )?,
-            ),
-        )
-        .checked_sub(offer_pool.into())?
-        .try_into()?;
-
-    let before_commission_deduction = Uint256::from(ask_amount) * inv_one_minus_commission;
-    let spread_amount = (offer_amount * Decimal::from_ratio(ask_pool, offer_pool))
-        .checked_sub(before_commission_deduction.try_into()?)
-        .unwrap_or_else(|_| Uint128::zero());
-    let commission_amount = before_commission_deduction * decimal2decimal256(commission_rate)?;
-    Ok((offer_amount, spread_amount, commission_amount.try_into()?))
-}
-
-/// ## Description
-/// Returns an [`ContractError`] on failure, otherwise if `belief_price` and `max_spread` both are given, we compute new spread else we just use swap
-/// spread to check `max_spread`.
-/// ## Params
-/// * **belief_price** is the object of type [`Option<Decimal>`]. Sets the belief price.
-///
-/// * **max_spread** is the object of type [`Option<Decimal>`]. Sets the maximum spread.
-///
-/// * **offer_amount** is the object of type [`Uint128`]. Sets the offer amount.
-///
-/// * **return_amount** is the object of type [`Uint128`]. Sets the return amount.
-///
-/// * **spread_amount** is the object of type [`Uint128`]. Sets the spread amount.
-pub fn assert_max_spread(
-    belief_price: Option<Decimal>,
-    max_spread: Option<Decimal>,
-    offer_amount: Uint128,
-    return_amount: Uint128,
-    spread_amount: Uint128,
-) -> Result<(), ContractError> {
-    let default_spread = Decimal::from_str(DEFAULT_SLIPPAGE)?;
-    let max_allowed_spread = Decimal::from_str(MAX_ALLOWED_SLIPPAGE)?;
-
-    let max_spread = max_spread.unwrap_or(default_spread);
-    if max_spread.gt(&max_allowed_spread) {
-        return Err(ContractError::AllowedSpreadAssertion {});
-    }
-
-    if let Some(belief_price) = belief_price {
-        let expected_return = offer_amount * belief_price.inv().unwrap();
-        let spread_amount = expected_return
-            .checked_sub(return_amount)
-            .unwrap_or_else(|_| Uint128::zero());
-
-        if return_amount < expected_return
-            && Decimal::from_ratio(spread_amount, expected_return) > max_spread
-        {
-            return Err(ContractError::MaxSpreadAssertion {});
+impl PairProxySwapOperation for SwapOperation {
+    fn get_offer_asset_info(&self) -> AssetInfo {
+        match self {
+            SwapOperation::NativeSwap { offer_denom, .. } => AssetInfo::NativeToken {
+                denom: offer_denom.clone(),
+            },
+            SwapOperation::AstroSwap {
+                offer_asset_info, ..
+            } => offer_asset_info.clone(),
         }
-    } else if Decimal::from_ratio(spread_amount, return_amount + spread_amount) > max_spread {
-        return Err(ContractError::MaxSpreadAssertion {});
     }
-
-    Ok(())
-}
-
-/// ## Description
-/// Ensures each prices are not dropped as much as slippage tolerance rate.
-/// Returns an [`ContractError`] on failure, otherwise returns [`Ok`].
-/// ## Params
-/// * **slippage_tolerance** is the object of type [`Option<Decimal>`].
-///
-/// * **deposits** are an array of [`Uint128`] type items.
-///
-/// * **pools** are an array of [`Asset`] type items.
-fn assert_slippage_tolerance(
-    slippage_tolerance: Option<Decimal>,
-    deposits: &[Uint128; 2],
-    pools: &[Asset; 2],
-) -> Result<(), ContractError> {
-    let default_slippage = Decimal::from_str(DEFAULT_SLIPPAGE)?;
-    let max_allowed_slippage = Decimal::from_str(MAX_ALLOWED_SLIPPAGE)?;
-
-    let slippage_tolerance = slippage_tolerance.unwrap_or(default_slippage);
-    if slippage_tolerance.gt(&max_allowed_slippage) {
-        return Err(ContractError::AllowedSpreadAssertion {});
-    }
-
-    let slippage_tolerance: Decimal256 = decimal2decimal256(slippage_tolerance)?;
-    let one_minus_slippage_tolerance = Decimal256::one() - slippage_tolerance;
-    let deposits: [Uint256; 2] = [deposits[0].into(), deposits[1].into()];
-    let pools: [Uint256; 2] = [pools[0].amount.into(), pools[1].amount.into()];
-
-    // Ensure each prices are not dropped as much as slippage tolerance rate
-    if Decimal256::from_ratio(deposits[0], deposits[1]) * one_minus_slippage_tolerance
-        > Decimal256::from_ratio(pools[0], pools[1])
-        || Decimal256::from_ratio(deposits[1], deposits[0]) * one_minus_slippage_tolerance
-            > Decimal256::from_ratio(pools[1], pools[0])
-    {
-        return Err(ContractError::MaxSlippageAssertion {});
-    }
-
-    Ok(())
 }
 
 /// ## Description
@@ -814,29 +446,4 @@ fn assert_slippage_tolerance(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
     Ok(Response::default())
-}
-
-/// ## Description
-/// Returns information about the pool.
-/// ## Params
-/// * **deps** is the object of type [`Deps`].
-///
-/// * **config** is the object of type [`Config`].
-pub fn pool_info(deps: Deps, config: Config) -> StdResult<([Asset; 2], Uint128)> {
-    let contract_addr = config.pair_info.contract_addr.clone();
-    let pools: [Asset; 2] = config.pair_info.query_pools(&deps.querier, contract_addr)?;
-    let total_share: Uint128 = query_supply(&deps.querier, config.pair_info.liquidity_token)?;
-
-    Ok((pools, total_share))
-}
-
-/// ## Description
-/// Converts [`Decimal`] to [`Decimal256`].
-pub fn decimal2decimal256(dec_value: Decimal) -> StdResult<Decimal256> {
-    Decimal256::from_atomics(dec_value.atomics(), dec_value.decimal_places()).map_err(|_| {
-        StdError::generic_err(format!(
-            "Failed to convert Decimal {} to Decimal256",
-            dec_value
-        ))
-    })
 }

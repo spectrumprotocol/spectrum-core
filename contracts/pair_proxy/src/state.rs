@@ -1,9 +1,8 @@
-use astroport::asset::PairInfo;
+use astroport::{asset::PairInfo, router::SwapOperation};
 use cosmwasm_std::{Addr};
 use cw_storage_plus::Item;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use spectrum::pair_proxy::SwapOperation;
 
 /// ## Description
 /// This structure describes the main control config of pair.
@@ -11,8 +10,8 @@ use spectrum::pair_proxy::SwapOperation;
 pub struct Config {
     /// the type of pair info available in [`PairInfo`]
     pub pair_info: PairInfo,
-    /// the factory contract address
-    pub factory_addr: Addr,
+    /// the router contract address
+    pub router_addr: Addr,
     /// swap operations
     pub operations: Vec<SwapOperation>
 }
