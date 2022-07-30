@@ -3,10 +3,14 @@
   "title": "StateInfo",
   "type": "object",
   "required": [
-    "earning"
+    "earning",
+    "total_bond_share"
   ],
   "properties": {
     "earning": {
+      "$ref": "#/definitions/Uint128"
+    },
+    "total_bond_share": {
       "$ref": "#/definitions/Uint128"
     }
   },

@@ -33,6 +33,18 @@
                 }
               ]
             },
+            "community_fee_collector": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compound_proxy": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "controller": {
               "type": [
                 "string",
@@ -49,7 +61,7 @@
                 }
               ]
             },
-            "owner": {
+            "controller_fee_collector": {
               "type": [
                 "string",
                 "null"
@@ -63,6 +75,12 @@
                 {
                   "type": "null"
                 }
+              ]
+            },
+            "platform_fee_collector": {
+              "type": [
+                "string",
+                "null"
               ]
             }
           }
@@ -93,30 +111,6 @@
     {
       "type": "object",
       "required": [
-        "register_asset"
-      ],
-      "properties": {
-        "register_asset": {
-          "type": "object",
-          "required": [
-            "asset_token",
-            "staking_token"
-          ],
-          "properties": {
-            "asset_token": {
-              "type": "string"
-            },
-            "staking_token": {
-              "type": "string"
-            }
-          }
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "required": [
         "compound"
       ],
       "properties": {
@@ -134,6 +128,61 @@
               ]
             }
           }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Creates a request to change the contract's ownership",
+      "type": "object",
+      "required": [
+        "propose_new_owner"
+      ],
+      "properties": {
+        "propose_new_owner": {
+          "type": "object",
+          "required": [
+            "expires_in",
+            "owner"
+          ],
+          "properties": {
+            "expires_in": {
+              "description": "The validity period of the proposal to change the owner",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "owner": {
+              "description": "The newly proposed owner",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Removes a request to change contract ownership",
+      "type": "object",
+      "required": [
+        "drop_ownership_proposal"
+      ],
+      "properties": {
+        "drop_ownership_proposal": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Claims contract ownership",
+      "type": "object",
+      "required": [
+        "claim_ownership"
+      ],
+      "properties": {
+        "claim_ownership": {
+          "type": "object"
         }
       },
       "additionalProperties": false
@@ -168,7 +217,25 @@
           ],
           "properties": {
             "stake": {
-              "type": "object"
+              "type": "object",
+              "required": [
+                "prev_balance"
+              ],
+              "properties": {
+                "minimum_receive": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/Uint128"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "prev_balance": {
+                  "$ref": "#/definitions/Uint128"
+                }
+              }
             }
           },
           "additionalProperties": false

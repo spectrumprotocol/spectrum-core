@@ -4,15 +4,11 @@
   "description": "This structure describes the custom struct for each query response.",
   "type": "object",
   "required": [
-    "pair_info",
-    "pair_proxy_contract"
+    "pair_info"
   ],
   "properties": {
     "pair_info": {
       "$ref": "#/definitions/PairInfo"
-    },
-    "pair_proxy_contract": {
-      "$ref": "#/definitions/Addr"
     }
   },
   "definitions": {

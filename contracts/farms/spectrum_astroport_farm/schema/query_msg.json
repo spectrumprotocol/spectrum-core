@@ -17,18 +17,6 @@
     {
       "type": "object",
       "required": [
-        "pool"
-      ],
-      "properties": {
-        "pool": {
-          "type": "object"
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "required": [
         "reward_info"
       ],
       "properties": {

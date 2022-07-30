@@ -1,11 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "ConfigInfo",
+  "title": "InstantiateMsg",
   "type": "object",
   "required": [
-    "astro_token",
-    "astroport_generator",
-    "base_denom",
     "community_fee",
     "community_fee_collector",
     "compound_proxy",
@@ -14,21 +11,11 @@
     "controller_fee_collector",
     "owner",
     "pair_contract",
-    "platform",
     "platform_fee",
     "platform_fee_collector",
-    "spectrum_gov"
+    "staking_contract"
   ],
   "properties": {
-    "astro_token": {
-      "type": "string"
-    },
-    "astroport_generator": {
-      "type": "string"
-    },
-    "base_denom": {
-      "type": "string"
-    },
     "community_fee": {
       "$ref": "#/definitions/Decimal"
     },
@@ -53,16 +40,13 @@
     "pair_contract": {
       "type": "string"
     },
-    "platform": {
-      "type": "string"
-    },
     "platform_fee": {
       "$ref": "#/definitions/Decimal"
     },
     "platform_fee_collector": {
       "type": "string"
     },
-    "spectrum_gov": {
+    "staking_contract": {
       "type": "string"
     }
   },

@@ -16,16 +16,6 @@
             "rewards"
           ],
           "properties": {
-            "minimum_receive": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/Uint128"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
             "rewards": {
               "type": "array",
               "items": {
@@ -158,35 +148,13 @@
           ],
           "properties": {
             "provide_liquidity": {
-              "type": "object"
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "required": [
-            "send_liquidity_token"
-          ],
-          "properties": {
-            "send_liquidity_token": {
               "type": "object",
               "required": [
-                "to"
+                "receiver"
               ],
               "properties": {
-                "minimum_receive": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/definitions/Uint128"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "to": {
-                  "$ref": "#/definitions/Addr"
+                "receiver": {
+                  "type": "string"
                 }
               }
             }

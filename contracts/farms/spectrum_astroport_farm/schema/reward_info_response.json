@@ -18,14 +18,13 @@
     "RewardInfoResponseItem": {
       "type": "object",
       "required": [
-        "asset_token",
         "bond_amount",
-        "bond_share"
+        "bond_share",
+        "deposit_amount",
+        "deposit_time",
+        "staking_token"
       ],
       "properties": {
-        "asset_token": {
-          "type": "string"
-        },
         "bond_amount": {
           "$ref": "#/definitions/Uint128"
         },
@@ -33,22 +32,15 @@
           "$ref": "#/definitions/Uint128"
         },
         "deposit_amount": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/Uint128"
-            },
-            {
-              "type": "null"
-            }
-          ]
+          "$ref": "#/definitions/Uint128"
         },
         "deposit_time": {
-          "type": [
-            "integer",
-            "null"
-          ],
+          "type": "integer",
           "format": "uint64",
           "minimum": 0.0
+        },
+        "staking_token": {
+          "type": "string"
         }
       }
     },
