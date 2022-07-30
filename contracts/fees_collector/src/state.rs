@@ -15,7 +15,7 @@ pub struct Config {
     /// The beneficiary address
     pub beneficiary: Addr,
     /// The stablecoin token address
-    pub stablecoin_token_contract: Addr, //TODO: Change to AssetInfo to support native token
+    pub stablecoin: AssetInfo,
     /// The max spread allowed when swapping fee tokens to stablecoin
     pub max_spread: Decimal,
 }

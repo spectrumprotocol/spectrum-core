@@ -3,7 +3,7 @@ use crate::state::{Config, BRIDGES};
 use astroport::asset::{Asset, AssetInfo, PairInfo};
 use astroport::pair::Cw20HookMsg;
 use astroport::querier::query_pair_info;
-use cosmwasm_std::{to_binary, Coin, Deps, Env, StdResult, SubMsg, Uint128, WasmMsg};
+use cosmwasm_std::{to_binary, Coin, Deps, Env, StdResult, Uint128, WasmMsg, CosmosMsg};
 use spectrum::fees_collector::ExecuteMsg;
 
 /// The default bridge depth for a fee token
@@ -19,31 +19,27 @@ pub fn try_build_swap_msg(
     from: AssetInfo,
     to: AssetInfo,
     amount_in: Uint128,
-) -> Result<SubMsg, ContractError> {
+) -> Result<CosmosMsg, ContractError> {
     let pool = get_pool(deps, config, from.clone(), to)?;
-    let msg = build_swap_msg(deps, config, pool, from, amount_in)?;
+    let msg = build_swap_msg(config, pool, from, amount_in)?;
     Ok(msg)
 }
 
 pub fn build_swap_msg(
-    deps: Deps,
     config: &Config,
     pool: PairInfo,
     from: AssetInfo,
     amount_in: Uint128,
-) -> Result<SubMsg, ContractError> {
+) -> Result<CosmosMsg, ContractError> {
     if from.is_native_token() {
         let mut offer_asset = Asset {
             info: from.clone(),
             amount: amount_in,
         };
 
-        // Deduct tax first
-        let amount_in = amount_in.checked_sub(offer_asset.compute_tax(&deps.querier)?)?;
-
         offer_asset.amount = amount_in;
 
-        Ok(SubMsg::new(WasmMsg::Execute {
+        Ok(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: pool.contract_addr.to_string(),
             msg: to_binary(&astroport::pair::ExecuteMsg::Swap {
                 offer_asset,
@@ -57,7 +53,7 @@ pub fn build_swap_msg(
             }],
         }))
     } else {
-        Ok(SubMsg::new(WasmMsg::Execute {
+        Ok(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: from.to_string(),
             msg: to_binary(&cw20::Cw20ExecuteMsg::Send {
                 contract: pool.contract_addr.to_string(),
@@ -73,29 +69,21 @@ pub fn build_swap_msg(
     }
 }
 
-pub fn build_distribute_msg(
+pub fn build_swap_bridge_msg(
     env: Env,
     bridge_assets: Vec<AssetInfo>,
     depth: u64,
-) -> StdResult<SubMsg> {
-    let msg: SubMsg = if !bridge_assets.is_empty() {
+) -> StdResult<CosmosMsg> {
+    let msg: CosmosMsg =
         // Swap bridge assets
-        SubMsg::new(WasmMsg::Execute {
+        CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: env.contract.address.to_string(),
             msg: to_binary(&ExecuteMsg::SwapBridgeAssets {
                 assets: bridge_assets,
                 depth,
             })?,
             funds: vec![],
-        })
-    } else {
-        // Update balances and distribute rewards
-        SubMsg::new(WasmMsg::Execute {
-            contract_addr: env.contract.address.to_string(),
-            msg: to_binary(&ExecuteMsg::DistributeFees {})?,
-            funds: vec![],
-        })
-    };
+        });
 
     Ok(msg)
 }

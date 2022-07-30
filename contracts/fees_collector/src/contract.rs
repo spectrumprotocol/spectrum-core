@@ -2,23 +2,23 @@ use crate::error::ContractError;
 use crate::state::{Config, BRIDGES, CONFIG};
 
 use crate::utils::{
-    build_distribute_msg, build_swap_msg, try_build_swap_msg, validate_bridge,
-    BRIDGES_EXECUTION_MAX_DEPTH, BRIDGES_INITIAL_DEPTH,
+    build_swap_bridge_msg, try_build_swap_msg, validate_bridge, BRIDGES_EXECUTION_MAX_DEPTH,
+    BRIDGES_INITIAL_DEPTH,
 };
 use astroport::asset::{
-    addr_validate_to_lower, native_asset_info, token_asset_info, Asset, AssetInfo,
-    PairInfo, ULUNA_DENOM,
+    addr_validate_to_lower, native_asset_info, Asset, AssetInfo, PairInfo, ULUNA_DENOM,
 };
 
 use astroport::pair::QueryMsg as PairQueryMsg;
 use cosmwasm_std::{
-    entry_point, to_binary, Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
-    MessageInfo, Order, QueryRequest, Response, StdError, StdResult, SubMsg, Uint128,
-    WasmMsg, WasmQuery,
+    entry_point, to_binary, Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo,
+    Order, QueryRequest, Response, StdError, StdResult, Uint128, WasmMsg, WasmQuery,
 };
-use cw2::{set_contract_version};
-use cw20::Cw20ExecuteMsg;
-use spectrum::fees_collector::{InstantiateMsg, ExecuteMsg, QueryMsg, ConfigResponse, BalancesResponse, AssetWithLimit, MigrateMsg};
+use cw2::set_contract_version;
+use spectrum::fees_collector::{
+    AssetWithLimit, BalancesResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg,
+    QueryMsg,
+};
 use std::collections::{HashMap, HashSet};
 
 /// Contract name that is used for migration.
@@ -57,10 +57,12 @@ pub fn instantiate(
         Decimal::percent(DEFAULT_MAX_SPREAD)
     };
 
+    msg.stablecoin.check(deps.api)?;
+
     let config = Config {
         operator: addr_validate_to_lower(deps.api, &msg.operator)?,
         factory_contract: addr_validate_to_lower(deps.api, &msg.factory_contract)?,
-        stablecoin_token_contract: addr_validate_to_lower(deps.api, &msg.stablecoin_token_contract)?,
+        stablecoin: msg.stablecoin,
         beneficiary: addr_validate_to_lower(deps.api, &msg.beneficiary)?,
         max_spread,
     };
@@ -136,9 +138,9 @@ fn collect(
     env: Env,
     assets: Vec<AssetWithLimit>,
 ) -> Result<Response, ContractError> {
-    let mut config = CONFIG.load(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?;
 
-    let stablecoin = token_asset_info(config.stablecoin_token_contract.clone());
+    let stablecoin = config.stablecoin.clone();
 
     // Check for duplicate assets
     let mut uniq = HashSet::new();
@@ -149,39 +151,44 @@ fn collect(
     {
         return Err(ContractError::DuplicatedAsset {});
     }
-
+    let response = Response::default();
     // Swap all non stablecoin tokens
-    let (mut response, bridge_assets) = swap_assets(
+    let (mut messages, bridge_assets) = swap_assets(
         deps.as_ref(),
         env.clone(),
         &config,
-        assets.into_iter().filter(|a| a.info.ne(&stablecoin)).collect(),
-        true,
+        assets
+            .into_iter()
+            .filter(|a| a.info.ne(&stablecoin))
+            .collect(),
     )?;
 
     // If no swap messages - send stablecoin directly to beneficiary
-    if response.messages.is_empty() {
-        let (mut distribute_msg, attributes) = distribute(deps, env, &mut config)?;
-        if !distribute_msg.is_empty() {
-            response.messages.append(&mut distribute_msg);
-            response = response.add_attributes(attributes);
-        }
-    } else {
-        response.messages.push(build_distribute_msg(
-            env,
+    if !messages.is_empty() && !bridge_assets.is_empty() {
+        messages.push(build_swap_bridge_msg(
+            env.clone(),
             bridge_assets,
             BRIDGES_INITIAL_DEPTH,
         )?);
     }
 
-    Ok(response.add_attribute("action", "collect"))
+    let distribute_fee = CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: env.contract.address.to_string(),
+        msg: to_binary(&ExecuteMsg::DistributeFees {})?,
+        funds: vec![],
+    });
+    messages.push(distribute_fee);
+
+    Ok(response
+        .add_messages(messages)
+        .add_attribute("action", "collect"))
 }
 
 /// ## Description
 /// This enum describes available token types that can be used as a SwapTarget.
 enum SwapTarget {
-    Stable(SubMsg),
-    Bridge { asset: AssetInfo, msg: SubMsg },
+    Stable(CosmosMsg),
+    Bridge { asset: AssetInfo, msg: CosmosMsg },
 }
 
 /// ## Description
@@ -202,9 +209,8 @@ fn swap_assets(
     env: Env,
     config: &Config,
     assets: Vec<AssetWithLimit>,
-    with_validation: bool,
-) -> Result<(Response, Vec<AssetInfo>), ContractError> {
-    let mut response = Response::default();
+) -> Result<(Vec<CosmosMsg>, Vec<AssetInfo>), ContractError> {
+    let mut messages: Vec<CosmosMsg> = vec![];
     let mut bridge_assets = HashMap::new();
 
     for a in assets {
@@ -219,25 +225,20 @@ fn swap_assets(
         }
 
         if !balance.is_zero() {
-            let swap_msg = if with_validation {
-                swap(deps, config, a.info, balance)?
-            } else {
-                swap_no_validate(deps, config, a.info, balance)?
-            };
-
+            let swap_msg = swap(deps, config, a.info, balance)?;
             match swap_msg {
                 SwapTarget::Stable(msg) => {
-                    response.messages.push(msg);
+                    messages.push(msg);
                 }
                 SwapTarget::Bridge { asset, msg } => {
-                    response.messages.push(msg);
+                    messages.push(msg);
                     bridge_assets.insert(asset.to_string(), asset);
                 }
             }
         }
     }
 
-    Ok((response, bridge_assets.into_values().collect()))
+    Ok((messages, bridge_assets.into_values().collect()))
 }
 
 /// ## Description
@@ -258,22 +259,13 @@ fn swap(
     from_token: AssetInfo,
     amount_in: Uint128,
 ) -> Result<SwapTarget, ContractError> {
-    let stablecoin = token_asset_info(config.stablecoin_token_contract.clone());
+    let stablecoin = config.stablecoin.clone();
     let uluna = native_asset_info(ULUNA_DENOM.to_string());
 
     // 2. Check if bridge tokens exist
     let bridge_token = BRIDGES.load(deps.storage, from_token.to_string());
     if let Ok(asset) = bridge_token {
-        let bridge_pool = validate_bridge(
-            deps,
-            config,
-            from_token.clone(),
-            asset.clone(),
-            stablecoin,
-            BRIDGES_INITIAL_DEPTH,
-        )?;
-
-        let msg = build_swap_msg(deps, config, bridge_pool, from_token, amount_in)?;
+        let msg = try_build_swap_msg(deps, config, from_token, asset.clone(), amount_in)?;
         return Ok(SwapTarget::Bridge { asset, msg });
     }
 
@@ -287,43 +279,8 @@ fn swap(
     }
 
     // 5. Check for a direct pair with stablecoin
-    let swap_to_stablecoin = try_build_swap_msg(deps, config, from_token.clone(), stablecoin, amount_in);
-    if let Ok(msg) = swap_to_stablecoin {
-        return Ok(SwapTarget::Stable(msg));
-    }
-
-    Err(ContractError::CannotSwap(from_token))
-}
-
-/// ## Description
-/// Performs a swap operation to stablecoin without additional checks. Returns a [`ContractError`] on failure,
-/// otherwise returns a vector that contains objects of type [`SubMsg`] if the operation
-/// was successful.
-/// # Params
-/// * **deps** is an object of type [`DepsMut`].
-///
-/// * **cfg** is an object of type [`Config`]. This is the Maker contract configuration.
-///
-/// * **from_token** is an object of type [`AssetInfo`]. This is the token to swap to stablecoin.
-///
-/// * **amount_in** is an object of type [`Uint128`]. This is the amount of tokens to swap.
-fn swap_no_validate(
-    deps: Deps,
-    config: &Config,
-    from_token: AssetInfo,
-    amount_in: Uint128,
-) -> Result<SwapTarget, ContractError> {
-    let stablecoin = token_asset_info(config.stablecoin_token_contract.clone());
-
-    // Check if next level bridge exists
-    let bridge_token = BRIDGES.load(deps.storage, from_token.to_string());
-    if let Ok(asset) = bridge_token {
-        let msg = try_build_swap_msg(deps, config, from_token, asset.clone(), amount_in)?;
-        return Ok(SwapTarget::Bridge { asset, msg });
-    }
-
-    // Check for a direct swap to stablecoin
-    let swap_to_stablecoin = try_build_swap_msg(deps, config, from_token.clone(), stablecoin, amount_in);
+    let swap_to_stablecoin =
+        try_build_swap_msg(deps, config, from_token.clone(), stablecoin, amount_in);
     if let Ok(msg) = swap_to_stablecoin {
         return Ok(SwapTarget::Stable(msg));
     }
@@ -376,17 +333,21 @@ fn swap_bridge_assets(
         })
         .collect();
 
-    let (response, bridge_assets) = swap_assets(deps.as_ref(), env.clone(), &config, bridges, false)?;
+    let (mut messages, bridge_assets) = swap_assets(deps.as_ref(), env.clone(), &config, bridges)?;
 
     // There should always be some messages, if there are none - something went wrong
-    if response.messages.is_empty() {
+    if messages.is_empty() {
         return Err(ContractError::Std(StdError::generic_err(
             "Empty swap messages",
         )));
     }
 
-    Ok(response
-        .add_submessage(build_distribute_msg(env, bridge_assets, depth + 1)?)
+    if !bridge_assets.is_empty() {
+        messages.push(build_swap_bridge_msg(env, bridge_assets, depth + 1)?)
+    }
+
+    Ok(Response::new()
+        .add_messages(messages)
         .add_attribute("action", "swap_bridge_assets"))
 }
 
@@ -412,12 +373,12 @@ fn distribute_fees(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Respons
         return Ok(Response::default());
     }
 
-    Ok(Response::default()
-        .add_submessages(distribute_msg)
+    Ok(Response::new()
+        .add_messages(distribute_msg)
         .add_attributes(attributes))
 }
 
-type DistributeMsgParts = (Vec<SubMsg>, Vec<(String, String)>);
+type DistributeMsgParts = (Vec<CosmosMsg>, Vec<(String, String)>);
 
 /// ## Description
 /// Private function that performs the stablecoin token distribution to beneficiary. Returns a [`ContractError`] on failure,
@@ -431,33 +392,29 @@ type DistributeMsgParts = (Vec<SubMsg>, Vec<(String, String)>);
 fn distribute(
     deps: DepsMut,
     env: Env,
-    config: &mut Config,
+    config: &Config,
 ) -> Result<DistributeMsgParts, ContractError> {
     let mut result = vec![];
     let mut attributes = vec![];
 
-    let stablecoin = token_asset_info(config.stablecoin_token_contract.clone());
+    let stablecoin = config.stablecoin.clone();
+    let beneficiary = config.beneficiary.clone();
 
-    let amount = stablecoin.query_pool(&deps.querier, env.contract.address.clone())?;
+    let amount = stablecoin.query_pool(&deps.querier, env.contract.address)?;
     if amount.is_zero() {
         return Ok((result, attributes));
     } else {
-        let send_msg = CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.stablecoin_token_contract.to_string(),
-            msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                recipient: config.beneficiary.to_string(),
-                amount,
-            })?,
-            funds: vec![],
-        });
-        result.push(SubMsg::new(send_msg))
+        let asset = Asset {
+            info: stablecoin,
+            amount,
+        };
+        let send_msg = asset.into_msg(&deps.querier, beneficiary)?;
+
+        result.push(send_msg)
     }
 
     attributes.push(("action".to_string(), "distribute_fees".to_string()));
-    attributes.push((
-        "amount".to_string(),
-        amount.to_string(),
-    ));
+    attributes.push(("amount".to_string(), amount.to_string()));
 
     Ok((result, attributes))
 }
@@ -492,33 +449,39 @@ fn update_bridges(
     // Remove old bridges
     if let Some(remove_bridges) = remove {
         for asset in remove_bridges {
-            BRIDGES.remove(
-                deps.storage,
-                addr_validate_to_lower(deps.api, asset.to_string().as_str())?.to_string(),
-            );
+            BRIDGES.remove(deps.storage, asset.to_string());
         }
     }
 
     // Add new bridges
-    let stablecoin = token_asset_info(config.stablecoin_token_contract.clone());
+    let stablecoin = config.stablecoin.clone();
     if let Some(add_bridges) = add {
         for (asset, bridge) in add_bridges {
             if asset.equal(&bridge) {
                 return Err(ContractError::InvalidBridge(asset, bridge));
             }
-
-            // Check that bridge tokens can be swapped to stablecoin
-            validate_bridge(
-                deps.as_ref(),
-                &config,
-                asset.clone(),
-                bridge.clone(),
-                stablecoin.clone(),
-                BRIDGES_INITIAL_DEPTH,
-            )?;
-
             BRIDGES.save(deps.storage, asset.to_string(), &bridge)?;
         }
+    }
+
+    let bridges = BRIDGES
+        .range(deps.storage, None, None, Order::Ascending)
+        .collect::<StdResult<Vec<(String, AssetInfo)>>>()?;
+
+    for (asset_label, bridge) in bridges {
+        let asset = match addr_validate_to_lower(deps.api, &asset_label) {
+            Ok(contract_addr) => AssetInfo::Token { contract_addr },
+            Err(_) => AssetInfo::NativeToken { denom: asset_label },
+        };
+        // Check that bridge tokens can be swapped to stablecoin
+        validate_bridge(
+            deps.as_ref(),
+            &config,
+            asset,
+            bridge.clone(),
+            stablecoin.clone(),
+            BRIDGES_INITIAL_DEPTH,
+        )?;
     }
 
     Ok(Response::default().add_attribute("action", "update_bridges"))
@@ -559,7 +522,7 @@ fn query_get_config(deps: Deps) -> StdResult<ConfigResponse> {
     Ok(ConfigResponse {
         operator: config.operator,
         factory_contract: config.factory_contract,
-        stablecoin_token_contract: config.stablecoin_token_contract,
+        stablecoin: config.stablecoin,
         beneficiary: config.beneficiary,
         max_spread: config.max_spread,
     })

@@ -10,8 +10,8 @@ pub struct InstantiateMsg {
     pub operator: String,
     /// The factory contract address
     pub factory_contract: String,
-    /// The stablecoin token contract address
-    pub stablecoin_token_contract: String,
+    /// The stablecoin asset info
+    pub stablecoin: AssetInfo,
     /// The beneficiary address to received fees in stablecoin
     pub beneficiary: String,
     /// The maximum spread used when swapping fee tokens to stablecoin
@@ -59,7 +59,7 @@ pub struct ConfigResponse {
     /// The factory contract address
     pub factory_contract: Addr,
     /// The stablecoin token contract address
-    pub stablecoin_token_contract: Addr,
+    pub stablecoin: AssetInfo,
     /// The beneficiary address to received fees in stablecoin
     pub beneficiary: Addr,
     /// The maximum spread used when swapping fee tokens to stablecoin
