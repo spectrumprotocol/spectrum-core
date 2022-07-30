@@ -108,8 +108,8 @@ pub struct RewardInfoResponseItem {
     pub staking_token: String,
     pub bond_amount: Uint128,
     pub bond_share: Uint128,
-    pub deposit_amount: Option<Uint128>,
-    pub deposit_time: Option<u64>,
+    pub deposit_amount: Uint128,
+    pub deposit_time: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]

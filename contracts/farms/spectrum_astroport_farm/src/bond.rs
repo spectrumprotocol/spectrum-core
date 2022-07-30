@@ -205,8 +205,6 @@ fn read_reward_info(
     let config = CONFIG.load(deps.storage)?;
     let staking_token = config.pair_info.liquidity_token;
 
-    let has_deposit_amount = !reward_info.deposit_amount.is_zero();
-
     let lp_balance = query_astroport_pool_balance(
         deps,
         &staking_token,
@@ -219,15 +217,7 @@ fn read_reward_info(
         staking_token: staking_token.to_string(),
         bond_share: reward_info.bond_share,
         bond_amount,
-        deposit_amount: if has_deposit_amount {
-            Some(reward_info.deposit_amount)
-        } else {
-            None
-        },
-        deposit_time: if has_deposit_amount {
-            Some(reward_info.deposit_time)
-        } else {
-            None
-        },
+        deposit_amount: reward_info.deposit_amount,
+        deposit_time: reward_info.deposit_time
     })
 }
