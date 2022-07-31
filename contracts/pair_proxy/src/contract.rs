@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use astroport::router::{ExecuteMsg as RouterExecuteMsg, SwapOperation};
 use cosmwasm_std::{
     entry_point, from_binary, to_binary, Addr, Api, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
-    MessageInfo, Response, StdError, StdResult, Uint128, WasmMsg,
+    MessageInfo, Response, StdError, StdResult, WasmMsg,
 };
 use spectrum::pair_proxy::{
     ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg,
@@ -63,7 +63,7 @@ pub fn instantiate(
 
     let config = Config {
         pair_info: PairInfo {
-            contract_addr: env.contract.address.clone(),
+            contract_addr: env.contract.address,
             liquidity_token: Addr::unchecked(""),
             asset_infos: msg.asset_infos.clone(),
             pair_type: PairType::Xyk {},
@@ -212,33 +212,6 @@ pub fn receive_cw20(
 }
 
 /// ## Description
-/// Returns the share of assets.
-/// ## Params
-/// * **pools** are an array of [`Asset`] type items.
-///
-/// * **amount** is the object of type [`Uint128`].
-///
-/// * **total_share** is the object of type [`Uint128`].
-pub fn get_share_in_assets(
-    pools: &[Asset; 2],
-    amount: Uint128,
-    total_share: Uint128,
-) -> Vec<Asset> {
-    let mut share_ratio = Decimal::zero();
-    if !total_share.is_zero() {
-        share_ratio = Decimal::from_ratio(amount, total_share);
-    }
-
-    pools
-        .iter()
-        .map(|a| Asset {
-            info: a.info.clone(),
-            amount: a.amount * share_ratio,
-        })
-        .collect()
-}
-
-/// ## Description
 /// Performs an swap operation with the specified parameters. CONTRACT - a user must do token approval.
 /// Returns an [`ContractError`] on failure, otherwise returns the [`Response`] with the specified attributes if the operation was successful.
 /// ## Params
@@ -294,11 +267,7 @@ pub fn swap(
         return Err(ContractError::InvalidAsset {});
     };
 
-    let to = if let Some(to) = to {
-        addr_validate_to_lower(deps.api, to.as_str())?
-    } else {
-        sender.clone()
-    };
+    let to = to.unwrap_or(sender);
 
     let message = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: config.router_addr.to_string(),
@@ -314,7 +283,6 @@ pub fn swap(
     Ok(Response::new()
         .add_message(message)
         .add_attribute("action", "swap")
-        .add_attribute("sender", sender.as_str())
         .add_attribute("receiver", to.as_str())
         .add_attribute("offer_asset", offer_asset.info.to_string()))
 }
@@ -349,31 +317,6 @@ fn assert_operations(api: &dyn Api, operations: &[SwapOperation]) -> Result<(), 
     }
 
     Ok(())
-}
-
-/// ## Description
-/// Calculates the maker commission according to the specified parameters.
-/// Returns an [`None`] if maker fee is zero, otherwise returns the [`Asset`] with the specified attributes.
-/// ## Params
-/// * **pool_info** is the object of type [`AssetInfo`]. Information about the pool for which the commission will be calculated.
-///
-/// * **commission_amount** is the object of type [`Env`]. Sets the commission amount for the pool.
-///
-/// * **maker_commission_rate** is the object of type [`MessageInfo`]. Sets the maker commission rate for the pool.
-pub fn calculate_maker_fee(
-    pool_info: AssetInfo,
-    commission_amount: Uint128,
-    maker_commission_rate: Decimal,
-) -> Option<Asset> {
-    let maker_fee: Uint128 = commission_amount * maker_commission_rate;
-    if maker_fee.is_zero() {
-        return None;
-    }
-
-    Some(Asset {
-        info: pool_info,
-        amount: maker_fee,
-    })
 }
 
 /// ## Description

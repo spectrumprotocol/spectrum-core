@@ -3,7 +3,7 @@ use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Addr, Decimal, StdResult, Uint128, Uint256};
+use cosmwasm_std::{Addr, Decimal, Uint128, Uint256};
 
 use crate::ownership::OwnershipProposal;
 
@@ -43,12 +43,10 @@ impl State {
             bond_amount
         } else {
             match scaling_operation {
-                ScalingOperation::Truncate => {
-                    bond_amount.multiply_ratio(self.total_bond_share, lp_balance)
-                }
+                ScalingOperation::Truncate =>
+                    bond_amount.multiply_ratio(self.total_bond_share, lp_balance),
                 ScalingOperation::Ceil => bond_amount
-                    .multiply_ratio_and_ceil(self.total_bond_share, lp_balance)
-                    .unwrap(),
+                    .multiply_ratio_and_ceil(self.total_bond_share, lp_balance),
             }
         }
     }
@@ -63,12 +61,10 @@ impl State {
             Uint128::zero()
         } else {
             match scaling_operation {
-                ScalingOperation::Truncate => {
-                    lp_balance.multiply_ratio(bond_share, self.total_bond_share)
-                }
+                ScalingOperation::Truncate =>
+                    lp_balance.multiply_ratio(bond_share, self.total_bond_share),
                 ScalingOperation::Ceil => lp_balance
-                    .multiply_ratio_and_ceil(bond_share, self.total_bond_share)
-                    .unwrap(),
+                    .multiply_ratio_and_ceil(bond_share, self.total_bond_share),
             }
         }
     }
@@ -109,7 +105,7 @@ trait ScalingUint128 {
         &self,
         numerator: Uint128,
         denominator: Uint128,
-    ) -> StdResult<Uint128>;
+    ) -> Uint128;
 }
 
 impl ScalingUint128 for Uint128 {
@@ -118,18 +114,10 @@ impl ScalingUint128 for Uint128 {
         self: &Uint128,
         numerator: Uint128,
         denominator: Uint128,
-    ) -> StdResult<Uint128> {
-        let numerator_u256 = self.full_mul(numerator);
-        let denominator_u256 = Uint256::from(denominator);
-
-        let mut result_u256 = numerator_u256 / denominator_u256;
-
-        if numerator_u256.checked_rem(denominator_u256)? > Uint256::zero() {
-            result_u256 += Uint256::from(1_u32);
-        }
-
-        let result = result_u256.try_into()?;
-        Ok(result)
+    ) -> Uint128 {
+        let x = self.full_mul(numerator);
+        let y: Uint256 = denominator.into();
+        ((x + y - Uint256::from(1u64)) / y).try_into().expect("multiplication overflow")
     }
 }
 
@@ -141,8 +129,12 @@ mod tests {
     fn multiply_ratio_and_ceil() {
         let a = Uint128::new(124);
         let b = a
-            .multiply_ratio_and_ceil(Uint128::new(1), Uint128::new(3))
-            .unwrap();
+            .multiply_ratio_and_ceil(Uint128::new(1), Uint128::new(3));
         assert_eq!(b, Uint128::new(42));
+
+        let a = Uint128::new(123);
+        let b = a
+            .multiply_ratio_and_ceil(Uint128::new(1), Uint128::new(3));
+        assert_eq!(b, Uint128::new(41));
     }
 }

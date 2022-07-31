@@ -29,7 +29,7 @@ pub fn bond(
     let staking_token = config.pair_info.liquidity_token;
 
     // only staking token contract can execute this message
-    if staking_token != addr_validate_to_lower(deps.api, info.sender.as_str())? {
+    if staking_token != info.sender {
         return Err(ContractError::Unauthorized {});
     }
 
@@ -49,14 +49,7 @@ pub fn bond(
     // withdraw reward to pending reward; before changing share
     let mut reward_info = REWARD
         .may_load(deps.storage, &staker_addr)?
-        .unwrap_or_else(|| RewardInfo::create());
-
-    if reward_info.deposit_amount.is_zero() && (!reward_info.bond_share.is_zero()) {
-        reward_info.deposit_amount = amount;
-        reward_info.deposit_time = env.block.time.seconds();
-
-        //TODO: deposit cost
-    }
+        .unwrap_or_else(RewardInfo::create);
 
     let deposit_amount = increase_bond_amount(&mut state, &mut reward_info, amount, lp_balance);
 
@@ -101,8 +94,7 @@ fn increase_bond_amount(
     state.total_bond_share += bond_share;
     reward_info.bond_share += bond_share;
 
-    let new_bond_amount = state.calc_user_balance(lp_balance + bond_amount, bond_share, ScalingOperation::Truncate);
-    new_bond_amount
+    state.calc_user_balance(lp_balance + bond_amount, bond_share, ScalingOperation::Truncate)
 }
 
 pub fn unbond(

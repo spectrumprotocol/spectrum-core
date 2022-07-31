@@ -367,11 +367,8 @@ fn distribute_fees(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Respons
         return Err(ContractError::Unauthorized {});
     }
 
-    let mut config = CONFIG.load(deps.storage)?;
-    let (distribute_msg, attributes) = distribute(deps, env, &mut config)?;
-    if distribute_msg.is_empty() {
-        return Ok(Response::default());
-    }
+    let config = CONFIG.load(deps.storage)?;
+    let (distribute_msg, attributes) = distribute(deps, env, &config)?;
 
     Ok(Response::new()
         .add_messages(distribute_msg)
@@ -403,15 +400,15 @@ fn distribute(
     let amount = stablecoin.query_pool(&deps.querier, env.contract.address)?;
     if amount.is_zero() {
         return Ok((result, attributes));
-    } else {
-        let asset = Asset {
-            info: stablecoin,
-            amount,
-        };
-        let send_msg = asset.into_msg(&deps.querier, beneficiary)?;
-
-        result.push(send_msg)
     }
+
+    let asset = Asset {
+        info: stablecoin,
+        amount,
+    };
+    let send_msg = asset.into_msg(&deps.querier, beneficiary)?;
+
+    result.push(send_msg);
 
     attributes.push(("action".to_string(), "distribute_fees".to_string()));
     attributes.push(("amount".to_string(), amount.to_string()));
