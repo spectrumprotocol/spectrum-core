@@ -161,7 +161,7 @@ pub fn compound(
     rewards: Vec<Asset>,
     to: Option<Addr>,
 ) -> Result<Response, ContractError> {
-    let receiver = to.unwrap_or_else(|| sender.clone());
+    let receiver = to.unwrap_or(sender);
 
     let mut messages: Vec<CosmosMsg> = vec![];
 
@@ -170,35 +170,13 @@ pub fn compound(
         deposit_asset(&env, &info, &mut messages, &reward)?;
         let pair_proxy = PAIR_PROXY.may_load(deps.storage, reward.info.to_string())?;
         if let Some(pair_proxy) = pair_proxy {
-            let swap_reward = if reward.is_native_token() {
-                CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: pair_proxy.to_string(),
-                    msg: to_binary(&AstroportPairExecuteMsg::Swap {
-                        offer_asset: reward.clone(),
-                        belief_price: None,
-                        max_spread: Some(Decimal::percent(50u64)),
-                        to: None,
-                    })?,
-                    funds: vec![Coin {
-                        denom: reward.info.to_string(),
-                        amount: reward.amount,
-                    }],
-                })
-            } else {
-                CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: reward.info.to_string(),
-                    msg: to_binary(&Cw20ExecuteMsg::Send {
-                        contract: pair_proxy.to_string(),
-                        amount: reward.amount,
-                        msg: to_binary(&AstroportPairCw20HookMsg::Swap {
-                            max_spread: Some(Decimal::percent(50u64)),
-                            belief_price: None,
-                            to: None,
-                        })?,
-                    })?,
-                    funds: vec![],
-                })
-            };
+            let swap_reward = swap_msg(
+                pair_proxy.to_string(),
+                &reward,
+                None,
+                Some(Decimal::percent(50u64)),
+                None,
+            )?;
             messages.push(swap_reward);
         }
     }
@@ -403,33 +381,25 @@ pub fn provide_liquidity(
     ];
 
     let mut messages: Vec<CosmosMsg> = vec![];
-
-    let increase_allowances: Vec<CosmosMsg> = assets
-        .iter()
-        .filter(|asset| !asset.is_native_token())
-        .map(|asset| {
-            CosmosMsg::Wasm(WasmMsg::Execute {
+    let mut funds: Vec<Coin> = vec![];
+    for asset in assets.iter() {
+        if asset.is_native_token() {
+            funds.push(Coin {
+                denom: asset.info.to_string(),
+                amount: asset.amount,
+            });
+        } else {
+            messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: asset.info.to_string(),
                 msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
                     spender: pair_contract.to_string(),
                     amount: asset.amount,
                     expires: Some(Expiration::AtHeight(env.block.height + 1)),
-                })
-                .unwrap(),
+                })?,
                 funds: vec![],
-            })
-        })
-        .collect();
-    messages.extend(increase_allowances);
-
-    let funds: Vec<Coin> = assets
-        .iter()
-        .filter(|asset| asset.is_native_token())
-        .map(|asset| Coin {
-            denom: asset.info.to_string(),
-            amount: asset.amount,
-        })
-        .collect();
+            }));
+        }
+    }
 
     let provide_liquidity = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: pair_contract.to_string(),
@@ -586,7 +556,7 @@ fn deposit_asset(
             Ok(())
         }
         AssetInfo::NativeToken { .. } => {
-            asset.assert_sent_native_token_balance(&info)?;
+            asset.assert_sent_native_token_balance(info)?;
             Ok(())
         }
     }
@@ -620,15 +590,4 @@ fn transfer_from_msg(asset: &Asset, from: &Addr, to: &Addr) -> StdResult<CosmosM
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
     Ok(Response::default())
-}
-
-/// ## Description
-/// Converts [`Decimal`] to [`Decimal256`].
-pub fn decimal2decimal256(dec_value: Decimal) -> StdResult<Decimal256> {
-    Decimal256::from_atomics(dec_value.atomics(), dec_value.decimal_places()).map_err(|_| {
-        StdError::generic_err(format!(
-            "Failed to convert Decimal {} to Decimal256",
-            dec_value
-        ))
-    })
 }

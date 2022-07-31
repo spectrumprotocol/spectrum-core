@@ -1,5 +1,5 @@
 use astroport::{
-    asset::{addr_validate_to_lower, Asset, AssetInfo},
+    asset::{Asset, AssetInfo},
     generator::{Cw20HookMsg as AstroportCw20HookMsg, ExecuteMsg as AstroportExecuteMsg},
 };
 use cosmwasm_std::{
@@ -164,13 +164,12 @@ pub fn compound(
 
     if !compound_rewards.is_empty() {
         let rewards = compound_rewards
-            .iter()
+            .into_iter()
             .map(|(contract_addr, amount)| Asset {
                 info: AssetInfo::Token {
-                    contract_addr: addr_validate_to_lower(deps.api, &contract_addr.to_string())
-                        .unwrap(),
+                    contract_addr,
                 },
-                amount: *amount,
+                amount,
             })
             .collect();
         let compound = CosmosMsg::Wasm(WasmMsg::Execute {
