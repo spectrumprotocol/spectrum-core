@@ -18,6 +18,7 @@ use astroport::pair::{
     Cw20HookMsg as AstroportPairCw20HookMsg, ExecuteMsg as AstroportPairExecuteMsg,
 };
 use cw2::set_contract_version;
+use spectrum::farm_helper::deposit_asset;
 
 /// Contract name that is used for migration.
 const CONTRACT_NAME: &str = "spectrum-compound-proxy";
@@ -534,49 +535,6 @@ fn swap_msg(
     };
 
     Ok(CosmosMsg::Wasm(wasm_msg))
-}
-
-fn deposit_asset(
-    env: &Env,
-    info: &MessageInfo,
-    messages: &mut Vec<CosmosMsg>,
-    asset: &Asset,
-) -> StdResult<()> {
-    if asset.amount.is_zero() {
-        return Ok(());
-    }
-
-    match asset.info {
-        AssetInfo::Token { .. } => {
-            messages.push(transfer_from_msg(
-                asset,
-                &info.sender,
-                &env.contract.address,
-            )?);
-            Ok(())
-        }
-        AssetInfo::NativeToken { .. } => {
-            asset.assert_sent_native_token_balance(info)?;
-            Ok(())
-        }
-    }
-}
-
-fn transfer_from_msg(asset: &Asset, from: &Addr, to: &Addr) -> StdResult<CosmosMsg> {
-    match &asset.info {
-        AssetInfo::Token { contract_addr } => Ok(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: contract_addr.to_string(),
-            msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
-                owner: from.to_string(),
-                recipient: to.to_string(),
-                amount: asset.amount,
-            })?,
-            funds: vec![],
-        })),
-        AssetInfo::NativeToken { .. } => Err(StdError::generic_err(
-            "TransferFrom does not apply to native tokens",
-        )),
-    }
 }
 
 /// ## Description

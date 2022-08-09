@@ -1,11 +1,12 @@
-use astroport::asset::addr_validate_to_lower;
+use astroport::asset::{addr_validate_to_lower, Asset};
+use astroport::querier::query_token_balance;
 use cosmwasm_std::{
     attr, to_binary, Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
-    Uint128, WasmMsg,
+    Uint128, WasmMsg, Coin,
 };
 
 use crate::error::ContractError;
-use crate::state::{RewardInfo, CONFIG, REWARD, STATE, State, ScalingOperation};
+use crate::state::{RewardInfo, ScalingOperation, State, CONFIG, REWARD, STATE};
 
 use cw20::Cw20ExecuteMsg;
 
@@ -13,8 +14,99 @@ use crate::querier::query_astroport_pool_balance;
 use astroport::generator::{
     Cw20HookMsg as AstroportCw20HookMsg, ExecuteMsg as AstroportExecuteMsg,
 };
-use spectrum::astroport_farm::{RewardInfoResponse, RewardInfoResponseItem};
-use spectrum::farm_helper::compute_deposit_time;
+use spectrum::astroport_farm::{RewardInfoResponse, RewardInfoResponseItem, CallbackMsg, Cw20HookMsg};
+use spectrum::compound_proxy::ExecuteMsg as CompoundProxyExecuteMsg;
+use spectrum::farm_helper::{compute_deposit_time, deposit_asset};
+
+pub fn bond_assets(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    assets: Vec<Asset>,
+    minimum_receive: Option<Uint128>,
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    let staking_token = config.pair_info.liquidity_token;
+
+    let mut messages: Vec<CosmosMsg> = vec![];
+    
+    let mut funds: Vec<Coin> = vec![];
+    
+    for asset in assets.clone() {
+        deposit_asset(&env, &info, &mut messages, &asset)?;
+        if asset.is_native_token() {
+            funds.push(Coin {
+                denom: asset.info.to_string(),
+                amount: asset.amount,
+            });
+        }
+    }
+
+    let compound = CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: config.compound_proxy.to_string(),
+        msg: to_binary(&CompoundProxyExecuteMsg::Compound {
+            rewards: assets,
+            to: None,
+        })?,
+        funds,
+    });
+    messages.push(compound);
+
+    let prev_balance = query_token_balance(&deps.querier, staking_token, env.contract.address.clone())?;
+    messages.push(
+        CallbackMsg::BondTo {
+            to: info.sender.to_string(),
+            prev_balance,
+            minimum_receive,
+        }
+        .into_cosmos_msg(&env.contract.address)?,
+    );
+
+    Ok(Response::new()
+        .add_messages(messages)
+        .add_attribute("action", "bond_assets"))
+}
+
+pub fn bond_to(
+    deps: DepsMut,
+    env: Env,
+    _info: MessageInfo,
+    to: String,
+    prev_balance: Uint128,
+    minimum_receive: Option<Uint128>
+) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+
+    let staking_token = config.pair_info.liquidity_token;
+
+    let balance = query_token_balance(&deps.querier, staking_token.clone(), env.contract.address.clone())?;
+    let amount = balance - prev_balance;
+
+    if let Some(minimum_receive) = minimum_receive {
+        if amount < minimum_receive {
+            return Err(ContractError::AssertionMinimumReceive {
+                minimum_receive,
+                amount,
+            });
+        }
+    }
+
+    Ok(Response::new()
+    .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: staking_token.to_string(),
+        funds: vec![],
+        msg: to_binary(&Cw20ExecuteMsg::Send {
+            contract: env.contract.address.to_string(),
+            amount,
+            msg: to_binary(&Cw20HookMsg::Bond { staker_addr: Some(to) })?,
+        })?,
+    })])
+    .add_attributes(vec![
+        attr("action", "bond_to"),
+        attr("amount", amount),
+    ]))
+
+}
 
 pub fn bond(
     deps: DepsMut,
@@ -94,7 +186,11 @@ fn increase_bond_amount(
     state.total_bond_share += bond_share;
     reward_info.bond_share += bond_share;
 
-    state.calc_user_balance(lp_balance + bond_amount, bond_share, ScalingOperation::Truncate)
+    state.calc_user_balance(
+        lp_balance + bond_amount,
+        bond_share,
+        ScalingOperation::Truncate,
+    )
 }
 
 pub fn unbond(
@@ -118,7 +214,11 @@ pub fn unbond(
     let mut state = STATE.load(deps.storage)?;
     let mut reward_info = REWARD.load(deps.storage, &staker_addr)?;
 
-    let user_balance = state.calc_user_balance(lp_balance, reward_info.bond_share, ScalingOperation::Truncate);
+    let user_balance = state.calc_user_balance(
+        lp_balance,
+        reward_info.bond_share,
+        ScalingOperation::Truncate,
+    );
 
     if user_balance < amount {
         return Err(ContractError::UnbondExceedBalance {});
@@ -176,11 +276,7 @@ pub fn query_reward_info(
     })
 }
 
-fn read_reward_info(
-    deps: Deps,
-    env: Env,
-    staker_addr: &Addr,
-) -> StdResult<RewardInfoResponseItem> {
+fn read_reward_info(deps: Deps, env: Env, staker_addr: &Addr) -> StdResult<RewardInfoResponseItem> {
     let reward_info = REWARD
         .load(deps.storage, staker_addr)
         .unwrap_or(RewardInfo {
@@ -200,12 +296,16 @@ fn read_reward_info(
         &config.staking_contract,
     )?;
 
-    let bond_amount = state.calc_user_balance(lp_balance, reward_info.bond_share, ScalingOperation::Truncate);
+    let bond_amount = state.calc_user_balance(
+        lp_balance,
+        reward_info.bond_share,
+        ScalingOperation::Truncate,
+    );
     Ok(RewardInfoResponseItem {
         staking_token: staking_token.to_string(),
         bond_share: reward_info.bond_share,
         bond_amount,
         deposit_amount: reward_info.deposit_amount,
-        deposit_time: reward_info.deposit_time
+        deposit_time: reward_info.deposit_time,
     })
 }

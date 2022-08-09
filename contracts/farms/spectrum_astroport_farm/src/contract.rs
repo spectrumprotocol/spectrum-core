@@ -6,7 +6,7 @@ use cosmwasm_std::{
 };
 
 use crate::{
-    bond::bond,
+    bond::{bond, bond_assets, bond_to},
     compound::{compound, stake},
     error::ContractError,
     ownership::{claim_ownership, drop_ownership_proposal, propose_new_owner},
@@ -113,6 +113,7 @@ pub fn execute(
             controller_fee_collector,
         ),
         ExecuteMsg::Unbond { amount } => unbond(deps, env, info, amount),
+        ExecuteMsg::BondAssets { assets, minimum_receive } => bond_assets(deps, env, info, assets, minimum_receive),
         ExecuteMsg::Compound { minimum_receive } => compound(deps, env, info, minimum_receive),
         ExecuteMsg::ProposeNewOwner { owner, expires_in } => {
             let config: Config = CONFIG.load(deps.storage)?;
@@ -255,6 +256,7 @@ pub fn handle_callback(
             prev_balance,
             minimum_receive,
         } => stake(deps, env, info, prev_balance, minimum_receive),
+        CallbackMsg::BondTo { to, prev_balance, minimum_receive } => bond_to(deps, env, info, to, prev_balance, minimum_receive),
     }
 }
 

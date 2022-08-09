@@ -1,3 +1,4 @@
+use astroport::asset::Asset;
 use cosmwasm_std::{to_binary, Addr, CosmosMsg, Decimal, StdResult, Uint128, WasmMsg};
 use cw20::Cw20ReceiveMsg;
 use schemars::JsonSchema;
@@ -41,6 +42,11 @@ pub enum ExecuteMsg {
     Compound {
         minimum_receive: Option<Uint128>,
     },
+    // Bond asset with optimal swap
+    BondAssets {
+        assets: Vec<Asset>,
+        minimum_receive: Option<Uint128>,
+    },
     /// Creates a request to change the contract's ownership
     ProposeNewOwner {
         /// The newly proposed owner
@@ -62,6 +68,11 @@ pub enum ExecuteMsg {
 #[serde(rename_all = "snake_case")]
 pub enum CallbackMsg {
     Stake {
+        prev_balance: Uint128,
+        minimum_receive: Option<Uint128>,
+    },
+    BondTo {
+        to: String,
         prev_balance: Uint128,
         minimum_receive: Option<Uint128>,
     },
