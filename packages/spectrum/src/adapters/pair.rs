@@ -1,9 +1,9 @@
-use cosmwasm_std::{Addr, Coin, CosmosMsg, Decimal, QuerierWrapper, StdResult, to_binary, WasmMsg};
+use cosmwasm_std::{Addr, Coin, CosmosMsg, Decimal, QuerierWrapper, StdResult, to_binary, WasmMsg, QueryRequest, WasmQuery};
 use cw20::Cw20ExecuteMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use astroport::asset::{Asset, AssetInfo, PairInfo};
-use astroport::pair::{Cw20HookMsg, ExecuteMsg, QueryMsg};
+use astroport::pair::{Cw20HookMsg, ExecuteMsg, QueryMsg, SimulationResponse, ConfigResponse};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Pair(pub Addr);
@@ -11,6 +11,25 @@ pub struct Pair(pub Addr);
 impl Pair {
     pub fn query_pair_info(&self, querier: &QuerierWrapper) -> StdResult<PairInfo> {
         querier.query_wasm_smart(self.0.to_string(), &QueryMsg::Pair {})
+    }
+
+    pub fn query_config(&self, querier: &QuerierWrapper) -> StdResult<ConfigResponse> {
+        querier.query_wasm_smart(self.0.to_string(), &QueryMsg::Config {})
+    }
+
+    pub fn simulate(
+        &self,
+        querier: &QuerierWrapper,
+        offer_asset: &Asset,
+        ask_asset_info: Option<AssetInfo>
+    ) -> StdResult<SimulationResponse> {
+        querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+            contract_addr: self.0.to_string(),
+            msg: to_binary(&QueryMsg::Simulation {
+                offer_asset: offer_asset.clone().into(),
+                ask_asset_info: ask_asset_info,
+            })?,
+        }))
     }
 
     /// Generate msg for swapping specified asset
