@@ -1,8 +1,9 @@
 use astroport::asset::{PairInfo};
-use cosmwasm_std::{Addr, Decimal};
+use cosmwasm_std::{Decimal};
 use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use spectrum::adapters::pair::Pair;
 
 /// ## Description
 /// This structure describes the main control config of pair.
@@ -22,4 +23,4 @@ pub const CONFIG: Item<Config> = Item::new("config");
 
 /// ## Description
 /// Stores pair proxy for the given reward
-pub const PAIR_PROXY: Map<String, Addr> = Map::new("pair_proxy");
+pub const PAIR_PROXY: Map<String, Pair> = Map::new("pair_proxy");

@@ -29,8 +29,8 @@ pub enum ContractError {
     #[error("Operation exceeds max splippage tolerance")]
     MaxSlippageAssertion {},
 
-    #[error("Doubling assets in asset infos")]
-    DoublingAssets {},
+    #[error("Duplicated assets in asset infos")]
+    DuplicatedAssets {},
 
     #[error("Asset mismatch between the requested and stored in contract")]
     AssetMismatch {},
@@ -44,10 +44,10 @@ pub enum ContractError {
     #[error("Native swap operations are not supported!")]
     NativeSwapNotSupported {},
 
-    #[error("Must provide operations!")]
-    MustProvideOperations {},
+    #[error("Must provide at least 2 assets!")]
+    MustProvideNAssets {},
 
-    #[error("The limit exceeded of swap operations!")]
+    #[error("The limit exceeded of swap assets!")]
     SwapLimitExceeded {},
 
     #[error("Assertion failed; minimum receive amount: {receive}, swap amount: {amount}")]

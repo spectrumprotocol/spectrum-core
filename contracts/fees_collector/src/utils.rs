@@ -1,9 +1,9 @@
 use crate::error::ContractError;
 use crate::state::{Config, BRIDGES};
 use astroport::asset::{Asset, AssetInfo, PairInfo};
-use astroport::pair::Cw20HookMsg;
 use astroport::querier::query_pair_info;
-use cosmwasm_std::{to_binary, Coin, Deps, Env, StdResult, Uint128, WasmMsg, CosmosMsg};
+use cosmwasm_std::{to_binary, Deps, Env, StdResult, Uint128, WasmMsg, CosmosMsg, Addr, QuerierWrapper};
+use spectrum::adapters::pair::Pair;
 use spectrum::fees_collector::ExecuteMsg;
 
 /// The default bridge depth for a fee token
@@ -14,59 +14,20 @@ pub const BRIDGES_MAX_DEPTH: u64 = 2;
 pub const BRIDGES_EXECUTION_MAX_DEPTH: u64 = 3;
 
 pub fn try_build_swap_msg(
-    deps: Deps,
+    querier: &QuerierWrapper,
     config: &Config,
     from: AssetInfo,
     to: AssetInfo,
-    amount_in: Uint128,
+    amount: Uint128,
 ) -> Result<CosmosMsg, ContractError> {
-    let pool = get_pool(deps, config, from.clone(), to)?;
-    let msg = build_swap_msg(config, pool, from, amount_in)?;
+    let pool = query_pair_info(querier, config.factory_contract.clone(), &[from.clone(), to])?;
+    let msg = Pair(pool.contract_addr).swap_msg(
+        &Asset { info: from, amount },
+        None,
+        Some(config.max_spread),
+        None,
+    )?;
     Ok(msg)
-}
-
-pub fn build_swap_msg(
-    config: &Config,
-    pool: PairInfo,
-    from: AssetInfo,
-    amount_in: Uint128,
-) -> Result<CosmosMsg, ContractError> {
-    if from.is_native_token() {
-        let mut offer_asset = Asset {
-            info: from.clone(),
-            amount: amount_in,
-        };
-
-        offer_asset.amount = amount_in;
-
-        Ok(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: pool.contract_addr.to_string(),
-            msg: to_binary(&astroport::pair::ExecuteMsg::Swap {
-                offer_asset,
-                belief_price: None,
-                max_spread: Some(config.max_spread),
-                to: None,
-            })?,
-            funds: vec![Coin {
-                denom: from.to_string(),
-                amount: amount_in,
-            }],
-        }))
-    } else {
-        Ok(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: from.to_string(),
-            msg: to_binary(&cw20::Cw20ExecuteMsg::Send {
-                contract: pool.contract_addr.to_string(),
-                amount: amount_in,
-                msg: to_binary(&Cw20HookMsg::Swap {
-                    belief_price: None,
-                    max_spread: Some(config.max_spread),
-                    to: None,
-                })?,
-            })?,
-            funds: vec![],
-        }))
-    }
 }
 
 pub fn build_swap_bridge_msg(
@@ -90,17 +51,17 @@ pub fn build_swap_bridge_msg(
 
 pub fn validate_bridge(
     deps: Deps,
-    config: &Config,
+    factory_contract: Addr,
     from_token: AssetInfo,
     bridge_token: AssetInfo,
     stablecoin_token: AssetInfo,
     depth: u64,
 ) -> Result<PairInfo, ContractError> {
     // Check if the bridge pool exists
-    let bridge_pool = get_pool(deps, config, from_token.clone(), bridge_token.clone())?;
+    let bridge_pool = query_pair_info(&deps.querier, factory_contract.clone(), &[from_token.clone(), bridge_token.clone()])?;
 
     // Check if the bridge token - stablecoin pool exists
-    let stablecoin_pool = get_pool(deps, config, bridge_token.clone(), stablecoin_token.clone());
+    let stablecoin_pool = query_pair_info(&deps.querier, factory_contract.clone(), &[bridge_token.clone(), stablecoin_token.clone()]);
     if stablecoin_pool.is_err() {
         if depth >= BRIDGES_MAX_DEPTH {
             return Err(ContractError::MaxBridgeDepth(depth));
@@ -113,7 +74,7 @@ pub fn validate_bridge(
 
         validate_bridge(
             deps,
-            config,
+            factory_contract,
             bridge_token,
             next_bridge_token,
             stablecoin_token,
@@ -122,18 +83,4 @@ pub fn validate_bridge(
     }
 
     Ok(bridge_pool)
-}
-
-pub fn get_pool(
-    deps: Deps,
-    config: &Config,
-    from: AssetInfo,
-    to: AssetInfo,
-) -> Result<PairInfo, ContractError> {
-    query_pair_info(
-        &deps.querier,
-        config.factory_contract.clone(),
-        &[from.clone(), to.clone()],
-    )
-    .map_err(|_| ContractError::InvalidBridgeNoPool(from.clone(), to.clone()))
 }

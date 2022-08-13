@@ -1,30 +1,23 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use astroport::{asset::{Asset, AssetInfo}, router::SwapOperation};
+use astroport::asset::{Asset, AssetInfo};
 
-use cosmwasm_std::{Decimal, Uint128};
+use cosmwasm_std::{Decimal};
 use cw20::Cw20ReceiveMsg;
+use crate::adapters::router::RouterType;
 
-/// the default slippage
-pub const DEFAULT_SLIPPAGE: &str = "0.005";
-/// the maximum allowed slippage
-pub const MAX_ALLOWED_SLIPPAGE: &str = "0.5";
-
-pub const TWAP_PRECISION: u8 = 6;
-
-pub const MAX_SWAP_OPERATIONS: usize = 50;
+pub const MAX_ASSETS: usize = 50;
 
 /// ## Description
 /// This structure describes the basic settings for creating a contract.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
-    /// the type of asset infos available in [`AssetInfo`]
-    pub asset_infos: [AssetInfo; 2],
-    /// the router contract address
-    pub router_addr: String,
-    /// swap operations for this pair
-    pub operations: Vec<SwapOperation>
+    pub asset_infos: Vec<AssetInfo>,
+    pub router: String,
+    pub router_type: RouterType,
+    pub offer_precision: Option<u8>,
+    pub ask_precision: Option<u8>,
 }
 
 /// ## Description
@@ -62,43 +55,8 @@ pub enum Cw20HookMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
-    /// Returns information about a pair in an object of type [`PairInfo`].
-    Pair {},
     /// Returns controls settings that specified in custom [`ConfigResponse`] structure.
     Config {},
-}
-
-/// ## Description
-/// This structure describes the custom struct for each query response.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct PoolResponse {
-    pub assets: [Asset; 2],
-    pub total_share: Uint128,
-}
-
-/// ## Description
-/// This structure describes the custom struct for each query response.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct ConfigResponse {
-    pub operations: Vec<SwapOperation>,
-}
-
-/// ## Description
-/// SimulationResponse returns swap simulation response
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct SimulationResponse {
-    pub return_amount: Uint128,
-    pub spread_amount: Uint128,
-    pub commission_amount: Uint128,
-}
-
-/// ## Description
-/// ReverseSimulationResponse returns reverse swap simulation response
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct ReverseSimulationResponse {
-    pub offer_amount: Uint128,
-    pub spread_amount: Uint128,
-    pub commission_amount: Uint128,
 }
 
 /// ## Description

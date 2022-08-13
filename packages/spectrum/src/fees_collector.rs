@@ -1,5 +1,5 @@
 use astroport::asset::{Asset, AssetInfo};
-use cosmwasm_std::{Addr, Decimal, Uint128};
+use cosmwasm_std::{Decimal, Uint128};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -49,21 +49,6 @@ pub enum QueryMsg {
         assets: Vec<AssetInfo>,
     },
     Bridges {},
-}
-
-/// A custom struct that holds contract parameters and is used to retrieve them.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct ConfigResponse {
-    /// Address that's allowed to update bridge assets
-    pub operator: Addr,
-    /// The factory contract address
-    pub factory_contract: Addr,
-    /// The stablecoin token contract address
-    pub stablecoin: AssetInfo,
-    /// The beneficiary address to received fees in stablecoin
-    pub beneficiary: Addr,
-    /// The maximum spread used when swapping fee tokens to stablecoin
-    pub max_spread: Decimal,
 }
 
 /// A custom struct used to return multiple asset balances.

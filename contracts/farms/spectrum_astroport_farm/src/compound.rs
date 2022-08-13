@@ -1,26 +1,20 @@
 use astroport::{
-    asset::{Asset, AssetInfo},
-    generator::{Cw20HookMsg as AstroportCw20HookMsg, ExecuteMsg as AstroportExecuteMsg},
+    asset::{Asset},
 };
-use cosmwasm_std::{
-    attr, to_binary, Addr, Attribute, CosmosMsg, DepsMut, Env, MessageInfo, Response, Uint128,
-    WasmMsg,
-};
+use cosmwasm_std::{attr, Attribute, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, Uint128};
 
 use crate::{
     error::ContractError,
-    querier::{
-        query_astroport_pending_token, query_astroport_pool_balance, query_astroport_reward_info,
-    },
     state::CONFIG,
 };
 
-use cw20::{Cw20ExecuteMsg, Expiration};
+use cw20::{Expiration};
+use astroport::asset::{AssetInfo, AssetInfoExt, token_asset};
 
 use astroport::querier::query_token_balance;
+use spectrum::adapters::asset::AssetEx;
 
 use spectrum::astroport_farm::CallbackMsg;
-use spectrum::compound_proxy::ExecuteMsg as CompoundProxyExecuteMsg;
 
 pub fn compound(
     deps: DepsMut,
@@ -35,23 +29,18 @@ pub fn compound(
         return Err(ContractError::Unauthorized {});
     }
 
-    let staking_token = config.pair_info.liquidity_token;
+    let staking_token = config.liquidity_token;
 
-    let reward_info =
-        query_astroport_reward_info(deps.as_ref(), &staking_token, &config.staking_contract)?;
-
-    let pending_token_response = query_astroport_pending_token(
-        deps.as_ref(),
+    let pending_token = config.staking_contract.query_pending_token(
+        &deps.querier,
         &staking_token,
         &env.contract.address,
-        &config.staking_contract,
     )?;
 
-    let lp_balance = query_astroport_pool_balance(
-        deps.as_ref(),
+    let lp_balance = config.staking_contract.query_pool_balance(
+        &deps.querier,
         &staking_token,
         &env.contract.address,
-        &config.staking_contract,
     )?;
 
     let thousand = Uint128::from(1000u64);
@@ -64,125 +53,81 @@ pub fn compound(
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut attributes: Vec<Attribute> = vec![];
 
-    let mut rewards: Vec<(String, Addr, Uint128)> = vec![];
-    let mut compound_rewards: Vec<(Addr, Uint128)> = vec![];
+    let mut rewards: Vec<Asset> = vec![];
+    let mut compound_rewards: Vec<Asset> = vec![];
 
-    let manual_claim_pending_token = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: config.staking_contract.to_string(),
-        funds: vec![],
-        msg: to_binary(&AstroportExecuteMsg::Withdraw {
-            lp_token: staking_token.to_string(),
-            amount: Uint128::zero(),
-        })?,
-    });
+    let manual_claim_pending_token = config.staking_contract.withdraw_msg(
+        staking_token.to_string(),
+        Uint128::zero()
+    )?;
     messages.push(manual_claim_pending_token);
 
-    rewards.push((
-        "base".to_string(),
-        reward_info.base_reward_token,
-        pending_token_response.pending,
-    ));
-    if let Some(proxy_reward_token) = reward_info.proxy_reward_token {
-        let pending_on_proxy = pending_token_response
-            .pending_on_proxy
-            .unwrap_or_else(Uint128::zero);
-        rewards.push(("proxy".to_string(), proxy_reward_token, pending_on_proxy));
+    rewards.push(
+        token_asset(config.base_reward_token, pending_token.pending),
+    );
+    if let Some(pending_on_proxy) = pending_token.pending_on_proxy {
+        rewards.extend(pending_on_proxy);
     }
 
-    for (label, reward_token, pending_amount) in rewards {
+    let mut compound_funds: Vec<Coin> = vec![];
+    for asset in rewards {
         let reward_amount = query_token_balance(
             &deps.querier,
-            reward_token.clone(),
-            env.contract.address.clone(),
-        )? + pending_amount;
+            asset.info.to_string(),
+            &env.contract.address,
+        )? + asset.amount;
         if !reward_amount.is_zero() && !lp_balance.is_zero() {
             let commission_amount = reward_amount * total_fee;
             let compound_amount = reward_amount.checked_sub(commission_amount)?;
             if !compound_amount.is_zero() {
-                let increase_allowance = CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: reward_token.clone().to_string(),
-                    msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
-                        spender: config.compound_proxy.to_string(),
-                        amount: compound_amount,
-                        expires: Some(Expiration::AtHeight(env.block.height + 1)),
-                    })?,
-                    funds: vec![],
-                });
-                messages.push(increase_allowance);
-                compound_rewards.push((reward_token.clone(), compound_amount));
+                let compound_asset = asset.info.with_balance(compound_amount);
+                if let AssetInfo::NativeToken { denom } = &asset.info {
+                    compound_funds.push(Coin { denom: denom.clone(), amount: asset.amount });
+                } else {
+                    let increase_allowance = compound_asset.increase_allowance_msg(
+                        config.compound_proxy.0.to_string(),
+                        Some(Expiration::AtHeight(env.block.height + 1)),
+                    )?;
+                    messages.push(increase_allowance);
+                }
+                compound_rewards.push(compound_asset);
             }
 
             let community_amount =
                 commission_amount.multiply_ratio(thousand * community_fee, thousand * total_fee);
             if !community_amount.is_zero() {
-                let transfer_community_fee = CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: reward_token.to_string(),
-                    msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                        recipient: config.community_fee_collector.to_string(),
-                        amount: community_amount,
-                    })?,
-                    funds: vec![],
-                });
+                let community_asset = asset.info.with_balance(community_amount);
+                let transfer_community_fee = community_asset.transfer_msg(&config.community_fee_collector)?;
                 messages.push(transfer_community_fee);
             }
 
             let platform_amount =
                 commission_amount.multiply_ratio(thousand * platform_fee, thousand * total_fee);
             if !platform_amount.is_zero() {
-                let transfer_platform_fee = CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: reward_token.to_string(),
-                    msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                        recipient: config.platform_fee_collector.to_string(),
-                        amount: platform_amount,
-                    })?,
-                    funds: vec![],
-                });
+                let platform_asset = asset.info.with_balance(platform_amount);
+                let transfer_platform_fee = platform_asset.transfer_msg(&config.platform_fee_collector)?;
                 messages.push(transfer_platform_fee);
             }
 
             let controller_amount =
                 commission_amount.checked_sub(community_amount + platform_amount)?;
             if !controller_amount.is_zero() {
-                let transfer_controller_fee = CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: reward_token.to_string(),
-                    msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                        recipient: config.controller_fee_collector.to_string(),
-                        amount: controller_amount,
-                    })?,
-                    funds: vec![],
-                });
+                let controller_asset = asset.info.with_balance(controller_amount);
+                let transfer_controller_fee = controller_asset.transfer_msg(&config.controller_fee_collector)?;
                 messages.push(transfer_controller_fee);
             }
 
-            attributes.push(attr(format!("{}_compound_amount", label), compound_amount));
-            attributes.push(attr(
-                format!("{}_commission_amount", label),
-                commission_amount,
-            ));
+            attributes.push(attr("token", asset.info.to_string()));
+            attributes.push(attr("compound_amount", compound_amount));
+            attributes.push(attr("commission_amount", commission_amount));
         }
     }
 
     if !compound_rewards.is_empty() {
-        let rewards = compound_rewards
-            .into_iter()
-            .map(|(contract_addr, amount)| Asset {
-                info: AssetInfo::Token {
-                    contract_addr,
-                },
-                amount,
-            })
-            .collect();
-        let compound = CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: config.compound_proxy.to_string(),
-            msg: to_binary(&CompoundProxyExecuteMsg::Compound {
-                rewards,
-                to: None,
-            })?,
-            funds: vec![],
-        });
+        let compound = config.compound_proxy.compound_msg(compound_rewards, compound_funds)?;
         messages.push(compound);
 
-        let prev_balance = query_token_balance(&deps.querier, staking_token, env.contract.address.clone())?;
+        let prev_balance = query_token_balance(&deps.querier, staking_token, &env.contract.address)?;
         messages.push(
             CallbackMsg::Stake {
                 prev_balance,
@@ -207,10 +152,9 @@ pub fn stake(
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
 
-    let astroport_generator = config.staking_contract;
-    let staking_token = config.pair_info.liquidity_token;
+    let staking_token = config.liquidity_token;
 
-    let balance = query_token_balance(&deps.querier, staking_token.clone(), env.contract.address)?;
+    let balance = query_token_balance(&deps.querier, &staking_token, &env.contract.address)?;
     let amount = balance - prev_balance;
 
     if let Some(minimum_receive) = minimum_receive {
@@ -223,15 +167,9 @@ pub fn stake(
     }
 
     Ok(Response::new()
-        .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: staking_token.to_string(),
-            funds: vec![],
-            msg: to_binary(&Cw20ExecuteMsg::Send {
-                contract: astroport_generator.to_string(),
-                amount,
-                msg: to_binary(&AstroportCw20HookMsg::Deposit {})?,
-            })?,
-        })])
+        .add_message(
+            config.staking_contract.deposit_msg(staking_token.to_string(), amount)?
+        )
         .add_attributes(vec![
             attr("action", "stake"),
             attr("staking_token", staking_token),
