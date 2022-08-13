@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use astroport::asset::{Asset, AssetInfo};
 
-use cosmwasm_std::{to_binary, Addr, CosmosMsg, StdResult, WasmMsg, Decimal, Coin};
+use cosmwasm_std::{to_binary, Addr, CosmosMsg, StdResult, WasmMsg, Decimal, Uint128, Coin};
 /// This structure describes the basic settings for creating a contract.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -56,6 +56,17 @@ impl CallbackMsg {
 pub enum QueryMsg {
     /// Returns controls settings that specified in custom [`ConfigResponse`] structure.
     Config {},
+    /// Return LP token amount received after compound
+    CompoundSimulation {
+        rewards: Vec<Asset>,
+    },
+}
+
+/// This structure holds the parameters that are returned from a compound simulation response
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct CompoundSimulationResponse {
+    /// The amount of LP returned from compound
+    pub lp_amount: Uint128,
 }
 
 /// This structure describes a migration message.
