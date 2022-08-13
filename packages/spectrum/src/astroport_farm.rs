@@ -17,7 +17,8 @@ pub struct InstantiateMsg {
     pub platform_fee_collector: String,
     pub community_fee_collector: String,
     pub controller_fee_collector: String,
-    pub pair_contract: String,
+    pub liquidity_token: String,
+    pub base_reward_token: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -72,7 +73,7 @@ pub enum CallbackMsg {
         minimum_receive: Option<Uint128>,
     },
     BondTo {
-        to: String,
+        to: Addr,
         prev_balance: Uint128,
         minimum_receive: Option<Uint128>,
     },

@@ -10,7 +10,6 @@ use crate::{
     compound::{compound, stake},
     error::ContractError,
     ownership::{claim_ownership, drop_ownership_proposal, propose_new_owner},
-    querier::query_pair_info,
     state::{Config, State, CONFIG, OWNERSHIP_PROPOSAL},
 };
 
@@ -22,6 +21,8 @@ use spectrum::astroport_farm::{
     CallbackMsg, InstantiateMsg, Cw20HookMsg, ExecuteMsg, MigrateMsg, QueryMsg,
     StateInfo,
 };
+use spectrum::compound_proxy::Compounder;
+use spectrum::generator_proxy::Generator;
 
 /// (we require 0-1)
 fn validate_percentage(value: Decimal, field: &str) -> StdResult<()> {
@@ -43,31 +44,21 @@ pub fn instantiate(
     validate_percentage(msg.platform_fee, "platform_fee")?;
     validate_percentage(msg.controller_fee, "controller_fee")?;
 
-    let pair_info = query_pair_info(
-        deps.as_ref(),
-        &addr_validate_to_lower(deps.api, &msg.pair_contract)?,
-    )?;
-
     CONFIG.save(
         deps.storage,
         &Config {
             owner: addr_validate_to_lower(deps.api, &msg.owner)?,
-            staking_contract: addr_validate_to_lower(deps.api, &msg.staking_contract)?,
-            compound_proxy: addr_validate_to_lower(deps.api, &msg.compound_proxy)?,
+            staking_contract: Generator(addr_validate_to_lower(deps.api, &msg.staking_contract)?),
+            compound_proxy: Compounder(addr_validate_to_lower(deps.api, &msg.compound_proxy)?),
             controller: addr_validate_to_lower(deps.api, &msg.controller)?,
             community_fee: msg.community_fee,
             platform_fee: msg.platform_fee,
             controller_fee: msg.controller_fee,
-            community_fee_collector: addr_validate_to_lower(
-                deps.api,
-                &msg.community_fee_collector,
-            )?,
+            community_fee_collector: addr_validate_to_lower(deps.api, &msg.community_fee_collector)?,
             platform_fee_collector: addr_validate_to_lower(deps.api, &msg.platform_fee_collector)?,
-            controller_fee_collector: addr_validate_to_lower(
-                deps.api,
-                &msg.controller_fee_collector,
-            )?,
-            pair_info,
+            controller_fee_collector: addr_validate_to_lower(deps.api, &msg.controller_fee_collector)?,
+            liquidity_token: addr_validate_to_lower(deps.api, &msg.liquidity_token)?,
+            base_reward_token: addr_validate_to_lower(deps.api, &msg.base_reward_token)?,
         },
     )?;
 
@@ -207,7 +198,7 @@ pub fn update_config(
     }
 
     if let Some(compound_proxy) = compound_proxy {
-        config.compound_proxy = addr_validate_to_lower(deps.api, &compound_proxy)?;
+        config.compound_proxy = Compounder(addr_validate_to_lower(deps.api, &compound_proxy)?);
     }
 
     if let Some(platform_fee_collector) = platform_fee_collector {

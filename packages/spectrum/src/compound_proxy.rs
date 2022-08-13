@@ -1,9 +1,9 @@
 use schemars::{JsonSchema};
 use serde::{Deserialize, Serialize};
 
-use astroport::asset::{Asset, PairInfo, AssetInfo};
+use astroport::asset::{Asset, AssetInfo};
 
-use cosmwasm_std::{to_binary, Addr, CosmosMsg, StdResult, WasmMsg, Decimal};
+use cosmwasm_std::{to_binary, Addr, CosmosMsg, StdResult, WasmMsg, Decimal, Coin};
 /// This structure describes the basic settings for creating a contract.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -58,13 +58,23 @@ pub enum QueryMsg {
     Config {},
 }
 
-/// This structure describes the custom struct for each query response.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct ConfigResponse {
-    pub pair_info: PairInfo,
-}
-
 /// This structure describes a migration message.
 /// We currently take no arguments for migrations.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct MigrateMsg {}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Compounder(pub Addr);
+
+impl Compounder {
+    pub fn compound_msg(&self, rewards: Vec<Asset>, funds: Vec<Coin>) -> StdResult<CosmosMsg> {
+        Ok(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: self.0.to_string(),
+            msg: to_binary(&ExecuteMsg::Compound {
+                rewards,
+                to: None,
+            })?,
+            funds,
+        }))
+    }
+}

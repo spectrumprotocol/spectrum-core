@@ -1,22 +1,15 @@
 use crate::error::ContractError;
 use crate::state::{Config, CONFIG};
-use std::collections::HashMap;
+use std::collections::{HashSet};
 
-use astroport::router::{ExecuteMsg as RouterExecuteMsg, SwapOperation};
-use cosmwasm_std::{
-    entry_point, from_binary, to_binary, Addr, Api, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env,
-    MessageInfo, Response, StdError, StdResult, WasmMsg,
-};
-use spectrum::pair_proxy::{
-    ConfigResponse, Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg,
-    MAX_SWAP_OPERATIONS,
-};
+use cosmwasm_std::{entry_point, from_binary, to_binary, Addr, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Fraction, Uint128};
+use spectrum::pair_proxy::{Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, MAX_ASSETS};
 
-use astroport::asset::{addr_validate_to_lower, Asset, AssetInfo, PairInfo};
-use astroport::factory::PairType;
+use astroport::asset::{addr_validate_to_lower, Asset, AssetInfo};
 use cw2::set_contract_version;
 use cw20::Cw20ReceiveMsg;
-use std::vec;
+use astroport::querier::query_token_precision;
+use spectrum::adapters::router::Router;
 
 /// Contract name that is used for migration.
 const CONTRACT_NAME: &str = "spectrom-pair-proxy";
@@ -36,40 +29,46 @@ const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
-    env: Env,
+    _env: Env,
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
-    msg.asset_infos[0].check(deps.api)?;
-    msg.asset_infos[1].check(deps.api)?;
-
-    if msg.asset_infos[0] == msg.asset_infos[1] {
-        return Err(ContractError::DoublingAssets {});
-    }
 
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-    // Validate swap operations
-    let operations_len = msg.operations.len();
-    if operations_len == 0 {
-        return Err(ContractError::MustProvideOperations {});
+    // Validate swap assets
+    let asset_len = msg.asset_infos.len();
+    if asset_len == 0 {
+        return Err(ContractError::MustProvideNAssets {});
     }
-    if operations_len > MAX_SWAP_OPERATIONS {
+    if asset_len > MAX_ASSETS {
         return Err(ContractError::SwapLimitExceeded {});
     }
 
-    // Assert the operations are properly set
-    assert_operations(deps.api, &msg.operations)?;
+    let mut uniq = HashSet::new();
+    for asset_info in msg.asset_infos.iter() {
+        asset_info.check(deps.api)?;
+        if !uniq.insert(asset_info.to_string()) {
+            return Err(ContractError::DuplicatedAssets {});
+        }
+    }
 
+    let offer_precision = if let Some(offer_precision) = msg.offer_precision {
+        offer_precision
+    } else {
+        query_token_precision(&deps.querier, &msg.asset_infos[0])?
+    };
+    let ask_precision = if let Some(ask_precision) = msg.ask_precision {
+        ask_precision
+    } else {
+        query_token_precision(&deps.querier, &msg.asset_infos[msg.asset_infos.len() - 1])?
+    };
     let config = Config {
-        pair_info: PairInfo {
-            contract_addr: env.contract.address,
-            liquidity_token: Addr::unchecked(""),
-            asset_infos: msg.asset_infos.clone(),
-            pair_type: PairType::Xyk {},
-        },
-        router_addr: addr_validate_to_lower(deps.api, msg.router_addr.as_str())?,
-        operations: msg.operations,
+        asset_infos: msg.asset_infos,
+        router: Router(addr_validate_to_lower(deps.api, msg.router.as_str())?),
+        router_type: msg.router_type,
+        offer_precision,
+        ask_precision,
     };
 
     CONFIG.save(deps.storage, &config)?;
@@ -171,22 +170,6 @@ pub fn receive_cw20(
             max_spread,
             to,
         }) => {
-            // only asset contract can execute this message
-            let mut authorized: bool = false;
-            let config: Config = CONFIG.load(deps.storage)?;
-
-            for pool in config.pair_info.asset_infos {
-                if let AssetInfo::Token { contract_addr, .. } = &pool {
-                    if contract_addr == &info.sender {
-                        authorized = true;
-                    }
-                }
-            }
-
-            if !authorized {
-                return Err(ContractError::Unauthorized {});
-            }
-
             let to_addr = if let Some(to_addr) = to {
                 Some(addr_validate_to_lower(deps.api, to_addr.as_str())?)
             } else {
@@ -237,86 +220,67 @@ pub fn swap(
     info: MessageInfo,
     sender: Addr,
     offer_asset: Asset,
-    _belief_price: Option<Decimal>,
+    belief_price: Option<Decimal>,
     max_spread: Option<Decimal>,
     to: Option<Addr>,
 ) -> Result<Response, ContractError> {
     offer_asset.assert_sent_native_token_balance(&info)?;
 
-    let config: Config = CONFIG.load(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?;
 
-    let operations = if offer_asset
-        .info
-        .equal(&config.operations.first().unwrap().get_offer_asset_info())
-    {
-        config.operations
-    } else if offer_asset
-        .info
-        .equal(&config.operations.last().unwrap().get_target_asset_info())
-    {
-        config
-            .operations
-            .into_iter()
-            .rev()
-            .map(|a| SwapOperation::AstroSwap {
-                offer_asset_info: a.get_target_asset_info(),
-                ask_asset_info: a.get_offer_asset_info(),
-            })
-            .collect()
+    let (operations, offer_precision, ask_precision) = if offer_asset.info.equal(&config.asset_infos[0]) {
+        (
+            config.router_type.create_swap_operations(&config.asset_infos)?,
+            config.offer_precision,
+            config.ask_precision,
+        )
+    } else if offer_asset.info.equal(&config.asset_infos[config.asset_infos.len() - 1]) {
+        let asset_infos: Vec<AssetInfo> = config.asset_infos.into_iter().rev().collect();
+        (
+            config.router_type.create_swap_operations(&asset_infos)?,
+            config.ask_precision,
+            config.offer_precision,
+        )
     } else {
         return Err(ContractError::InvalidAsset {});
     };
 
     let to = to.unwrap_or(sender);
-
-    let message = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: config.router_addr.to_string(),
-        funds: vec![],
-        msg: to_binary(&RouterExecuteMsg::ExecuteSwapOperations {
-            operations,
-            to: Some(to.clone()),
-            max_spread,
-            minimum_receive: None, //TODO: calculate minimum receive
-        })?,
-    });
+    let minimum_receive = match (belief_price, max_spread) {
+        (Some(belief_price), Some(max_spread)) => {
+            let minimum_receive = compute_minimum_receive(offer_asset.amount, belief_price, max_spread, offer_precision, ask_precision);
+            Some(minimum_receive)
+        },
+        (_, _) => None,
+    };
+    let message = config.router.execute_swap_operations_msg(
+        offer_asset,
+        operations,
+        minimum_receive,
+        Some(to),
+        max_spread,
+    )?;
 
     Ok(Response::new()
         .add_message(message)
-        .add_attribute("action", "swap")
-        .add_attribute("receiver", to.as_str())
-        .add_attribute("offer_asset", offer_asset.info.to_string()))
+        .add_attribute("action", "swap"))
 }
 
-/// ## Description
-/// Validates assets in operations. Returns an [`ContractError`] on failure, otherwise returns [`Ok`].
-/// ## Params
-/// * **api** is the object of type [`Api`].
-///
-/// * **operations** is a vector that contains object of type [`SwapOperation`].
-fn assert_operations(api: &dyn Api, operations: &[SwapOperation]) -> Result<(), ContractError> {
-    let mut ask_asset_map: HashMap<String, bool> = HashMap::new();
-    for operation in operations.iter() {
-        let (offer_asset, ask_asset) = match operation {
-            SwapOperation::AstroSwap {
-                offer_asset_info,
-                ask_asset_info,
-            } => (offer_asset_info.clone(), ask_asset_info.clone()),
-            SwapOperation::NativeSwap { .. } => {
-                return Err(ContractError::NativeSwapNotSupported {})
-            }
-        };
-        offer_asset.check(api)?;
-        ask_asset.check(api)?;
-
-        ask_asset_map.remove(&offer_asset.to_string());
-        ask_asset_map.insert(ask_asset.to_string(), true);
-    }
-
-    if ask_asset_map.keys().len() != 1 {
-        return Err(StdError::generic_err("invalid operations; multiple output token").into());
-    }
-
-    Ok(())
+fn compute_minimum_receive(
+    offer_amount: Uint128,
+    belief_price: Decimal,
+    max_spread: Decimal,
+    offer_precision: u8,
+    ask_precision: u8,
+) -> Uint128 {
+    let dec_adj = Decimal::from_ratio(
+        10u128.pow(ask_precision as u32),
+        10u128.pow(offer_precision as u32));
+    let micro_price = Decimal::from_ratio(
+        dec_adj.numerator(),
+        belief_price.numerator()
+    );
+    offer_amount * micro_price * (Decimal::one() - max_spread)
 }
 
 /// ## Description
@@ -336,45 +300,7 @@ fn assert_operations(api: &dyn Api, operations: &[SwapOperation]) -> Result<(), 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::Pair {} => to_binary(&query_pair_info(deps)?),
-        QueryMsg::Config {} => to_binary(&query_config(deps)?),
-    }
-}
-
-/// ## Description
-/// Returns information about a pair in an object of type [`PairInfo`].
-/// ## Params
-/// * **deps** is the object of type [`Deps`].
-pub fn query_pair_info(deps: Deps) -> StdResult<PairInfo> {
-    let config: Config = CONFIG.load(deps.storage)?;
-    Ok(config.pair_info)
-}
-
-/// ## Description
-/// Returns information about the controls settings in a [`ConfigResponse`] object.
-/// ## Params
-/// * **deps** is the object of type [`Deps`].
-pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
-    let config: Config = CONFIG.load(deps.storage)?;
-    Ok(ConfigResponse {
-        operations: config.operations,
-    })
-}
-
-trait PairProxySwapOperation {
-    fn get_offer_asset_info(&self) -> AssetInfo;
-}
-
-impl PairProxySwapOperation for SwapOperation {
-    fn get_offer_asset_info(&self) -> AssetInfo {
-        match self {
-            SwapOperation::NativeSwap { offer_denom, .. } => AssetInfo::NativeToken {
-                denom: offer_denom.clone(),
-            },
-            SwapOperation::AstroSwap {
-                offer_asset_info, ..
-            } => offer_asset_info.clone(),
-        }
+        QueryMsg::Config {} => to_binary(&CONFIG.load(deps.storage)?),
     }
 }
 
@@ -389,4 +315,30 @@ impl PairProxySwapOperation for SwapOperation {
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
     Ok(Response::default())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_minimum_receive() {
+        let min_receive = compute_minimum_receive(
+            Uint128::from(1234_567u128),
+            Decimal::permille(10000_000),
+            Decimal::zero(),
+            3,
+            5,
+        );
+        assert_eq!(min_receive, Uint128::from(0_12345u128));
+
+        let min_receive = compute_minimum_receive(
+            Uint128::from(12_34567u128),
+            Decimal::permille(0_001),
+            Decimal::zero(),
+            5,
+            0,
+        );
+        assert_eq!(min_receive, Uint128::from(12345u128));
+    }
 }

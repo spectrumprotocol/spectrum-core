@@ -5,21 +5,19 @@ use crate::utils::{
     build_swap_bridge_msg, try_build_swap_msg, validate_bridge, BRIDGES_EXECUTION_MAX_DEPTH,
     BRIDGES_INITIAL_DEPTH,
 };
-use astroport::asset::{
-    addr_validate_to_lower, native_asset_info, Asset, AssetInfo, PairInfo, ULUNA_DENOM,
-};
+use astroport::asset::{addr_validate_to_lower, native_asset_info, Asset, AssetInfo, ULUNA_DENOM};
 
-use astroport::pair::QueryMsg as PairQueryMsg;
 use cosmwasm_std::{
-    entry_point, to_binary, Addr, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo,
-    Order, QueryRequest, Response, StdError, StdResult, Uint128, WasmMsg, WasmQuery,
+    entry_point, to_binary, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo,
+    Order, Response, StdError, StdResult, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use spectrum::fees_collector::{
-    AssetWithLimit, BalancesResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg,
+    AssetWithLimit, BalancesResponse, ExecuteMsg, InstantiateMsg, MigrateMsg,
     QueryMsg,
 };
 use std::collections::{HashMap, HashSet};
+use spectrum::adapters::asset::AssetEx;
 
 /// Contract name that is used for migration.
 const CONTRACT_NAME: &str = "spectrum-fees-collector";
@@ -265,14 +263,14 @@ fn swap(
     // 2. Check if bridge tokens exist
     let bridge_token = BRIDGES.load(deps.storage, from_token.to_string());
     if let Ok(asset) = bridge_token {
-        let msg = try_build_swap_msg(deps, config, from_token, asset.clone(), amount_in)?;
+        let msg = try_build_swap_msg(&deps.querier, config, from_token, asset.clone(), amount_in)?;
         return Ok(SwapTarget::Bridge { asset, msg });
     }
 
     // 4. Check for a pair with LUNA
     if from_token.ne(&uluna) {
         let swap_to_uluna =
-            try_build_swap_msg(deps, config, from_token.clone(), uluna.clone(), amount_in);
+            try_build_swap_msg(&deps.querier, config, from_token.clone(), uluna.clone(), amount_in);
         if let Ok(msg) = swap_to_uluna {
             return Ok(SwapTarget::Bridge { asset: uluna, msg });
         }
@@ -280,7 +278,7 @@ fn swap(
 
     // 5. Check for a direct pair with stablecoin
     let swap_to_stablecoin =
-        try_build_swap_msg(deps, config, from_token.clone(), stablecoin, amount_in);
+        try_build_swap_msg(&deps.querier, config, from_token.clone(), stablecoin, amount_in);
     if let Ok(msg) = swap_to_stablecoin {
         return Ok(SwapTarget::Stable(msg));
     }
@@ -406,7 +404,7 @@ fn distribute(
         info: stablecoin,
         amount,
     };
-    let send_msg = asset.into_msg(&deps.querier, beneficiary)?;
+    let send_msg = asset.transfer_msg(&beneficiary)?;
 
     result.push(send_msg);
 
@@ -473,7 +471,7 @@ fn update_bridges(
         // Check that bridge tokens can be swapped to stablecoin
         validate_bridge(
             deps.as_ref(),
-            &config,
+            config.factory_contract.clone(),
             asset,
             bridge.clone(),
             stablecoin.clone(),
@@ -504,25 +502,10 @@ fn update_bridges(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::Config {} => to_binary(&query_get_config(deps)?),
+        QueryMsg::Config {} => to_binary(&CONFIG.load(deps.storage)?),
         QueryMsg::Balances { assets } => to_binary(&query_get_balances(deps, env, assets)?),
         QueryMsg::Bridges {} => to_binary(&query_bridges(deps, env)?),
     }
-}
-
-/// ## Description
-/// Returns information about the Maker configuration using a [`ConfigResponse`] object.
-/// ## Params
-/// * **deps** is an object of type [`Deps`].
-fn query_get_config(deps: Deps) -> StdResult<ConfigResponse> {
-    let config = CONFIG.load(deps.storage)?;
-    Ok(ConfigResponse {
-        operator: config.operator,
-        factory_contract: config.factory_contract,
-        stablecoin: config.stablecoin,
-        beneficiary: config.beneficiary,
-        max_spread: config.max_spread,
-    })
 }
 
 /// ## Description
@@ -564,21 +547,6 @@ fn query_bridges(deps: Deps, _env: Env) -> StdResult<Vec<(String, String)>> {
             Ok((bridge, asset.to_string()))
         })
         .collect()
-}
-
-/// ## Description
-/// Returns asset information for the specified pair.
-/// ## Params
-/// * **deps** is an object of type [`Deps`].
-///
-/// * **contract_addr** is an object of type [`Addr`]. This is an Astroport pair contract address.
-pub fn query_pair(deps: Deps, contract_addr: Addr) -> StdResult<[AssetInfo; 2]> {
-    let res: PairInfo = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-        contract_addr: String::from(contract_addr),
-        msg: to_binary(&PairQueryMsg::Pair {})?,
-    }))?;
-
-    Ok(res.asset_infos)
 }
 
 /// ## Description

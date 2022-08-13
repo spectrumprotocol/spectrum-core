@@ -1,17 +1,19 @@
-use astroport::asset::PairInfo;
 use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Addr, Decimal, Uint128, Uint256};
+use cosmwasm_std::{Addr, Decimal, Uint128};
+use spectrum::compound_proxy::Compounder;
+use spectrum::generator_proxy::Generator;
+use spectrum::helper::ScalingUint128;
 
 use crate::ownership::OwnershipProposal;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
     pub owner: Addr,
-    pub staking_contract: Addr,
-    pub compound_proxy: Addr,
+    pub staking_contract: Generator,
+    pub compound_proxy: Compounder,
     pub controller: Addr,
     pub community_fee: Decimal,
     pub platform_fee: Decimal,
@@ -19,7 +21,8 @@ pub struct Config {
     pub platform_fee_collector: Addr,
     pub community_fee_collector: Addr,
     pub controller_fee_collector: Addr,
-    pub pair_info: PairInfo, // Store PairInfo instead
+    pub liquidity_token: Addr,
+    pub base_reward_token: Addr,
 }
 
 pub const CONFIG: Item<Config> = Item::new("config");
@@ -98,43 +101,4 @@ pub const OWNERSHIP_PROPOSAL: Item<OwnershipProposal> = Item::new("ownership_pro
 pub enum ScalingOperation {
     Truncate,
     Ceil,
-}
-
-trait ScalingUint128 {
-    fn multiply_ratio_and_ceil(
-        &self,
-        numerator: Uint128,
-        denominator: Uint128,
-    ) -> Uint128;
-}
-
-impl ScalingUint128 for Uint128 {
-    /// Multiply Uint128 by Decimal, rounding up to the nearest integer.
-    fn multiply_ratio_and_ceil(
-        self: &Uint128,
-        numerator: Uint128,
-        denominator: Uint128,
-    ) -> Uint128 {
-        let x = self.full_mul(numerator);
-        let y: Uint256 = denominator.into();
-        ((x + y - Uint256::from(1u64)) / y).try_into().expect("multiplication overflow")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn multiply_ratio_and_ceil() {
-        let a = Uint128::new(124);
-        let b = a
-            .multiply_ratio_and_ceil(Uint128::new(1), Uint128::new(3));
-        assert_eq!(b, Uint128::new(42));
-
-        let a = Uint128::new(123);
-        let b = a
-            .multiply_ratio_and_ceil(Uint128::new(1), Uint128::new(3));
-        assert_eq!(b, Uint128::new(41));
-    }
 }

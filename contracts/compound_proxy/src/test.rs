@@ -3,19 +3,18 @@ use astroport::pair::{
     Cw20HookMsg as AstroportPairCw20HookMsg, ExecuteMsg as AstroportPairExecuteMsg,
 };
 use cosmwasm_std::testing::{mock_env, mock_info, MOCK_CONTRACT_ADDR};
-use cosmwasm_std::{
-    coin, to_binary, Addr, Coin, CosmosMsg, Decimal, Order, StdResult, Uint128, WasmMsg,
-};
+use cosmwasm_std::{coin, to_binary, Addr, Coin, CosmosMsg, Decimal, Order, StdResult, Uint128, WasmMsg, from_binary};
 use cw20::{Cw20ExecuteMsg, Expiration};
-use spectrum::compound_proxy::{CallbackMsg, ConfigResponse, ExecuteMsg, InstantiateMsg};
+use spectrum::adapters::Pair;
+use spectrum::compound_proxy::{CallbackMsg, ExecuteMsg, InstantiateMsg, QueryMsg};
 
-use crate::contract::{execute, instantiate, query_config};
+use crate::contract::{execute, instantiate, query};
 use crate::error::ContractError;
 use crate::mock_querier::mock_dependencies;
-use crate::state::PAIR_PROXY;
+use crate::state::{Config, PAIR_PROXY};
 
 #[test]
-fn proper_initialization() {
+fn proper_initialization() -> StdResult<()> {
     let mut deps = mock_dependencies(&[]);
 
     let msg = InstantiateMsg {
@@ -42,48 +41,48 @@ fn proper_initialization() {
 
     let env = mock_env();
     let info = mock_info(sender, &[]);
-    let res = instantiate(deps.as_mut(), env, info, msg);
+    let res = instantiate(deps.as_mut(), env.clone(), info, msg);
     assert!(res.is_ok());
 
-    let config = query_config(deps.as_ref()).unwrap();
+    let msg = QueryMsg::Config {};
+    let config: Config = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
     assert_eq!(
-        config,
-        ConfigResponse {
-            pair_info: PairInfo {
-                asset_infos: [
-                    {
-                        AssetInfo::Token {
-                            contract_addr: Addr::unchecked("token"),
-                        }
-                    },
-                    {
-                        AssetInfo::NativeToken {
-                            denom: "uluna".to_string(),
-                        }
+        config.pair_info,
+        PairInfo {
+            asset_infos: [
+                {
+                    AssetInfo::Token {
+                        contract_addr: Addr::unchecked("token"),
                     }
-                ],
-                contract_addr: Addr::unchecked("pair_contract"),
-                liquidity_token: Addr::unchecked("liquidity_token"),
-                pair_type: astroport::factory::PairType::Xyk {}
-            }
+                },
+                {
+                    AssetInfo::NativeToken {
+                        denom: "uluna".to_string(),
+                    }
+                }
+            ],
+            contract_addr: Addr::unchecked("pair_contract"),
+            liquidity_token: Addr::unchecked("liquidity_token"),
+            pair_type: astroport::factory::PairType::Xyk {}
         }
     );
 
     let pair_proxies = PAIR_PROXY
         .range(&deps.storage, None, None, Order::Ascending)
-        .collect::<StdResult<Vec<(String, Addr)>>>()
-        .unwrap();
+        .collect::<StdResult<Vec<(String, Pair)>>>()?;
     assert_eq!(
         pair_proxies,
         vec![
-            ("ibc/token".to_string(), Addr::unchecked("pair0002")),
-            ("token0001".to_string(), Addr::unchecked("pair0001")),
+            ("ibc/token".to_string(), Pair(Addr::unchecked("pair0002"))),
+            ("token0001".to_string(), Pair(Addr::unchecked("pair0001"))),
         ]
-    )
+    );
+
+    Ok(())
 }
 
 #[test]
-fn compound() {
+fn compound() -> Result<(), ContractError> {
     let mut deps = mock_dependencies(&[]);
 
     let msg = InstantiateMsg {
@@ -119,7 +118,7 @@ fn compound() {
         }],
     );
 
-    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info, msg)?;
     assert_eq!(
         res.messages
             .into_iter()
@@ -131,8 +130,7 @@ fn compound() {
                 funds: vec![],
                 msg: to_binary(&ExecuteMsg::Callback {
                     0: CallbackMsg::OptimalSwap {}
-                })
-                .unwrap(),
+                })?,
             }),
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: env.contract.address.to_string(),
@@ -141,15 +139,16 @@ fn compound() {
                     0: CallbackMsg::ProvideLiquidity {
                         receiver: "addr0000".to_string()
                     }
-                })
-                .unwrap(),
+                })?,
             }),
         ]
     );
+
+    Ok(())
 }
 
 #[test]
-fn optimal_swap() {
+fn optimal_swap() -> Result<(), ContractError> {
     let mut deps = mock_dependencies(&[]);
     deps.querier.with_balance(&[(
         &String::from("pair_contract"),
@@ -188,7 +187,7 @@ fn optimal_swap() {
     assert_eq!(res, Err(ContractError::Unauthorized {}));
 
     let info = mock_info(env.contract.address.as_str(), &[]);
-    let res = execute(deps.as_mut(), env.clone().clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone().clone(), info, msg)?;
 
     assert_eq!(
         res.messages
@@ -205,16 +204,16 @@ fn optimal_swap() {
                     belief_price: None,
                     max_spread: None,
                     to: None,
-                })
-                .unwrap()
-            })
-            .unwrap(),
+                })?
+            })?,
         }),]
     );
+
+    Ok(())
 }
 
 #[test]
-fn provide_liquidity() {
+fn provide_liquidity() -> Result<(), ContractError> {
     let mut deps = mock_dependencies(&[]);
     deps.querier.with_balance(&[
         (
@@ -264,7 +263,7 @@ fn provide_liquidity() {
     assert_eq!(res, Err(ContractError::Unauthorized {}));
 
     let info = mock_info(env.contract.address.as_str(), &[]);
-    let res = execute(deps.as_mut(), env, info, msg).unwrap();
+    let res = execute(deps.as_mut(), env, info, msg)?;
 
     assert_eq!(
         res.messages
@@ -279,8 +278,7 @@ fn provide_liquidity() {
                     spender: "pair_contract".to_string(),
                     amount: Uint128::from(1000000u128),
                     expires: Some(Expiration::AtHeight(12346)),
-                })
-                .unwrap(),
+                })?,
             }),
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: "pair_contract".to_string(),
@@ -303,9 +301,10 @@ fn provide_liquidity() {
                     slippage_tolerance: Some(Decimal::percent(1)),
                     auto_stake: None,
                     receiver: Some("sender".to_string()),
-                })
-                .unwrap(),
+                })?,
             }),
         ]
     );
+
+    Ok(())
 }

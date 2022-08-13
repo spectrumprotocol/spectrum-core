@@ -1,22 +1,18 @@
-use astroport::asset::{addr_validate_to_lower, Asset};
+use astroport::asset::{addr_validate_to_lower, Asset, token_asset};
 use astroport::querier::query_token_balance;
 use cosmwasm_std::{
-    attr, to_binary, Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
-    Uint128, WasmMsg, Coin,
+    attr, Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
+    Uint128, Coin,
 };
 
 use crate::error::ContractError;
-use crate::state::{RewardInfo, ScalingOperation, State, CONFIG, REWARD, STATE};
+use crate::state::{RewardInfo, ScalingOperation, State, CONFIG, REWARD, STATE, Config};
 
-use cw20::Cw20ExecuteMsg;
+use cw20::{Expiration};
 
-use crate::querier::query_astroport_pool_balance;
-use astroport::generator::{
-    Cw20HookMsg as AstroportCw20HookMsg, ExecuteMsg as AstroportExecuteMsg,
-};
-use spectrum::astroport_farm::{RewardInfoResponse, RewardInfoResponseItem, CallbackMsg, Cw20HookMsg};
-use spectrum::compound_proxy::ExecuteMsg as CompoundProxyExecuteMsg;
-use spectrum::farm_helper::{compute_deposit_time, deposit_asset};
+use spectrum::adapters::asset::AssetEx;
+use spectrum::astroport_farm::{RewardInfoResponse, RewardInfoResponseItem, CallbackMsg};
+use spectrum::helper::{compute_deposit_time};
 
 pub fn bond_assets(
     deps: DepsMut,
@@ -26,36 +22,33 @@ pub fn bond_assets(
     minimum_receive: Option<Uint128>,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    let staking_token = config.pair_info.liquidity_token;
+    let staking_token = config.liquidity_token;
 
     let mut messages: Vec<CosmosMsg> = vec![];
-    
     let mut funds: Vec<Coin> = vec![];
-    
-    for asset in assets.clone() {
-        deposit_asset(&env, &info, &mut messages, &asset)?;
+
+    for asset in assets.iter() {
+        asset.deposit_asset(&info, &env.contract.address, &mut messages)?;
         if asset.is_native_token() {
             funds.push(Coin {
                 denom: asset.info.to_string(),
                 amount: asset.amount,
             });
+        } else {
+            messages.push(asset.increase_allowance_msg(
+                config.compound_proxy.0.to_string(),
+                Some(Expiration::AtHeight(env.block.height + 1)),
+            )?);
         }
     }
 
-    let compound = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: config.compound_proxy.to_string(),
-        msg: to_binary(&CompoundProxyExecuteMsg::Compound {
-            rewards: assets,
-            to: None,
-        })?,
-        funds,
-    });
+    let compound = config.compound_proxy.compound_msg(assets, funds)?;
     messages.push(compound);
 
-    let prev_balance = query_token_balance(&deps.querier, staking_token, env.contract.address.clone())?;
+    let prev_balance = query_token_balance(&deps.querier, staking_token, &env.contract.address)?;
     messages.push(
         CallbackMsg::BondTo {
-            to: info.sender.to_string(),
+            to: info.sender,
             prev_balance,
             minimum_receive,
         }
@@ -71,15 +64,13 @@ pub fn bond_to(
     deps: DepsMut,
     env: Env,
     _info: MessageInfo,
-    to: String,
+    to: Addr,
     prev_balance: Uint128,
     minimum_receive: Option<Uint128>
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
 
-    let staking_token = config.pair_info.liquidity_token;
-
-    let balance = query_token_balance(&deps.querier, staking_token.clone(), env.contract.address.clone())?;
+    let balance = query_token_balance(&deps.querier, &config.liquidity_token, &env.contract.address)?;
     let amount = balance - prev_balance;
 
     if let Some(minimum_receive) = minimum_receive {
@@ -91,21 +82,13 @@ pub fn bond_to(
         }
     }
 
-    Ok(Response::new()
-    .add_messages(vec![CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: staking_token.to_string(),
-        funds: vec![],
-        msg: to_binary(&Cw20ExecuteMsg::Send {
-            contract: env.contract.address.to_string(),
-            amount,
-            msg: to_binary(&Cw20HookMsg::Bond { staker_addr: Some(to) })?,
-        })?,
-    })])
-    .add_attributes(vec![
-        attr("action", "bond_to"),
-        attr("amount", amount),
-    ]))
-
+    bond_internal(
+        deps,
+        env,
+        config,
+        to,
+        amount,
+    )
 }
 
 pub fn bond(
@@ -118,20 +101,33 @@ pub fn bond(
     let staker_addr = addr_validate_to_lower(deps.api, &sender_addr)?;
 
     let config = CONFIG.load(deps.storage)?;
-    let staking_token = config.pair_info.liquidity_token;
 
     // only staking token contract can execute this message
-    if staking_token != info.sender {
+    if config.liquidity_token != info.sender {
         return Err(ContractError::Unauthorized {});
     }
 
-    let config = CONFIG.load(deps.storage)?;
+    bond_internal(
+        deps,
+        env,
+        config,
+        staker_addr,
+        amount,
+    )
+}
 
-    let lp_balance = query_astroport_pool_balance(
-        deps.as_ref(),
-        &staking_token,
+fn bond_internal(
+    deps: DepsMut,
+    env: Env,
+    config: Config,
+    staker_addr: Addr,
+    amount: Uint128,
+) -> Result<Response, ContractError>{
+
+    let lp_balance = config.staking_contract.query_pool_balance(
+        &deps.querier,
+        &config.liquidity_token,
         &env.contract.address,
-        &config.staking_contract,
     )?;
 
     let mut messages: Vec<CosmosMsg> = vec![];
@@ -157,18 +153,9 @@ pub fn bond(
     REWARD.save(deps.storage, &staker_addr, &reward_info)?;
     STATE.save(deps.storage, &state)?;
 
-    messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: staking_token.to_string(),
-        funds: vec![],
-        msg: to_binary(&Cw20ExecuteMsg::Send {
-            contract: config.staking_contract.to_string(),
-            amount,
-            msg: to_binary(&AstroportCw20HookMsg::Deposit {})?,
-        })?,
-    }));
+    messages.push(config.staking_contract.deposit_msg(config.liquidity_token.to_string(), amount)?);
     Ok(Response::new().add_messages(messages).add_attributes(vec![
         attr("action", "bond"),
-        attr("lp_token", staking_token.to_string()),
         attr("amount", amount),
         attr("bond_amount", amount),
     ]))
@@ -202,13 +189,12 @@ pub fn unbond(
     let staker_addr = info.sender;
 
     let config = CONFIG.load(deps.storage)?;
-    let staking_token = config.pair_info.liquidity_token;
+    let staking_token = config.liquidity_token;
 
-    let lp_balance = query_astroport_pool_balance(
-        deps.as_ref(),
+    let lp_balance = config.staking_contract.query_pool_balance(
+        &deps.querier,
         &staking_token,
         &env.contract.address,
-        &config.staking_contract,
     )?;
 
     let mut state = STATE.load(deps.storage)?;
@@ -238,22 +224,8 @@ pub fn unbond(
 
     Ok(Response::new()
         .add_messages(vec![
-            CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: config.staking_contract.to_string(),
-                funds: vec![],
-                msg: to_binary(&AstroportExecuteMsg::Withdraw {
-                    lp_token: staking_token.to_string(),
-                    amount,
-                })?,
-            }),
-            CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: staking_token.to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                    recipient: staker_addr.to_string(),
-                    amount,
-                })?,
-                funds: vec![],
-            }),
+            config.staking_contract.withdraw_msg(staking_token.to_string(), amount)?,
+            token_asset(staking_token, amount).transfer_msg(&staker_addr)?,
         ])
         .add_attributes(vec![
             attr("action", "unbond"),
@@ -287,13 +259,12 @@ fn read_reward_info(deps: Deps, env: Env, staker_addr: &Addr) -> StdResult<Rewar
         });
     let state = STATE.load(deps.storage)?;
     let config = CONFIG.load(deps.storage)?;
-    let staking_token = config.pair_info.liquidity_token;
+    let staking_token = config.liquidity_token;
 
-    let lp_balance = query_astroport_pool_balance(
-        deps,
+    let lp_balance = config.staking_contract.query_pool_balance(
+        &deps.querier,
         &staking_token,
         &env.contract.address,
-        &config.staking_contract,
     )?;
 
     let bond_amount = state.calc_user_balance(

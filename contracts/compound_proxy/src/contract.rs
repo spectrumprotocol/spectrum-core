@@ -1,24 +1,21 @@
 use crate::error::ContractError;
-use crate::querier::query_pair_info;
 use crate::state::{Config, CONFIG, PAIR_PROXY};
 use std::convert::TryInto;
 
 use astroport::factory::PairType;
 use cosmwasm_std::{
     entry_point, to_binary, Addr, Binary, Coin, CosmosMsg, Decimal, Decimal256, Deps, DepsMut, Env,
-    Isqrt, MessageInfo, QuerierWrapper, Response, StdError, StdResult, Uint128, Uint256, WasmMsg,
+    Isqrt, MessageInfo, QuerierWrapper, Response, StdError, StdResult, Uint128, Uint256,
 };
-use cw20::{Cw20ExecuteMsg, Expiration};
+use cw20::{Expiration};
 use spectrum::compound_proxy::{
-    CallbackMsg, ConfigResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg,
+    CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg,
 };
 
-use astroport::asset::{addr_validate_to_lower, Asset, AssetInfo};
-use astroport::pair::{
-    Cw20HookMsg as AstroportPairCw20HookMsg, ExecuteMsg as AstroportPairExecuteMsg,
-};
+use astroport::asset::{addr_validate_to_lower, Asset};
 use cw2::set_contract_version;
-use spectrum::farm_helper::deposit_asset;
+use spectrum::adapters::asset::AssetEx;
+use spectrum::adapters::pair::Pair;
 
 /// Contract name that is used for migration.
 const CONTRACT_NAME: &str = "spectrum-compound-proxy";
@@ -66,7 +63,8 @@ pub fn instantiate(
     let commission_bps = validate_commission(msg.commission_bps)?;
     let slippage_tolerance = validate_percentage(msg.slippage_tolerance, "slippage_tolerance")?;
     let pair_contract = addr_validate_to_lower(deps.api, msg.pair_contract.as_str())?;
-    let pair_info = query_pair_info(deps.as_ref(), &pair_contract)?;
+    let pair_info = Pair(pair_contract)
+        .query_pair_info(&deps.querier)?;
 
     let config = Config {
         pair_info,
@@ -78,7 +76,7 @@ pub fn instantiate(
     for (asset_info, pair_proxy) in msg.pair_proxies {
         asset_info.check(deps.api)?;
         let pair_proxy_addr = addr_validate_to_lower(deps.api, &pair_proxy)?;
-        PAIR_PROXY.save(deps.storage, asset_info.to_string(), &pair_proxy_addr)?;
+        PAIR_PROXY.save(deps.storage, asset_info.to_string(), &Pair(pair_proxy_addr))?;
     }
 
     Ok(Response::new())
@@ -168,11 +166,10 @@ pub fn compound(
 
     // Swap reward to asset in the pair
     for reward in rewards {
-        deposit_asset(&env, &info, &mut messages, &reward)?;
+        reward.deposit_asset(&info, &env.contract.address, &mut messages)?;
         let pair_proxy = PAIR_PROXY.may_load(deps.storage, reward.info.to_string())?;
         if let Some(pair_proxy) = pair_proxy {
-            let swap_reward = swap_msg(
-                pair_proxy.to_string(),
+            let swap_reward = pair_proxy.swap_msg(
                 &reward,
                 None,
                 Some(Decimal::percent(50u64)),
@@ -239,23 +236,10 @@ pub fn optimal_swap(
             //Do nothing for stable pair
         }
         _ => {
-            let asset_a_info = config.pair_info.asset_infos[0].clone();
-            let asset_b_info = config.pair_info.asset_infos[1].clone();
-
-            let asset_a_amount =
-                asset_a_info.query_pool(&deps.querier, env.contract.address.clone())?;
-            let asset_b_amount = asset_b_info.query_pool(&deps.querier, env.contract.address)?;
-
-            let asset_a = Asset {
-                info: asset_a_info,
-                amount: asset_a_amount,
-            };
-
-            let asset_b = Asset {
-                info: asset_b_info,
-                amount: asset_b_amount,
-            };
-            if !asset_a.amount.is_zero() || !asset_b_amount.is_zero() {
+            let assets = config.pair_info.query_pools(&deps.querier, env.contract.address)?;
+            let asset_a = assets[0].clone();
+            let asset_b = assets[1].clone();
+            if !asset_a.amount.is_zero() || !asset_b.amount.is_zero() {
                 calculate_optimal_swap(
                     &deps.querier,
                     &config,
@@ -283,13 +267,12 @@ fn calculate_optimal_swap(
     max_spread: Option<Decimal>,
     messages: &mut Vec<CosmosMsg>,
 ) -> StdResult<()> {
-    let [pool_a, pool_b] = config
-        .pair_info
-        .query_pools(querier, config.pair_info.contract_addr.clone())?;
+    let pair_contract = config.pair_info.contract_addr.clone();
+    let pools = config.pair_info.query_pools(querier, pair_contract.clone())?;
     let provide_a_amount: Uint256 = asset_a.amount.into();
     let provide_b_amount: Uint256 = asset_b.amount.into();
-    let pool_a_amount: Uint256 = pool_a.amount.into();
-    let pool_b_amount: Uint256 = pool_b.amount.into();
+    let pool_a_amount: Uint256 = pools[0].amount.into();
+    let pool_b_amount: Uint256 = pools[1].amount.into();
     let provide_a_area = provide_a_amount * pool_b_amount;
     let provide_b_area = provide_b_amount * pool_a_amount;
 
@@ -314,8 +297,7 @@ fn calculate_optimal_swap(
                 Decimal256::from_ratio(config.commission_bps, COMMISSION_DENOM),
             )?;
             if !return_amount.is_zero() {
-                messages.push(swap_msg(
-                    config.pair_info.contract_addr.to_string(),
+                messages.push(Pair(pair_contract).swap_msg(
                     &swap_asset,
                     belief_price,
                     max_spread,
@@ -343,8 +325,7 @@ fn calculate_optimal_swap(
                 Decimal256::from_ratio(config.commission_bps, COMMISSION_DENOM),
             )?;
             if !return_amount.is_zero() {
-                messages.push(swap_msg(
-                    config.pair_info.contract_addr.to_string(),
+                messages.push(Pair(pair_contract).swap_msg(
                     &swap_asset,
                     belief_price,
                     max_spread,
@@ -365,21 +346,9 @@ pub fn provide_liquidity(
 ) -> Result<Response, ContractError> {
     let config: Config = CONFIG.load(deps.storage)?;
 
-    let pair_contract = config.pair_info.contract_addr;
-    let asset_infos = config.pair_info.asset_infos;
+    let pair_contract = config.pair_info.contract_addr.clone();
 
-    let assets: [Asset; 2] = [
-        Asset {
-            info: asset_infos[0].clone(),
-            amount: asset_infos[0]
-                .query_pool(&deps.querier, env.contract.address.clone())?,
-        },
-        Asset {
-            info: asset_infos[1].clone(),
-            amount: asset_infos[1]
-                .query_pool(&deps.querier, env.contract.address)?,
-        },
-    ];
+    let assets = config.pair_info.query_pools(&deps.querier, env.contract.address)?;
 
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut funds: Vec<Coin> = vec![];
@@ -390,28 +359,19 @@ pub fn provide_liquidity(
                 amount: asset.amount,
             });
         } else {
-            messages.push(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: asset.info.to_string(),
-                msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
-                    spender: pair_contract.to_string(),
-                    amount: asset.amount,
-                    expires: Some(Expiration::AtHeight(env.block.height + 1)),
-                })?,
-                funds: vec![],
-            }));
+            messages.push(asset.increase_allowance_msg(
+                pair_contract.to_string(),
+                Some(Expiration::AtHeight(env.block.height + 1)))?);
         }
     }
 
-    let provide_liquidity = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: pair_contract.to_string(),
-        msg: to_binary(&AstroportPairExecuteMsg::ProvideLiquidity {
+    let provide_liquidity = Pair(pair_contract)
+        .provide_liquidity_msg(
             assets,
-            slippage_tolerance: Some(config.slippage_tolerance),
-            receiver: Some(receiver.to_string()),
-            auto_stake: None,
-        })?,
-        funds,
-    });
+            Some(config.slippage_tolerance),
+            Some(receiver.to_string()),
+            funds,
+        )?;
     messages.push(provide_liquidity);
 
     Ok(Response::new()
@@ -435,19 +395,8 @@ pub fn provide_liquidity(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::Config {} => to_binary(&query_config(deps)?),
+        QueryMsg::Config {} => to_binary(&CONFIG.load(deps.storage)?),
     }
-}
-
-/// ## Description
-/// Returns information about the controls settings in a [`ConfigResponse`] object.
-/// ## Params
-/// * **deps** is the object of type [`Deps`].
-pub fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
-    let config: Config = CONFIG.load(deps.storage)?;
-    Ok(ConfigResponse {
-        pair_info: config.pair_info,
-    })
 }
 
 fn get_swap_amount(
@@ -496,46 +445,6 @@ fn simulate(
         .map_err(|_| StdError::generic_err("overflow"))
 }
 
-/// Generate msg for swapping specified asset
-fn swap_msg(
-    pair_contract: String,
-    asset: &Asset,
-    belief_price: Option<Decimal>,
-    max_spread: Option<Decimal>,
-    to: Option<String>,
-) -> StdResult<CosmosMsg> {
-    let wasm_msg = match &asset.info {
-        AssetInfo::Token { contract_addr } => WasmMsg::Execute {
-            contract_addr: contract_addr.to_string(),
-            msg: to_binary(&Cw20ExecuteMsg::Send {
-                contract: pair_contract,
-                amount: asset.amount,
-                msg: to_binary(&AstroportPairCw20HookMsg::Swap {
-                    belief_price,
-                    max_spread,
-                    to,
-                })?,
-            })?,
-            funds: vec![],
-        },
-
-        AssetInfo::NativeToken { denom } => WasmMsg::Execute {
-            contract_addr: pair_contract,
-            msg: to_binary(&AstroportPairExecuteMsg::Swap {
-                offer_asset: asset.clone(),
-                belief_price,
-                max_spread,
-                to: None,
-            })?,
-            funds: vec![Coin {
-                denom: denom.clone(),
-                amount: asset.amount,
-            }],
-        },
-    };
-
-    Ok(CosmosMsg::Wasm(wasm_msg))
-}
 
 /// ## Description
 /// Used for migration of contract. Returns the default object of type [`Response`].

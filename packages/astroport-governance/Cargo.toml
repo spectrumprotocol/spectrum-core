@@ -1,10 +1,9 @@
 [package]
-name = "astroport"
-version = "1.2.0"
+name = "astroport-governance"
+version = "1.1.0"
 authors = ["Astroport"]
 edition = "2021"
-description = "Common astroport types"
-repository = "https://github.com/astroport-fi/astroport"
+repository = "https://github.com/astroport-fi/astroport-governance"
 homepage = "https://astroport.fi"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -17,11 +16,7 @@ backtraces = ["cosmwasm-std/backtraces"]
 [dependencies]
 cw20 = { version = "0.13.2" }
 cosmwasm-std = { version = "1.0.0" }
+cw-storage-plus = { version = "0.13.2" }
 schemars = "0.8.1"
 serde = { version = "1.0.137", default-features = false, features = ["derive"] }
-uint = "0.9.1"
-cw-storage-plus = { version = "0.13.2" }
-itertools = "0.10"
-
-[dev-dependencies]
-cosmwasm-schema = "1.0.0"
+astroport = { path = "../astroport", default-features = false }
