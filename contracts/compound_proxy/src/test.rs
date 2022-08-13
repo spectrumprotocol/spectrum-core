@@ -5,7 +5,7 @@ use astroport::pair::{
 use cosmwasm_std::testing::{mock_env, mock_info, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{coin, to_binary, Addr, Coin, CosmosMsg, Decimal, Order, StdResult, Uint128, WasmMsg, from_binary};
 use cw20::{Cw20ExecuteMsg, Expiration};
-use spectrum::adapters::Pair;
+use spectrum::adapters::pair::Pair;
 use spectrum::compound_proxy::{CallbackMsg, ExecuteMsg, InstantiateMsg, QueryMsg};
 
 use crate::contract::{execute, instantiate, query};
@@ -49,7 +49,7 @@ fn proper_initialization() -> StdResult<()> {
     assert_eq!(
         config.pair_info,
         PairInfo {
-            asset_infos: [
+            asset_infos: vec![
                 {
                     AssetInfo::Token {
                         contract_addr: Addr::unchecked("token"),
@@ -201,6 +201,7 @@ fn optimal_swap() -> Result<(), ContractError> {
                 contract: "pair_contract".to_string(),
                 amount: Uint128::new(500626),
                 msg: to_binary(&AstroportPairCw20HookMsg::Swap {
+                    ask_asset_info: None,
                     belief_price: None,
                     max_spread: None,
                     to: None,
@@ -284,7 +285,7 @@ fn provide_liquidity() -> Result<(), ContractError> {
                 contract_addr: "pair_contract".to_string(),
                 funds: vec![coin(1000000, "uluna")],
                 msg: to_binary(&AstroportPairExecuteMsg::ProvideLiquidity {
-                    assets: [
+                    assets: vec![
                         Asset {
                             info: AssetInfo::Token {
                                 contract_addr: Addr::unchecked("token"),

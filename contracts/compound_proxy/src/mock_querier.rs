@@ -98,7 +98,7 @@ impl WasmMockQuerier {
                     match from_binary(&msg).unwrap() {
                         Pair { .. } => SystemResult::Ok(
                             to_binary(&PairInfo {
-                                asset_infos: [
+                                asset_infos: vec![
                                     {
                                         AssetInfo::Token { contract_addr: Addr::unchecked("token") }
                                     },
