@@ -59,7 +59,7 @@ pub fn query_compound_simulation(
     }
 
     let pair = Pair(config.pair_info.contract_addr.clone());
-    let pools = config
+    let mut pools = config
         .pair_info
         .query_pools(&deps.querier, &config.pair_info.contract_addr)?;
 
@@ -89,11 +89,15 @@ pub fn query_compound_simulation(
             if !swap_asset_a_amount.is_zero() {
                 asset_a_amount -= swap_asset_a_amount;
                 asset_b_amount += return_b_amount;
+                pools[0].amount += swap_asset_a_amount;
+                pools[1].amount -= return_b_amount;
             }
 
             if !swap_asset_b_amount.is_zero() {
                 asset_b_amount -= swap_asset_b_amount;
                 asset_a_amount += return_a_amount;
+                pools[1].amount += swap_asset_b_amount;
+                pools[0].amount -= return_a_amount;
             }
 
             if total_share.is_zero() {
