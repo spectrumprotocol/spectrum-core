@@ -68,11 +68,11 @@ pub fn query_compound_simulation(
     let lp_amount = match config.pair_info.pair_type {
         PairType::Xyk {} => {
             let asset_a = Asset {
-                info: asset_a_info.clone(),
+                info: asset_a_info,
                 amount: asset_a_amount,
             };
             let asset_b = Asset {
-                info: asset_b_info.clone(),
+                info: asset_b_info,
                 amount: asset_b_amount,
             };
             let mut _messages: Vec<CosmosMsg> = vec![];
@@ -124,7 +124,7 @@ pub fn query_compound_simulation(
                 let liquidity_token_precision = query_token_precision(
                     &deps.querier,
                     &AssetInfo::Token {
-                        contract_addr: config.pair_info.liquidity_token.clone(),
+                        contract_addr: config.pair_info.liquidity_token,
                     },
                 )?;
 
