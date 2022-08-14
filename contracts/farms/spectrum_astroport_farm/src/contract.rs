@@ -40,9 +40,7 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
-    validate_percentage(msg.community_fee, "community_fee")?;
-    validate_percentage(msg.platform_fee, "platform_fee")?;
-    validate_percentage(msg.controller_fee, "controller_fee")?;
+    validate_percentage(msg.fee, "community_fee")?;
 
     CONFIG.save(
         deps.storage,
@@ -51,12 +49,8 @@ pub fn instantiate(
             staking_contract: Generator(addr_validate_to_lower(deps.api, &msg.staking_contract)?),
             compound_proxy: Compounder(addr_validate_to_lower(deps.api, &msg.compound_proxy)?),
             controller: addr_validate_to_lower(deps.api, &msg.controller)?,
-            community_fee: msg.community_fee,
-            platform_fee: msg.platform_fee,
-            controller_fee: msg.controller_fee,
-            community_fee_collector: addr_validate_to_lower(deps.api, &msg.community_fee_collector)?,
-            platform_fee_collector: addr_validate_to_lower(deps.api, &msg.platform_fee_collector)?,
-            controller_fee_collector: addr_validate_to_lower(deps.api, &msg.controller_fee_collector)?,
+            fee: msg.fee,
+            fee_collector: addr_validate_to_lower(deps.api, &msg.fee_collector)?,
             liquidity_token: addr_validate_to_lower(deps.api, &msg.liquidity_token)?,
             base_reward_token: addr_validate_to_lower(deps.api, &msg.base_reward_token)?,
         },
@@ -83,25 +77,17 @@ pub fn execute(
     match msg {
         ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
         ExecuteMsg::UpdateConfig {
-            controller,
-            community_fee,
-            platform_fee,
-            controller_fee,
             compound_proxy,
-            platform_fee_collector,
-            community_fee_collector,
-            controller_fee_collector,
+            controller,
+            fee,
+            fee_collector,
         } => update_config(
             deps,
             info,
-            controller,
-            community_fee,
-            platform_fee,
-            controller_fee,
             compound_proxy,
-            platform_fee_collector,
-            community_fee_collector,
-            controller_fee_collector,
+            controller,
+            fee,
+            fee_collector,
         ),
         ExecuteMsg::Unbond { amount } => unbond(deps, env, info, amount),
         ExecuteMsg::BondAssets { assets, minimum_receive } => bond_assets(deps, env, info, assets, minimum_receive),
@@ -163,14 +149,10 @@ fn receive_cw20(
 pub fn update_config(
     deps: DepsMut,
     info: MessageInfo,
-    controller: Option<String>,
-    community_fee: Option<Decimal>,
-    platform_fee: Option<Decimal>,
-    controller_fee: Option<Decimal>,
     compound_proxy: Option<String>,
-    platform_fee_collector: Option<String>,
-    community_fee_collector: Option<String>,
-    controller_fee_collector: Option<String>,
+    controller: Option<String>,
+    fee: Option<Decimal>,
+    fee_collector: Option<String>,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
@@ -178,39 +160,21 @@ pub fn update_config(
         return Err(ContractError::Unauthorized {});
     }
 
-    if let Some(controller) = controller {
-        config.controller = addr_validate_to_lower(deps.api, &controller)?;
-    }
-
-    if let Some(community_fee) = community_fee {
-        validate_percentage(community_fee, "community_fee")?;
-        config.community_fee = community_fee;
-    }
-
-    if let Some(platform_fee) = platform_fee {
-        validate_percentage(platform_fee, "platform_fee")?;
-        config.platform_fee = platform_fee;
-    }
-
-    if let Some(controller_fee) = controller_fee {
-        validate_percentage(controller_fee, "controller_fee")?;
-        config.controller_fee = controller_fee;
-    }
-
     if let Some(compound_proxy) = compound_proxy {
         config.compound_proxy = Compounder(addr_validate_to_lower(deps.api, &compound_proxy)?);
     }
 
-    if let Some(platform_fee_collector) = platform_fee_collector {
-        config.platform_fee_collector = addr_validate_to_lower(deps.api, &platform_fee_collector)?;
+    if let Some(controller) = controller {
+        config.controller = addr_validate_to_lower(deps.api, &controller)?;
     }
 
-    if let Some(community_fee_collector) = community_fee_collector {
-        config.community_fee_collector = addr_validate_to_lower(deps.api, &community_fee_collector)?;
+    if let Some(fee) = fee {
+        validate_percentage(fee, "fee")?;
+        config.fee = fee;
     }
 
-    if let Some(controller_fee_collector) = controller_fee_collector {
-        config.controller_fee_collector = addr_validate_to_lower(deps.api, &controller_fee_collector)?;
+    if let Some(fee_collector) = fee_collector {
+        config.fee_collector = addr_validate_to_lower(deps.api, &fee_collector)?;
     }
 
     CONFIG.save(deps.storage, &config)?;

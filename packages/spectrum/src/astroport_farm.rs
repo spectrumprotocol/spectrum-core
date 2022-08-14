@@ -11,12 +11,8 @@ pub struct InstantiateMsg {
     pub staking_contract: String,
     pub compound_proxy: String,
     pub controller: String,
-    pub community_fee: Decimal,
-    pub platform_fee: Decimal,
-    pub controller_fee: Decimal,
-    pub platform_fee_collector: String,
-    pub community_fee_collector: String,
-    pub controller_fee_collector: String,
+    pub fee: Decimal,
+    pub fee_collector: String,
     pub liquidity_token: String,
     pub base_reward_token: String,
 }
@@ -27,14 +23,10 @@ pub enum ExecuteMsg {
     Receive(Cw20ReceiveMsg), // Bond lp token
     // Update config
     UpdateConfig {
-        controller: Option<String>,
-        community_fee: Option<Decimal>,
-        platform_fee: Option<Decimal>,
-        controller_fee: Option<Decimal>,
         compound_proxy: Option<String>,
-        platform_fee_collector: Option<String>,
-        community_fee_collector: Option<String>,
-        controller_fee_collector: Option<String>,
+        controller: Option<String>,
+        fee: Option<Decimal>,
+        fee_collector: Option<String>,
     },
     // Unbond lp token
     Unbond {
