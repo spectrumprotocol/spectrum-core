@@ -1,7 +1,7 @@
 use std::cmp;
 use std::collections::HashMap;
 use cosmwasm_std::{Addr, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, QuerierWrapper, Response, StdResult, Uint128};
-use astroport::asset::{addr_validate_to_lower, Asset, AssetInfo, token_asset};
+use astroport::asset::{addr_validate_to_lower, Asset, token_asset};
 use astroport::querier::query_token_balance;
 use crate::error::ContractError;
 use astroport::generator::{PendingTokenResponse, UserInfoV2};
@@ -9,7 +9,7 @@ use astroport::restricted_vector::RestrictedVector;
 use spectrum::adapters::asset::AssetEx;
 use crate::astro_generator::GeneratorEx;
 use crate::model::{CallbackMsg, Config, PoolInfo, RewardInfo, UserInfo};
-use crate::state::{CONFIG, POOL_CONFIG, POOL_INFO, REWARD_INFO, USER_INFO};
+use crate::state::{CONFIG, POOL_INFO, REWARD_INFO, USER_INFO};
 
 pub fn execute_deposit(
     deps: DepsMut,
@@ -100,20 +100,20 @@ fn reconcile_astro_to_pool_info(
     let astro_amount = query_token_balance(querier, config.astro_token.clone(), contract_addr.clone())?;
     let add_astro_amount = astro_amount.saturating_sub(astro_reward.reconciled_amount);
     let target_add_astro_amount = (astro_user_info.reward_user_index - pool_info.prev_reward_user_index) * astro_user_info.virtual_amount;
-    let earned_astro_amount = cmp::min(add_astro_amount, target_add_astro_amount) + add_pending_amount;
-    let fee = earned_astro_amount * config.fee_rate;
-    let net_astro_amount = earned_astro_amount - fee;
+    let net_astro_amount = cmp::min(add_astro_amount, target_add_astro_amount) + add_pending_amount;
     let based_astro = net_astro_amount.multiply_ratio(
         astro_user_info.amount * Decimal::percent(40),
         astro_user_info.virtual_amount,
     );
     let boosted_astro = net_astro_amount.checked_sub(based_astro)?;
-    let to_staker = boosted_astro * config.staker_rate;
-    let to_lp = boosted_astro - to_staker + based_astro;
+    let fee = boosted_astro * config.boost_fee;
+    let net_boosted_astro = boosted_astro - fee;
+    let to_staker = net_boosted_astro * config.staker_rate;
+    let to_lp = net_boosted_astro - to_staker + based_astro;
     let astro_per_share = Decimal::from_ratio(to_lp, pool_info.total_bond_share);
     astro_reward.fee += fee;
     astro_reward.staker_income += to_staker;
-    astro_reward.reconciled_amount += earned_astro_amount;
+    astro_reward.reconciled_amount += net_astro_amount;
     pool_info.prev_reward_user_index = astro_user_info.reward_user_index;
     pool_info.reward_indexes.update(&config.astro_token, astro_per_share)?;
 
@@ -125,7 +125,6 @@ fn reconcile_token_to_pool_info(
     querier: &QuerierWrapper,
     token: &Addr,
     contract_addr: &Addr,
-    config: &Config,
     target_add_token_amount: Uint128,
     add_pending_amount: Uint128,
     pool_info: &mut PoolInfo,
@@ -133,12 +132,9 @@ fn reconcile_token_to_pool_info(
 ) -> StdResult<()> {
     let token_amount = query_token_balance(querier, token.clone(), contract_addr.clone())?;
     let add_token_amount = token_amount.saturating_sub(token_reward.reconciled_amount);
-    let earned_token_amount = cmp::min(add_token_amount, target_add_token_amount) + add_pending_amount;
-    let fee = earned_token_amount * config.fee_rate;
-    let net_token_amount = earned_token_amount - fee;
+    let net_token_amount = cmp::min(add_token_amount, target_add_token_amount) + add_pending_amount;
     let token_per_share = Decimal::from_ratio(net_token_amount, pool_info.total_bond_share);
-    token_reward.fee += fee;
-    token_reward.reconciled_amount += earned_token_amount;
+    token_reward.reconciled_amount += net_token_amount;
     pool_info.reward_indexes.update(token, token_per_share)?;
 
     Ok(())
@@ -181,7 +177,6 @@ pub fn callback_after_claimed(
             &deps.querier,
             token,
             &env.contract.address,
-            &config,
             target_add_token_amount,
             Uint128::zero(),
             &mut pool_info,
@@ -199,7 +194,6 @@ pub fn callback_after_bond_changed(
     deps: DepsMut,
     env: Env,
     lp_token: Addr,
-    prev_assets: Vec<Asset>,
 ) -> Result<Response, ContractError> {
 
     // load
@@ -210,24 +204,6 @@ pub fn callback_after_bond_changed(
     let astro_user_info = config.generator.query_user_info(&deps.querier, &lp_token, &env.contract.address)?;
     pool_info.prev_reward_user_index = astro_user_info.reward_user_index;
     pool_info.prev_reward_debt_proxy = astro_user_info.reward_debt_proxy;
-
-    // asset rewards
-    for prev_asset in prev_assets {
-        let balance = prev_asset.info.query_pool(&deps.querier, env.contract.address.clone())?;
-        let add_amount = balance.checked_sub(prev_asset.amount)?;
-        if !add_amount.is_zero() {
-            let token = Addr::unchecked(prev_asset.info.to_string());
-            let mut token_reward = REWARD_INFO.may_load(deps.storage, &token)?
-                .unwrap_or_default();
-            let fee = add_amount * config.fee_rate;
-            let net_amount = add_amount - fee;
-            let token_per_share = Decimal::from_ratio(net_amount, pool_info.total_bond_share);
-            token_reward.fee += fee;
-            token_reward.reconciled_amount += add_amount;
-            pool_info.reward_indexes.update(&token, token_per_share)?;
-            REWARD_INFO.save(deps.storage, &token, &token_reward)?;
-        }
-    }
 
     // save
     POOL_INFO.save(deps.storage, &lp_token, &pool_info)?;
@@ -277,24 +253,11 @@ pub fn callback_deposit(
     USER_INFO.save(deps.storage, (&lp_token, &staker_addr), &user_info)?;
     POOL_INFO.save(deps.storage, &lp_token, &pool_info)?;
 
-    // fetch prev asset balance
-    let mut prev_assets: Vec<Asset> = vec![];
-    if let Some(pool_config) = POOL_CONFIG.may_load(deps.storage, &lp_token)? {
-        for asset_reward in pool_config.asset_rewards {
-            let amount = asset_reward.query_pool(&deps.querier, env.contract.address.clone())?;
-            prev_assets.push(Asset {
-                info: asset_reward,
-                amount,
-            });
-        }
-    }
-
     let deposit_msg = config.generator.deposit_msg(lp_token.to_string(), amount)?;
     Ok(Response::new()
         .add_message(deposit_msg)
         .add_message(CallbackMsg::AfterBondChanged {
             lp_token,
-            prev_assets,
         }.to_cosmos_msg(&env.contract.address)?)
         .add_attribute("add_share", share)
     )
@@ -324,24 +287,11 @@ pub fn callback_withdraw(
     USER_INFO.save(deps.storage, (&lp_token, &staker_addr), &user_info)?;
     POOL_INFO.save(deps.storage, &lp_token, &pool_info)?;
 
-    // fetch prev asset balance
-    let mut prev_assets: Vec<Asset> = vec![];
-    if let Some(pool_config) = POOL_CONFIG.may_load(deps.storage, &lp_token)? {
-        for asset_reward in pool_config.asset_rewards {
-            let amount = asset_reward.query_pool(&deps.querier, env.contract.address.clone())?;
-            prev_assets.push(Asset {
-                info: asset_reward,
-                amount,
-            });
-        }
-    }
-
     let withdraw_msg = config.generator.withdraw_msg(lp_token.to_string(), amount)?;
     Ok(Response::new()
         .add_message(withdraw_msg)
         .add_message(CallbackMsg::AfterBondChanged {
             lp_token,
-            prev_assets,
         }.to_cosmos_msg(&env.contract.address)?)
         .add_attribute("deduct_share", share)
     )
@@ -429,7 +379,6 @@ pub fn query_pending_token(
             &deps.querier,
             token,
             &env.contract.address,
-            &config,
             target_add_token_amount,
             add_pending_amount,
             &mut pool_info,
@@ -448,12 +397,7 @@ pub fn query_pending_token(
         if addr == &config.astro_token {
             pending = *amount;
         } else {
-            let info = if addr.to_string().starts_with('u') {
-                AssetInfo::NativeToken { denom: addr.to_string() }
-            } else {
-                AssetInfo::Token { contract_addr: addr.clone() }
-            };
-            pending_on_proxy.push(Asset { info, amount: *amount });
+            pending_on_proxy.push(token_asset(addr.clone(), *amount));
         }
     }
 

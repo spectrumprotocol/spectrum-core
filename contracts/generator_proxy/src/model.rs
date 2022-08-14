@@ -2,7 +2,6 @@ use cosmwasm_std::{Addr, CosmosMsg, Decimal, StdResult, to_binary, Uint128, Wasm
 use cw20::{Cw20ReceiveMsg};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use astroport::asset::{Asset, AssetInfo};
 use astroport::restricted_vector::RestrictedVector;
 use spectrum::adapters::generator::Generator;
 use spectrum::helper::ScalingUint128;
@@ -19,7 +18,7 @@ pub struct InstantiateMsg {
     pub income_distributor: String,
     pub max_quota: Uint128,
     pub staker_rate: Decimal,
-    pub fee_rate: Decimal,
+    pub boost_fee: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -33,7 +32,7 @@ pub struct Config {
     pub income_distributor: Addr,
     pub max_quota: Uint128,
     pub staker_rate: Decimal,
-    pub fee_rate: Decimal,
+    pub boost_fee: Decimal,
 }
 
 pub fn zero_address() -> Addr {
@@ -133,11 +132,6 @@ impl RewardInfo {
 
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
-pub struct PoolConfig {
-    pub asset_rewards: Vec<AssetInfo>,
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
     pub next_claim_period: u64,
@@ -152,17 +146,13 @@ pub enum ExecuteMsg {
     // config
     UpdateConfig {
         controller: Option<String>,
-        fee_rate: Option<Decimal>,
+        boost_fee: Option<Decimal>,
     },
 
     // controller's actions
     UpdateParameters {
         max_quota: Option<Uint128>,
         staker_rate: Option<Decimal>,
-    },
-    UpdatePoolConfig {
-        lp_token: String,
-        asset_rewards: Option<Vec<AssetInfo>>,
     },
 
     // ControllerVote {
@@ -199,7 +189,6 @@ pub enum CallbackMsg {
     },
     AfterBondChanged {
         lp_token: Addr,
-        prev_assets: Vec<Asset>,
     },
     ClaimRewards {
         lp_token: Addr,
@@ -231,9 +220,6 @@ pub enum Cw20HookMsg {
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     Config {},
-    PoolConfig {
-        lp_token: String,
-    },
     PoolInfo {
         lp_token: String,
     },

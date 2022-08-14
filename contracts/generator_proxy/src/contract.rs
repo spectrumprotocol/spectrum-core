@@ -1,10 +1,10 @@
 use cosmwasm_std::{entry_point, DepsMut, Env, MessageInfo, Response, from_binary, Deps, Binary, to_binary, Empty};
 use cw20::Cw20ReceiveMsg;
 use astroport::asset::addr_validate_to_lower;
+use astroport_governance::utils::get_period;
 use spectrum::adapters::generator::Generator;
-use crate::astro_gov::get_period;
 use crate::bond::{callback_after_bond_changed, callback_after_claimed, callback_claim_rewards, callback_deposit, callback_withdraw, execute_deposit, execute_withdraw, query_deposit, query_pending_token};
-use crate::config::{execute_update_config, execute_update_parameters, execute_update_pool_config, query_config, query_pool_config, validate_percentage};
+use crate::config::{execute_update_config, execute_update_parameters, query_config, validate_percentage};
 use crate::error::ContractError;
 use crate::model::{CallbackMsg, Config, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg, State};
 use crate::query::{query_pool_info, query_reward_info, query_state, query_user_info};
@@ -19,7 +19,7 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
 
     validate_percentage(msg.staker_rate, "staker_rate")?;
-    validate_percentage(msg.fee_rate, "fee_rate")?;
+    validate_percentage(msg.boost_fee, "boost_fee")?;
 
     let config = Config {
         generator: Generator(addr_validate_to_lower(deps.api, &msg.generator)?),
@@ -31,7 +31,7 @@ pub fn instantiate(
         income_distributor: addr_validate_to_lower(deps.api, &msg.income_distributor)?,
         max_quota: msg.max_quota,
         staker_rate: msg.staker_rate,
-        fee_rate: msg.fee_rate,
+        boost_fee: msg.boost_fee,
     };
     CONFIG.save(deps.storage, &config)?;
 
@@ -51,16 +51,12 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> R
 
         ExecuteMsg::UpdateConfig {
             controller,
-            fee_rate,
-        } => execute_update_config(deps, env, info, controller, fee_rate),
+            boost_fee,
+        } => execute_update_config(deps, env, info, controller, boost_fee),
         ExecuteMsg::UpdateParameters {
             max_quota,
             staker_rate,
         } => execute_update_parameters(deps, env, info, max_quota, staker_rate),
-        ExecuteMsg::UpdatePoolConfig {
-            lp_token,
-            asset_rewards,
-        } => execute_update_pool_config(deps, env, info, lp_token, asset_rewards),
 
         // ExecuteMsg::ControllerVote { votes } => execute_controller_vote(deps, env, info, votes),
         // ExecuteMsg::ExtendLockTime { time } => execute_extend_lock_time(deps, env, info, time),
@@ -98,7 +94,7 @@ fn execute_callback(
         CallbackMsg::AfterClaimed { lp_token } => callback_after_claimed(deps, env, lp_token),
         CallbackMsg::Deposit { lp_token, staker_addr, amount } => callback_deposit(deps, env, lp_token, staker_addr, amount),
         CallbackMsg::Withdraw { lp_token, staker_addr, amount } => callback_withdraw(deps, env, lp_token, staker_addr, amount),
-        CallbackMsg::AfterBondChanged { lp_token, prev_assets } => callback_after_bond_changed(deps, env, lp_token, prev_assets),
+        CallbackMsg::AfterBondChanged { lp_token } => callback_after_bond_changed(deps, env, lp_token),
         CallbackMsg::ClaimRewards { lp_token, staker_addr } => callback_claim_rewards(deps, env, lp_token, staker_addr),
     }
 }
@@ -109,7 +105,6 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
         QueryMsg::PendingToken { lp_token, user } => to_binary(&query_pending_token(deps, env, lp_token, user)?),
         QueryMsg::Deposit { lp_token, user } => to_binary(&query_deposit(deps, env, lp_token, user)?),
         QueryMsg::Config { } => to_binary(&query_config(deps, env)?),
-        QueryMsg::PoolConfig { lp_token } => to_binary(&query_pool_config(deps, env, lp_token)?),
         QueryMsg::PoolInfo { lp_token } => to_binary(&query_pool_info(deps, env, lp_token)?),
         QueryMsg::UserInfo { lp_token, user } => to_binary(&query_user_info(deps, env, lp_token, user)?),
         QueryMsg::RewardInfo { token } => to_binary(&query_reward_info(deps, env, token)?),

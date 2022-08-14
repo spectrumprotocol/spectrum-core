@@ -1,8 +1,8 @@
 use cosmwasm_std::{Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult, Uint128};
-use astroport::asset::{addr_validate_to_lower, AssetInfo};
+use astroport::asset::{addr_validate_to_lower};
 use crate::error::ContractError;
-use crate::model::{Config, PoolConfig};
-use crate::state::{CONFIG, POOL_CONFIG};
+use crate::model::{Config};
+use crate::state::{CONFIG};
 
 pub fn validate_percentage(value: Decimal, field: &str) -> StdResult<()> {
     if value > Decimal::one() {
@@ -16,7 +16,7 @@ pub fn execute_update_config(
     _env: Env,
     info: MessageInfo,
     controller: Option<String>,
-    fee_rate: Option<Decimal>,
+    boost_fee: Option<Decimal>,
 ) -> Result<Response, ContractError> {
 
     // only owner can update
@@ -29,9 +29,9 @@ pub fn execute_update_config(
         config.controller = addr_validate_to_lower(deps.api, &controller)?;
     }
 
-    if let Some(fee_rate) = fee_rate {
-        validate_percentage(fee_rate, "fee_rate")?;
-        config.fee_rate = fee_rate;
+    if let Some(boost_fee) = boost_fee {
+        validate_percentage(boost_fee, "boost_fee")?;
+        config.boost_fee = boost_fee;
     }
 
     CONFIG.save(deps.storage, &config)?;
@@ -67,46 +67,9 @@ pub fn execute_update_parameters(
     Ok(Response::default())
 }
 
-pub fn execute_update_pool_config(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
-    lp_token: String,
-    asset_rewards: Option<Vec<AssetInfo>>,
-) -> Result<Response, ContractError> {
-
-    // only controller can update
-    let config = CONFIG.load(deps.storage)?;
-    if info.sender != config.controller {
-        return Err(ContractError::Unauthorized {});
-    }
-
-    // load data
-    let lp_token = addr_validate_to_lower(deps.api, &lp_token)?;
-    let mut pool_config = POOL_CONFIG.may_load(deps.storage, &lp_token)?
-        .unwrap_or_default();
-
-    if let Some(asset_rewards) = asset_rewards {
-        pool_config.asset_rewards = asset_rewards;
-    }
-
-    POOL_CONFIG.save(deps.storage, &lp_token, &pool_config)?;
-
-    Ok(Response::default())
-}
-
 pub fn query_config(
     deps: Deps,
     _env: Env,
 ) -> StdResult<Config> {
     CONFIG.load(deps.storage)
-}
-
-pub fn query_pool_config(
-    deps: Deps,
-    _env: Env,
-    lp_token: String,
-) -> StdResult<PoolConfig> {
-    let lp_token = addr_validate_to_lower(deps.api, &lp_token)?;
-    POOL_CONFIG.load(deps.storage, &lp_token)
 }

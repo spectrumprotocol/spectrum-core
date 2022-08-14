@@ -8,19 +8,6 @@ use astroport_governance::escrow_fee_distributor::{ExecuteMsg as FeeExecuteMsg};
 use astroport_governance::generator_controller::{ExecuteMsg as ControllerExecuteMsg};
 use astroport_governance::voting_escrow::{Cw20HookMsg as VotingCw20HookMsg, ExecuteMsg as VotingExecuteMsg, QueryMsg as VotingQueryMsg, LockInfoResponse, VotingPowerResponse};
 
-pub const WEEK: u64 = 7 * 86400;
-pub const EPOCH_START: u64 = 1646006400;
-
-/// ## Description
-/// Calculates the period number. Time should be formatted as a timestamp.
-pub fn get_period(time: u64) -> StdResult<u64> {
-    if time < EPOCH_START {
-        Err(StdError::generic_err("Invalid time"))
-    } else {
-        Ok((time - EPOCH_START) / WEEK)
-    }
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct AstroGovBase<T> {
     pub fee_distributor: T,

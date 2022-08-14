@@ -7,3 +7,4 @@ pub mod astro_gov;
 pub mod bond;
 pub mod astro_generator;
 pub mod query;
+pub mod staking;
