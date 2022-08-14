@@ -262,9 +262,11 @@ pub fn calculate_optimal_swap(
     belief_price: Option<Decimal>,
     max_spread: Option<Decimal>,
     messages: &mut Vec<CosmosMsg>,
-) -> StdResult<(Uint128, Uint128)> {
+) -> StdResult<(Uint128, Uint128, Uint128, Uint128)> {
     let mut swap_asset_a_amount = Uint128::zero();
     let mut swap_asset_b_amount = Uint128::zero();
+    let mut return_a_amount = Uint128::zero();
+    let mut return_b_amount = Uint128::zero();
 
     let pair_contract = config.pair_info.contract_addr.clone();
     let pools = config
@@ -291,13 +293,13 @@ pub fn calculate_optimal_swap(
                 info: asset_a.info,
                 amount: swap_amount,
             };
-            let return_amount = simulate(
+            return_b_amount = simulate(
                 pool_a_amount,
                 pool_b_amount,
                 swap_asset.amount.into(),
                 Decimal256::from_ratio(config.commission_bps, COMMISSION_DENOM),
             )?;
-            if !return_amount.is_zero() {
+            if !return_b_amount.is_zero() {
                 swap_asset_a_amount = swap_asset.amount;
                 messages.push(Pair(pair_contract).swap_msg(
                     &swap_asset,
@@ -320,13 +322,13 @@ pub fn calculate_optimal_swap(
                 info: asset_b.info,
                 amount: swap_amount,
             };
-            let return_amount = simulate(
+            return_a_amount = simulate(
                 pool_b_amount,
                 pool_a_amount,
                 swap_asset.amount.into(),
                 Decimal256::from_ratio(config.commission_bps, COMMISSION_DENOM),
             )?;
-            if !return_amount.is_zero() {
+            if !return_a_amount.is_zero() {
                 swap_asset_b_amount = swap_asset.amount;
                 messages.push(Pair(pair_contract).swap_msg(
                     &swap_asset,
@@ -338,7 +340,7 @@ pub fn calculate_optimal_swap(
         }
     };
 
-    Ok((swap_asset_a_amount, swap_asset_b_amount))
+    Ok((swap_asset_a_amount, swap_asset_b_amount, return_a_amount, return_b_amount))
 }
 
 pub fn provide_liquidity(
