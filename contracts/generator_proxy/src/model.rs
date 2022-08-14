@@ -1,39 +1,38 @@
-use cosmwasm_std::{Addr, CosmosMsg, Decimal, QuerierWrapper, StdResult, to_binary, Uint128, WasmMsg};
-use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
+use cosmwasm_std::{Addr, CosmosMsg, Decimal, StdResult, to_binary, Uint128, WasmMsg};
+use cw20::{Cw20ReceiveMsg};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use astroport::asset::{Asset, AssetInfo};
-use astroport::generator::PendingTokenResponse;
 use astroport::restricted_vector::RestrictedVector;
-use crate::helper::ScalingUint128;
+use spectrum::adapters::generator::Generator;
+use spectrum::helper::ScalingUint128;
+use crate::astro_gov::{AstroGov, AstroGovUnchecked};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub generator: String,
-    pub astro_gov: String, // AstroGovUnchecked,
+    pub astro_gov: AstroGovUnchecked,
     pub owner: String,
     pub controller: String,
     pub astro_token: String,
-    pub spastro_token: String,
     pub fee_distributor: String,
     pub income_distributor: String,
     pub max_quota: Uint128,
-    pub spastro_rate: Decimal,
+    pub staker_rate: Decimal,
     pub fee_rate: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
     pub generator: Generator,
-    pub astro_gov: Addr, // AstroGov,
+    pub astro_gov: AstroGov,
     pub owner: Addr,
     pub controller: Addr,
     pub astro_token: Addr,
-    pub spastro_token: Addr,
     pub fee_distributor: Addr,
     pub income_distributor: Addr,
     pub max_quota: Uint128,
-    pub spastro_rate: Decimal,
+    pub staker_rate: Decimal,
     pub fee_rate: Decimal,
 }
 
@@ -104,7 +103,7 @@ pub struct LockedIncome {
 pub struct RewardInfo {
     pub reconciled_amount: Uint128,
     pub fee: Uint128,
-    pub spastro_income: Uint128,
+    pub staker_income: Uint128,
     pub locked_income: Option<LockedIncome>,
 }
 
@@ -115,14 +114,14 @@ impl RewardInfo {
     ) {
         if let Some(locked_income) = &self.locked_income {
             if now >= locked_income.end {
-                self.spastro_income += locked_income.amount;
+                self.staker_income += locked_income.amount;
                 self.locked_income = None;
             } else if now > locked_income.start {
                 let unlocked_amount = locked_income.amount.multiply_ratio(
                     now - locked_income.start,
                     locked_income.end - locked_income.start,
                 );
-                self.spastro_income += unlocked_amount;
+                self.staker_income += unlocked_amount;
                 self.locked_income = Some(LockedIncome {
                     start: now,
                     end: locked_income.end,
@@ -150,32 +149,30 @@ pub enum ExecuteMsg {
     Receive(Cw20ReceiveMsg),
     Callback(CallbackMsg),
 
-    // owner
+    // config
     UpdateConfig {
-        proposed_owner: Option<String>,
-        spastro_token: Option<String>,
         controller: Option<String>,
         fee_rate: Option<Decimal>,
     },
-    ClaimOwner {},
 
     // controller's actions
     UpdateParameters {
         max_quota: Option<Uint128>,
-        spastro_rate: Option<Decimal>,
+        staker_rate: Option<Decimal>,
     },
     UpdatePoolConfig {
         lp_token: String,
         asset_rewards: Option<Vec<AssetInfo>>,
     },
-    ControllerVote {
-        votes: Vec<(String, u16)>,
-    },
-    ExtendLockTime { time: u64 },
-    SendIncome {},
 
-    // anyone
-    ReconcileGovIncome {},
+    // ControllerVote {
+    //     votes: Vec<(String, u16)>,
+    // },
+    // ExtendLockTime { time: u64 },
+    // SendIncome {},
+    //
+    // // anyone
+    // ReconcileGovIncome {},
 
     // from generator
     Withdraw {
@@ -226,8 +223,8 @@ pub enum Cw20HookMsg {
     // from generator
     Deposit {},
 
-    // spASTRO
-    Convert {},
+    // ASTRO staking
+    // Stake {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -252,56 +249,4 @@ pub enum QueryMsg {
     // from generator
     PendingToken { lp_token: String, user: String },
     Deposit { lp_token: String, user: String },
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct Generator(pub Addr);
-
-impl Generator {
-    pub fn query_pending_token(
-        &self,
-        querier: &QuerierWrapper,
-        lp_token: &Addr,
-        staker: &Addr,
-    ) -> StdResult<PendingTokenResponse> {
-        querier.query_wasm_smart(self.0.to_string(), &QueryMsg::PendingToken {
-            lp_token: lp_token.to_string(),
-            user: staker.to_string(),
-        })
-    }
-
-    pub fn query_pool_balance(
-        &self,
-        querier: &QuerierWrapper,
-        lp_token: &Addr,
-        staker: &Addr,
-    ) -> StdResult<Uint128> {
-        querier.query_wasm_smart(self.0.to_string(),&QueryMsg::Deposit {
-            lp_token: lp_token.to_string(),
-            user: staker.to_string(),
-        })
-    }
-
-    pub fn deposit_msg(&self, lp_token: String, amount: Uint128) -> StdResult<CosmosMsg> {
-        Ok(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: lp_token,
-            funds: vec![],
-            msg: to_binary(&Cw20ExecuteMsg::Send {
-                contract: self.0.to_string(),
-                amount,
-                msg: to_binary(&Cw20HookMsg::Deposit {})?,
-            })?,
-        }))
-    }
-
-    pub fn withdraw_msg(&self, lp_token: String, amount: Uint128) -> StdResult<CosmosMsg> {
-        Ok(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: self.0.to_string(),
-            funds: vec![],
-            msg: to_binary(&ExecuteMsg::Withdraw {
-                lp_token,
-                amount,
-            })?,
-        }))
-    }
 }

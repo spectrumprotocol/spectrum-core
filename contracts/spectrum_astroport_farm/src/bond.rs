@@ -124,7 +124,7 @@ fn bond_internal(
     amount: Uint128,
 ) -> Result<Response, ContractError>{
 
-    let lp_balance = config.staking_contract.query_pool_balance(
+    let lp_balance = config.staking_contract.query_deposit(
         &deps.querier,
         &config.liquidity_token,
         &env.contract.address,
@@ -191,7 +191,7 @@ pub fn unbond(
     let config = CONFIG.load(deps.storage)?;
     let staking_token = config.liquidity_token;
 
-    let lp_balance = config.staking_contract.query_pool_balance(
+    let lp_balance = config.staking_contract.query_deposit(
         &deps.querier,
         &staking_token,
         &env.contract.address,
@@ -261,7 +261,7 @@ fn read_reward_info(deps: Deps, env: Env, staker_addr: &Addr) -> StdResult<Rewar
     let config = CONFIG.load(deps.storage)?;
     let staking_token = config.liquidity_token;
 
-    let lp_balance = config.staking_contract.query_pool_balance(
+    let lp_balance = config.staking_contract.query_deposit(
         &deps.querier,
         &staking_token,
         &env.contract.address,

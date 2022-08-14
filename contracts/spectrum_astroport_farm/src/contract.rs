@@ -14,6 +14,7 @@ use crate::{
 };
 
 use cw20::Cw20ReceiveMsg;
+use spectrum::adapters::generator::Generator;
 
 use crate::bond::{query_reward_info, unbond};
 use crate::state::STATE;
@@ -22,7 +23,6 @@ use spectrum::astroport_farm::{
     StateInfo,
 };
 use spectrum::compound_proxy::Compounder;
-use spectrum::generator_proxy::Generator;
 
 /// (we require 0-1)
 fn validate_percentage(value: Decimal, field: &str) -> StdResult<()> {

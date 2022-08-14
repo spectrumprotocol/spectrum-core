@@ -37,7 +37,7 @@ pub fn compound(
         &env.contract.address,
     )?;
 
-    let lp_balance = config.staking_contract.query_pool_balance(
+    let lp_balance = config.staking_contract.query_deposit(
         &deps.querier,
         &staking_token,
         &env.contract.address,
@@ -56,11 +56,10 @@ pub fn compound(
     let mut rewards: Vec<Asset> = vec![];
     let mut compound_rewards: Vec<Asset> = vec![];
 
-    let manual_claim_pending_token = config.staking_contract.withdraw_msg(
-        staking_token.to_string(),
-        Uint128::zero()
+    let claim_rewards = config.staking_contract.claim_rewards_msg(
+        vec![staking_token.to_string()],
     )?;
-    messages.push(manual_claim_pending_token);
+    messages.push(claim_rewards);
 
     rewards.push(
         token_asset(config.base_reward_token, pending_token.pending),

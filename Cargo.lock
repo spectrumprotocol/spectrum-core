@@ -918,6 +918,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "spectrum-generator-proxy"
+version = "1.0.0"
+dependencies = [
+ "astroport",
+ "astroport-governance",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "cw20",
+ "schemars",
+ "serde",
+ "spectrum",
+ "thiserror",
+]
+
+[[package]]
 name = "spectrum-pair-proxy"
 version = "1.0.0"
 dependencies = [
