@@ -24,8 +24,8 @@ impl Pair {
         ask_asset_info: Option<AssetInfo>
     ) -> StdResult<SimulationResponse> {
         querier.query_wasm_smart(self.0.to_string(), &QueryMsg::Simulation {
-            offer_asset: offer_asset.clone().into(),
-            ask_asset_info: ask_asset_info,
+            offer_asset: offer_asset.clone(),
+            ask_asset_info,
         })
     }
 
