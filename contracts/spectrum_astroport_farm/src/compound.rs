@@ -43,12 +43,7 @@ pub fn compound(
         &env.contract.address,
     )?;
 
-    let thousand = Uint128::from(1000u64);
-
-    let community_fee = config.community_fee;
-    let platform_fee = config.platform_fee;
-    let controller_fee = config.controller_fee;
-    let total_fee = community_fee + platform_fee + controller_fee;
+    let total_fee = config.fee;
 
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut attributes: Vec<Attribute> = vec![];
@@ -92,28 +87,10 @@ pub fn compound(
                 compound_rewards.push(compound_asset);
             }
 
-            let community_amount =
-                commission_amount.multiply_ratio(thousand * community_fee, thousand * total_fee);
-            if !community_amount.is_zero() {
-                let community_asset = asset.info.with_balance(community_amount);
-                let transfer_community_fee = community_asset.transfer_msg(&config.community_fee_collector)?;
-                messages.push(transfer_community_fee);
-            }
-
-            let platform_amount =
-                commission_amount.multiply_ratio(thousand * platform_fee, thousand * total_fee);
-            if !platform_amount.is_zero() {
-                let platform_asset = asset.info.with_balance(platform_amount);
-                let transfer_platform_fee = platform_asset.transfer_msg(&config.platform_fee_collector)?;
-                messages.push(transfer_platform_fee);
-            }
-
-            let controller_amount =
-                commission_amount.checked_sub(community_amount + platform_amount)?;
-            if !controller_amount.is_zero() {
-                let controller_asset = asset.info.with_balance(controller_amount);
-                let transfer_controller_fee = controller_asset.transfer_msg(&config.controller_fee_collector)?;
-                messages.push(transfer_controller_fee);
+            if !commission_amount.is_zero() {
+                let commission_asset = asset.info.with_balance(commission_amount);
+                let transfer_fee = commission_asset.transfer_msg(&config.fee_collector)?;
+                messages.push(transfer_fee);
             }
 
             attributes.push(attr("token", asset.info.to_string()));
