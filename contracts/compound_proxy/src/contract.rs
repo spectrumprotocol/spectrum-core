@@ -1,4 +1,5 @@
 use crate::error::ContractError;
+use crate::simulation::query_compound_simulation;
 use crate::state::{Config, CONFIG, PAIR_PROXY};
 use std::convert::TryInto;
 
@@ -7,10 +8,8 @@ use cosmwasm_std::{
     entry_point, to_binary, Addr, Binary, Coin, CosmosMsg, Decimal, Decimal256, Deps, DepsMut, Env,
     Isqrt, MessageInfo, QuerierWrapper, Response, StdError, StdResult, Uint128, Uint256,
 };
-use cw20::{Expiration};
-use spectrum::compound_proxy::{
-    CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg,
-};
+use cw20::Expiration;
+use spectrum::compound_proxy::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 
 use astroport::asset::{addr_validate_to_lower, Asset};
 use cw2::set_contract_version;
@@ -63,8 +62,7 @@ pub fn instantiate(
     let commission_bps = validate_commission(msg.commission_bps)?;
     let slippage_tolerance = validate_percentage(msg.slippage_tolerance, "slippage_tolerance")?;
     let pair_contract = addr_validate_to_lower(deps.api, msg.pair_contract.as_str())?;
-    let pair_info = Pair(pair_contract)
-        .query_pair_info(&deps.querier)?;
+    let pair_info = Pair(pair_contract).query_pair_info(&deps.querier)?;
 
     let config = Config {
         pair_info,
@@ -169,12 +167,8 @@ pub fn compound(
         reward.deposit_asset(&info, &env.contract.address, &mut messages)?;
         let pair_proxy = PAIR_PROXY.may_load(deps.storage, reward.info.to_string())?;
         if let Some(pair_proxy) = pair_proxy {
-            let swap_reward = pair_proxy.swap_msg(
-                &reward,
-                None,
-                Some(Decimal::percent(50u64)),
-                None,
-            )?;
+            let swap_reward =
+                pair_proxy.swap_msg(&reward, None, Some(Decimal::percent(50u64)), None)?;
             messages.push(swap_reward);
         }
     }
@@ -236,7 +230,9 @@ pub fn optimal_swap(
             //Do nothing for stable pair
         }
         _ => {
-            let assets = config.pair_info.query_pools(&deps.querier, env.contract.address)?;
+            let assets = config
+                .pair_info
+                .query_pools(&deps.querier, env.contract.address)?;
             let asset_a = assets[0].clone();
             let asset_b = assets[1].clone();
             if !asset_a.amount.is_zero() || !asset_b.amount.is_zero() {
@@ -258,7 +254,7 @@ pub fn optimal_swap(
         .add_attribute("action", "optimal_swap"))
 }
 
-fn calculate_optimal_swap(
+pub fn calculate_optimal_swap(
     querier: &QuerierWrapper,
     config: &Config,
     asset_a: Asset,
@@ -266,9 +262,16 @@ fn calculate_optimal_swap(
     belief_price: Option<Decimal>,
     max_spread: Option<Decimal>,
     messages: &mut Vec<CosmosMsg>,
-) -> StdResult<()> {
+) -> StdResult<(Uint128, Uint128, Uint128, Uint128)> {
+    let mut swap_asset_a_amount = Uint128::zero();
+    let mut swap_asset_b_amount = Uint128::zero();
+    let mut return_a_amount = Uint128::zero();
+    let mut return_b_amount = Uint128::zero();
+
     let pair_contract = config.pair_info.contract_addr.clone();
-    let pools = config.pair_info.query_pools(querier, pair_contract.clone())?;
+    let pools = config
+        .pair_info
+        .query_pools(querier, pair_contract.clone())?;
     let provide_a_amount: Uint256 = asset_a.amount.into();
     let provide_b_amount: Uint256 = asset_b.amount.into();
     let pool_a_amount: Uint256 = pools[0].amount.into();
@@ -290,13 +293,14 @@ fn calculate_optimal_swap(
                 info: asset_a.info,
                 amount: swap_amount,
             };
-            let return_amount = simulate(
+            return_b_amount = simulate(
                 pool_a_amount,
                 pool_b_amount,
                 swap_asset.amount.into(),
                 Decimal256::from_ratio(config.commission_bps, COMMISSION_DENOM),
             )?;
-            if !return_amount.is_zero() {
+            if !return_b_amount.is_zero() {
+                swap_asset_a_amount = swap_asset.amount;
                 messages.push(Pair(pair_contract).swap_msg(
                     &swap_asset,
                     belief_price,
@@ -318,13 +322,14 @@ fn calculate_optimal_swap(
                 info: asset_b.info,
                 amount: swap_amount,
             };
-            let return_amount = simulate(
+            return_a_amount = simulate(
                 pool_b_amount,
                 pool_a_amount,
                 swap_asset.amount.into(),
                 Decimal256::from_ratio(config.commission_bps, COMMISSION_DENOM),
             )?;
-            if !return_amount.is_zero() {
+            if !return_a_amount.is_zero() {
+                swap_asset_b_amount = swap_asset.amount;
                 messages.push(Pair(pair_contract).swap_msg(
                     &swap_asset,
                     belief_price,
@@ -335,7 +340,7 @@ fn calculate_optimal_swap(
         }
     };
 
-    Ok(())
+    Ok((swap_asset_a_amount, swap_asset_b_amount, return_a_amount, return_b_amount))
 }
 
 pub fn provide_liquidity(
@@ -348,7 +353,9 @@ pub fn provide_liquidity(
 
     let pair_contract = config.pair_info.contract_addr.clone();
 
-    let assets = config.pair_info.query_pools(&deps.querier, env.contract.address)?;
+    let assets = config
+        .pair_info
+        .query_pools(&deps.querier, env.contract.address)?;
 
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut funds: Vec<Coin> = vec![];
@@ -361,17 +368,17 @@ pub fn provide_liquidity(
         } else {
             messages.push(asset.increase_allowance_msg(
                 pair_contract.to_string(),
-                Some(Expiration::AtHeight(env.block.height + 1)))?);
+                Some(Expiration::AtHeight(env.block.height + 1)),
+            )?);
         }
     }
 
-    let provide_liquidity = Pair(pair_contract)
-        .provide_liquidity_msg(
-            assets,
-            Some(config.slippage_tolerance),
-            Some(receiver.to_string()),
-            funds,
-        )?;
+    let provide_liquidity = Pair(pair_contract).provide_liquidity_msg(
+        assets,
+        Some(config.slippage_tolerance),
+        Some(receiver.to_string()),
+        funds,
+    )?;
     messages.push(provide_liquidity);
 
     Ok(Response::new()
@@ -396,6 +403,9 @@ pub fn provide_liquidity(
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&CONFIG.load(deps.storage)?),
+        QueryMsg::CompoundSimulation { rewards } => {
+            to_binary(&query_compound_simulation(deps, rewards)?)
+        }
     }
 }
 
@@ -444,7 +454,6 @@ fn simulate(
         .try_into()
         .map_err(|_| StdError::generic_err("overflow"))
 }
-
 
 /// ## Description
 /// Used for migration of contract. Returns the default object of type [`Response`].

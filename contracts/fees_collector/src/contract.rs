@@ -1,15 +1,16 @@
 use crate::error::ContractError;
-use crate::state::{Config, BRIDGES, CONFIG};
+use crate::state::{Config, BRIDGES, CONFIG, OWNERSHIP_PROPOSAL};
 
 use crate::utils::{
     build_swap_bridge_msg, try_build_swap_msg, validate_bridge, BRIDGES_EXECUTION_MAX_DEPTH,
     BRIDGES_INITIAL_DEPTH,
 };
-use astroport::asset::{addr_validate_to_lower, native_asset_info, Asset, AssetInfo, ULUNA_DENOM};
+use astroport::asset::{addr_validate_to_lower, native_asset_info, Asset, AssetInfo, ULUNA_DENOM, AssetInfoExt};
 
+use astroport::common::{propose_new_owner, drop_ownership_proposal, claim_ownership};
 use cosmwasm_std::{
     entry_point, to_binary, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo,
-    Order, Response, StdError, StdResult, Uint128, WasmMsg,
+    Order, Response, StdError, StdResult, Uint128, WasmMsg, attr,
 };
 use cw2::set_contract_version;
 use spectrum::fees_collector::{
@@ -58,10 +59,13 @@ pub fn instantiate(
     msg.stablecoin.check(deps.api)?;
 
     let config = Config {
+        owner: addr_validate_to_lower(deps.api, &msg.owner)?,
         operator: addr_validate_to_lower(deps.api, &msg.operator)?,
         factory_contract: addr_validate_to_lower(deps.api, &msg.factory_contract)?,
         stablecoin: msg.stablecoin,
-        beneficiary: addr_validate_to_lower(deps.api, &msg.beneficiary)?,
+        target_list: msg.target_list.into_iter()
+                                .map(|(addr, weight)| (addr_validate_to_lower(deps.api, addr).unwrap(), weight))
+                                .collect(),
         max_spread,
     };
 
@@ -114,10 +118,54 @@ pub fn execute(
     match msg {
         ExecuteMsg::Collect { assets } => collect(deps, env, assets),
         ExecuteMsg::UpdateBridges { add, remove } => update_bridges(deps, info, add, remove),
+        ExecuteMsg::UpdateConfig {
+            operator,
+            factory_contract,
+            target_list,
+            max_spread,
+        } => update_config(
+            deps,
+            info,
+            operator,
+            factory_contract,
+            target_list,
+            max_spread,
+        ),
         ExecuteMsg::SwapBridgeAssets { assets, depth } => {
             swap_bridge_assets(deps, env, info, assets, depth)
         }
         ExecuteMsg::DistributeFees {} => distribute_fees(deps, env, info),
+        ExecuteMsg::ProposeNewOwner { owner, expires_in } => {
+            let config: Config = CONFIG.load(deps.storage)?;
+
+            propose_new_owner(
+                deps,
+                info,
+                env,
+                owner,
+                expires_in,
+                config.owner,
+                OWNERSHIP_PROPOSAL,
+            )
+            .map_err(|e| e.into())
+        },
+        ExecuteMsg::DropOwnershipProposal {} => {
+            let config: Config = CONFIG.load(deps.storage)?;
+
+            drop_ownership_proposal(deps, info, config.owner, OWNERSHIP_PROPOSAL)
+                .map_err(|e| e.into())
+        },
+        ExecuteMsg::ClaimOwnership {} => {
+            claim_ownership(deps, info, env, OWNERSHIP_PROPOSAL, |deps, new_owner| {
+                CONFIG.update::<_, StdError>(deps.storage, |mut v| {
+                    v.owner = new_owner;
+                    Ok(v)
+                })?;
+
+                Ok(())
+            })
+            .map_err(|e| e.into())
+        },
     }
 }
 
@@ -389,29 +437,75 @@ fn distribute(
     env: Env,
     config: &Config,
 ) -> Result<DistributeMsgParts, ContractError> {
-    let mut result = vec![];
+    let mut messages = vec![];
     let mut attributes = vec![];
 
     let stablecoin = config.stablecoin.clone();
-    let beneficiary = config.beneficiary.clone();
 
-    let amount = stablecoin.query_pool(&deps.querier, env.contract.address)?;
-    if amount.is_zero() {
-        return Ok((result, attributes));
+    let total_weight = config.target_list.iter()
+        .map(|(_, weight)| *weight)
+        .sum::<u64>();
+
+    let total_amount = stablecoin.query_pool(&deps.querier, env.contract.address)?;
+
+    if total_amount.is_zero() {
+        return Ok((messages, attributes));
     }
 
-    let asset = Asset {
-        info: stablecoin,
-        amount,
-    };
-    let send_msg = asset.transfer_msg(&beneficiary)?;
-
-    result.push(send_msg);
+    for (to, weight) in &config.target_list {
+        let amount = total_amount.multiply_ratio(*weight, total_weight);
+        if !amount.is_zero() {
+            let send_msg = stablecoin.with_balance(amount).transfer_msg(to)?;
+            messages.push(send_msg);
+            attributes.push(("to".to_string(), to.to_string()));
+            attributes.push(("amount".to_string(), amount.to_string()));
+        }
+    }
 
     attributes.push(("action".to_string(), "distribute_fees".to_string()));
-    attributes.push(("amount".to_string(), amount.to_string()));
 
-    Ok((result, attributes))
+    Ok((messages, attributes))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn update_config(
+    deps: DepsMut,
+    info: MessageInfo,
+    operator: Option<String>,
+    factory_contract: Option<String>,
+    target_list: Option<Vec<(String, u64)>>,
+    max_spread: Option<Decimal>,
+) -> Result<Response, ContractError> {
+    let mut config: Config = CONFIG.load(deps.storage)?;
+
+    if info.sender != config.owner {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    if let Some(operator) = operator {
+        config.operator = addr_validate_to_lower(deps.api, &operator)?;
+    }
+
+    if let Some(factory_contract) = factory_contract {
+        config.factory_contract = addr_validate_to_lower(deps.api, &factory_contract)?;
+    }
+
+    if let Some(max_spread) = max_spread {
+        if max_spread.gt(&Decimal::one()) {
+            return Err(ContractError::IncorrectMaxSpread {});
+        };
+        config.max_spread = max_spread;
+    }
+
+    if let Some(target_list) = target_list {
+        config.target_list = target_list.into_iter()
+        .map(|(addr, weight)| (addr_validate_to_lower(deps.api, addr).unwrap(), weight))
+        .collect()
+    }
+
+    CONFIG.save(deps.storage, &config)?;
+
+    Ok(Response::new().add_attributes(vec![attr("action", "update_config")]))
 }
 
 /// ## Description

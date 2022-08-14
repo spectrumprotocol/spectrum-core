@@ -6,14 +6,16 @@ use serde::{Deserialize, Serialize};
 /// This structure stores general parameters for the contract.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
+    /// Address that's allowed to update config
+    pub owner: String,
     /// Address that's allowed to update bridge assets
     pub operator: String,
     /// The factory contract address
     pub factory_contract: String,
     /// The stablecoin asset info
     pub stablecoin: AssetInfo,
-    /// The beneficiary address to received fees in stablecoin
-    pub beneficiary: String,
+    /// The beneficiary addresses to received fees in stablecoin
+    pub target_list: Vec<(String, u64)>,
     /// The maximum spread used when swapping fee tokens to stablecoin
     pub max_spread: Option<Decimal>,
 }
@@ -27,6 +29,12 @@ pub enum ExecuteMsg {
         /// The assets to swap to stablecoin
         assets: Vec<AssetWithLimit>,
     },
+    UpdateConfig {
+        operator: Option<String>,
+        factory_contract: Option<String>,
+        target_list: Option<Vec<(String, u64)>>,
+        max_spread: Option<Decimal>,
+    },
     /// Add bridge tokens used to swap specific fee tokens to stablecoin (effectively declaring a swap route)
     UpdateBridges {
         add: Option<Vec<(AssetInfo, AssetInfo)>>,
@@ -36,6 +44,17 @@ pub enum ExecuteMsg {
     SwapBridgeAssets { assets: Vec<AssetInfo>, depth: u64 },
     /// Distribute stablecoin to beneficiary
     DistributeFees {},
+    /// Creates a request to change the contract's ownership
+    ProposeNewOwner {
+        /// The newly proposed owner
+        owner: String,
+        /// The validity period of the proposal to change the owner
+        expires_in: u64,
+    },
+    /// Removes a request to change contract ownership
+    DropOwnershipProposal {},
+    /// Claims contract ownership
+    ClaimOwnership {},
 }
 
 /// This structure describes the query functions available in the contract.
