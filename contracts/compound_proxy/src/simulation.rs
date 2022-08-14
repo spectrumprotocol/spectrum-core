@@ -45,9 +45,11 @@ pub fn query_compound_simulation(
             {
                 asset_b_amount += simulation_response.return_amount;
             } else if reward.info.equal(&pair_proxy_info.asset_infos[1])
-                && pair_proxy_info.asset_infos[1].equal(&asset_a_info)
+                && pair_proxy_info.asset_infos[0].equal(&asset_a_info)
             {
                 asset_a_amount += simulation_response.return_amount;
+            } else {
+                return Err(StdError::generic_err("Invalid pair proxy"));
             }
         } else if reward.info.equal(&asset_a_info) {
             asset_a_amount += reward.amount;
@@ -74,7 +76,7 @@ pub fn query_compound_simulation(
                 amount: asset_b_amount,
             };
             let mut _messages: Vec<CosmosMsg> = vec![];
-            let (swap_asset_a_amount, swap_asset_b_amount) = calculate_optimal_swap(
+            let (swap_asset_a_amount, swap_asset_b_amount, return_a_amount, return_b_amount) = calculate_optimal_swap(
                 &deps.querier,
                 &config,
                 asset_a,
@@ -86,34 +88,15 @@ pub fn query_compound_simulation(
 
             if !swap_asset_a_amount.is_zero() {
                 asset_a_amount -= swap_asset_a_amount;
-                asset_b_amount += pair
-                    .simulate(
-                        &deps.querier,
-                        &Asset {
-                            info: asset_a_info,
-                            amount: swap_asset_a_amount,
-                        },
-                        None,
-                    )?
-                    .return_amount;
+                asset_b_amount += return_b_amount;
             }
 
             if !swap_asset_b_amount.is_zero() {
                 asset_b_amount -= swap_asset_b_amount;
-                asset_a_amount += pair
-                    .simulate(
-                        &deps.querier,
-                        &Asset {
-                            info: asset_b_info,
-                            amount: swap_asset_b_amount,
-                        },
-                        None,
-                    )?
-                    .return_amount;
+                asset_a_amount += return_a_amount;
             }
 
             if total_share.is_zero() {
-                // Initial share = collateral amount
                 Uint128::new(
                     (U256::from(asset_a_amount.u128()) * U256::from(asset_b_amount.u128()))
                         .integer_sqrt()
@@ -181,13 +164,13 @@ pub fn query_compound_simulation(
 
                 // d after adding liquidity may be less than or equal to d before adding liquidity because of rounding
                 if d_before_addition_liquidity >= d_after_addition_liquidity {
-                    return Err(StdError::generic_err("Insufficient amount of liquidity"));
+                    Uint128::zero()
+                } else {
+                    total_share.multiply_ratio(
+                        d_after_addition_liquidity - d_before_addition_liquidity,
+                        d_before_addition_liquidity,
+                    )
                 }
-
-                total_share.multiply_ratio(
-                    d_after_addition_liquidity - d_before_addition_liquidity,
-                    d_before_addition_liquidity,
-                )
             }
         }
         PairType::Custom(_) => {

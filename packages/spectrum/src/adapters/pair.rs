@@ -1,4 +1,4 @@
-use cosmwasm_std::{Addr, Coin, CosmosMsg, Decimal, QuerierWrapper, StdResult, to_binary, WasmMsg, QueryRequest, WasmQuery};
+use cosmwasm_std::{Addr, Coin, CosmosMsg, Decimal, QuerierWrapper, StdResult, to_binary, WasmMsg};
 use cw20::Cw20ExecuteMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -23,13 +23,10 @@ impl Pair {
         offer_asset: &Asset,
         ask_asset_info: Option<AssetInfo>
     ) -> StdResult<SimulationResponse> {
-        querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
-            contract_addr: self.0.to_string(),
-            msg: to_binary(&QueryMsg::Simulation {
-                offer_asset: offer_asset.clone().into(),
-                ask_asset_info: ask_asset_info,
-            })?,
-        }))
+        querier.query_wasm_smart(self.0.to_string(), &QueryMsg::Simulation {
+            offer_asset: offer_asset.clone().into(),
+            ask_asset_info: ask_asset_info,
+        })
     }
 
     /// Generate msg for swapping specified asset

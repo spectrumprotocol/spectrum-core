@@ -1,14 +1,21 @@
 use crate::error::ContractError;
 use crate::state::{Config, CONFIG};
-use std::collections::{HashSet};
+use std::collections::HashSet;
 
-use cosmwasm_std::{entry_point, from_binary, to_binary, Addr, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Fraction, Uint128};
-use spectrum::pair_proxy::{Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, MAX_ASSETS};
+use astroport::factory::PairType;
+use astroport::pair::SimulationResponse;
+use cosmwasm_std::{
+    entry_point, from_binary, to_binary, Addr, Binary, Decimal, Deps, DepsMut, Env, Fraction,
+    MessageInfo, Response, StdError, StdResult, Uint128,
+};
+use spectrum::pair_proxy::{
+    Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, MAX_ASSETS,
+};
 
-use astroport::asset::{addr_validate_to_lower, Asset, AssetInfo};
+use astroport::asset::{addr_validate_to_lower, Asset, AssetInfo, PairInfo};
+use astroport::querier::query_token_precision;
 use cw2::set_contract_version;
 use cw20::Cw20ReceiveMsg;
-use astroport::querier::query_token_precision;
 use spectrum::adapters::router::Router;
 
 /// Contract name that is used for migration.
@@ -29,11 +36,10 @@ const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
-
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     // Validate swap assets
@@ -63,7 +69,17 @@ pub fn instantiate(
     } else {
         query_token_precision(&deps.querier, &msg.asset_infos[msg.asset_infos.len() - 1])?
     };
+
     let config = Config {
+        pair_info: PairInfo {
+            contract_addr: env.contract.address,
+            liquidity_token: Addr::unchecked(""),
+            asset_infos: vec![
+                msg.asset_infos[0].clone(),
+                msg.asset_infos[msg.asset_infos.len() - 1].clone(),
+            ],
+            pair_type: PairType::Custom("pair_proxy".to_string()),
+        },
         asset_infos: msg.asset_infos,
         router: Router(addr_validate_to_lower(deps.api, msg.router.as_str())?),
         router_type: msg.router_type,
@@ -228,29 +244,41 @@ pub fn swap(
 
     let config = CONFIG.load(deps.storage)?;
 
-    let (operations, offer_precision, ask_precision) = if offer_asset.info.equal(&config.asset_infos[0]) {
-        (
-            config.router_type.create_swap_operations(&config.asset_infos)?,
-            config.offer_precision,
-            config.ask_precision,
-        )
-    } else if offer_asset.info.equal(&config.asset_infos[config.asset_infos.len() - 1]) {
-        let asset_infos: Vec<AssetInfo> = config.asset_infos.into_iter().rev().collect();
-        (
-            config.router_type.create_swap_operations(&asset_infos)?,
-            config.ask_precision,
-            config.offer_precision,
-        )
-    } else {
-        return Err(ContractError::InvalidAsset {});
-    };
+    let (operations, offer_precision, ask_precision) =
+        if offer_asset.info.equal(&config.asset_infos[0]) {
+            (
+                config
+                    .router_type
+                    .create_swap_operations(&config.asset_infos)?,
+                config.offer_precision,
+                config.ask_precision,
+            )
+        } else if offer_asset
+            .info
+            .equal(&config.asset_infos[config.asset_infos.len() - 1])
+        {
+            let asset_infos: Vec<AssetInfo> = config.asset_infos.into_iter().rev().collect();
+            (
+                config.router_type.create_swap_operations(&asset_infos)?,
+                config.ask_precision,
+                config.offer_precision,
+            )
+        } else {
+            return Err(ContractError::InvalidAsset {});
+        };
 
     let to = to.unwrap_or(sender);
     let minimum_receive = match (belief_price, max_spread) {
         (Some(belief_price), Some(max_spread)) => {
-            let minimum_receive = compute_minimum_receive(offer_asset.amount, belief_price, max_spread, offer_precision, ask_precision);
+            let minimum_receive = compute_minimum_receive(
+                offer_asset.amount,
+                belief_price,
+                max_spread,
+                offer_precision,
+                ask_precision,
+            );
             Some(minimum_receive)
-        },
+        }
         (_, _) => None,
     };
     let message = config.router.execute_swap_operations_msg(
@@ -275,11 +303,9 @@ fn compute_minimum_receive(
 ) -> Uint128 {
     let dec_adj = Decimal::from_ratio(
         10u128.pow(ask_precision as u32),
-        10u128.pow(offer_precision as u32));
-    let micro_price = Decimal::from_ratio(
-        dec_adj.numerator(),
-        belief_price.numerator()
+        10u128.pow(offer_precision as u32),
     );
+    let micro_price = Decimal::from_ratio(dec_adj.numerator(), belief_price.numerator());
     offer_amount * micro_price * (Decimal::one() - max_spread)
 }
 
@@ -300,8 +326,55 @@ fn compute_minimum_receive(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
+        QueryMsg::Pair {} => to_binary(&CONFIG.load(deps.storage)?.pair_info),
         QueryMsg::Config {} => to_binary(&CONFIG.load(deps.storage)?),
+        QueryMsg::Simulation { offer_asset, .. } => {
+            to_binary(&query_simulation(deps, offer_asset)?)
+        }
     }
+}
+
+/// ## Description
+/// Returns information about a swap simulation in a [`SimulationResponse`] object.
+/// ## Params
+/// * **deps** is an object of type [`Deps`].
+///
+/// * **offer_asset** is an object of type [`Asset`]. This is the asset to swap as well as an amount of the said asset.
+pub fn query_simulation(deps: Deps, offer_asset: Asset) -> StdResult<SimulationResponse> {
+    let config = CONFIG.load(deps.storage)?;
+
+    let (operations, _, _) = if offer_asset.info.equal(&config.asset_infos[0]) {
+        (
+            config
+                .router_type
+                .create_swap_operations(&config.asset_infos)?,
+            config.offer_precision,
+            config.ask_precision,
+        )
+    } else if offer_asset
+        .info
+        .equal(&config.asset_infos[config.asset_infos.len() - 1])
+    {
+        let asset_infos: Vec<AssetInfo> = config.asset_infos.into_iter().rev().collect();
+        (
+            config.router_type.create_swap_operations(&asset_infos)?,
+            config.ask_precision,
+            config.offer_precision,
+        )
+    } else {
+        return Err(StdError::generic_err("Invalid asset"));
+    };
+
+    let simulate_operations_response =
+        config
+            .router
+            .simulate(&deps.querier, offer_asset.amount, operations)?;
+
+    Ok(SimulationResponse {
+        return_amount: simulate_operations_response.amount,
+        spread_amount: Uint128::zero(),
+        commission_amount: Uint128::zero(),
+    })
 }
 
 /// ## Description

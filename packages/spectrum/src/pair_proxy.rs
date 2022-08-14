@@ -55,8 +55,15 @@ pub enum Cw20HookMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
-    /// Returns controls settings that specified in custom [`ConfigResponse`] structure.
+    /// Returns information about a pair in an object of type [`super::asset::PairInfo`].
+    Pair {},
+    /// Returns controls settings that specified in [`Config`] structure.
     Config {},
+    /// Returns information about a swap simulation in a [`SimulationResponse`] object.
+    Simulation {
+        offer_asset: Asset,
+        ask_asset_info: Option<AssetInfo>,
+    },
 }
 
 /// ## Description
