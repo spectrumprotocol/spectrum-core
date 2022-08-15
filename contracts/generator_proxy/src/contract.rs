@@ -1,4 +1,5 @@
-use cosmwasm_std::{entry_point, DepsMut, Env, MessageInfo, Response, from_binary, Deps, Binary, to_binary, Empty};
+use astroport::common::{propose_new_owner, drop_ownership_proposal, claim_ownership};
+use cosmwasm_std::{entry_point, DepsMut, Env, MessageInfo, Response, from_binary, Deps, Binary, to_binary, Empty, StdError};
 use cw20::Cw20ReceiveMsg;
 use astroport::asset::addr_validate_to_lower;
 use astroport_governance::utils::get_period;
@@ -8,7 +9,7 @@ use crate::config::{execute_update_config, execute_update_parameters, query_conf
 use crate::error::ContractError;
 use crate::model::{CallbackMsg, Config, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg, State};
 use crate::query::{query_pool_info, query_reward_info, query_state, query_user_info};
-use crate::state::{CONFIG, STATE};
+use crate::state::{CONFIG, STATE, OWNERSHIP_PROPOSAL};
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -64,6 +65,37 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> R
         // ExecuteMsg::SendIncome {} => execute_send_income(deps, env, info),
 
         ExecuteMsg::Withdraw { lp_token, amount, } => execute_withdraw(deps, env, info, lp_token, amount),
+        ExecuteMsg::ProposeNewOwner { owner, expires_in } => {
+            let config: Config = CONFIG.load(deps.storage)?;
+
+            propose_new_owner(
+                deps,
+                info,
+                env,
+                owner,
+                expires_in,
+                config.owner,
+                OWNERSHIP_PROPOSAL,
+            )
+            .map_err(|e| e.into())
+        },
+        ExecuteMsg::DropOwnershipProposal {} => {
+            let config: Config = CONFIG.load(deps.storage)?;
+
+            drop_ownership_proposal(deps, info, config.owner, OWNERSHIP_PROPOSAL)
+                .map_err(|e| e.into())
+        },
+        ExecuteMsg::ClaimOwnership {} => {
+            claim_ownership(deps, info, env, OWNERSHIP_PROPOSAL, |deps, new_owner| {
+                CONFIG.update::<_, StdError>(deps.storage, |mut v| {
+                    v.owner = new_owner;
+                    Ok(v)
+                })?;
+
+                Ok(())
+            })
+            .map_err(|e| e.into())
+        },
     }
 }
 

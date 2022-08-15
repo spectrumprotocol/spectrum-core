@@ -169,6 +169,17 @@ pub enum ExecuteMsg {
         lp_token: String,
         amount: Uint128,
     },
+    /// Creates a request to change the contract's ownership
+    ProposeNewOwner {
+        /// The newly proposed owner
+        owner: String,
+        /// The validity period of the proposal to change the owner
+        expires_in: u64,
+    },
+    /// Removes a request to change contract ownership
+    DropOwnershipProposal {},
+    /// Claims contract ownership
+    ClaimOwnership {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
