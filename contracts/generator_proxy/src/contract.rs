@@ -4,7 +4,7 @@ use cw20::Cw20ReceiveMsg;
 use astroport::asset::addr_validate_to_lower;
 use astroport_governance::utils::get_period;
 use spectrum::adapters::generator::Generator;
-use crate::bond::{callback_after_bond_changed, callback_after_claimed, callback_claim_rewards, callback_deposit, callback_withdraw, execute_deposit, execute_withdraw, query_deposit, query_pending_token};
+use crate::bond::{callback_after_bond_changed, callback_after_claimed, callback_claim_rewards, callback_deposit, callback_withdraw, execute_deposit, execute_withdraw, query_deposit, query_pending_token, execute_claim_rewards};
 use crate::config::{execute_update_config, execute_update_parameters, query_config, validate_percentage};
 use crate::error::ContractError;
 use crate::model::{CallbackMsg, Config, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg, State};
@@ -63,7 +63,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> R
         // ExecuteMsg::ExtendLockTime { time } => execute_extend_lock_time(deps, env, info, time),
         // ExecuteMsg::ReconcileGovIncome {} => execute_reconcile_gov_income(deps, env, info),
         // ExecuteMsg::SendIncome {} => execute_send_income(deps, env, info),
-
+        ExecuteMsg::ClaimRewards { lp_tokens } => execute_claim_rewards(deps, env, info, lp_tokens),
         ExecuteMsg::Withdraw { lp_token, amount, } => execute_withdraw(deps, env, info, lp_token, amount),
         ExecuteMsg::ProposeNewOwner { owner, expires_in } => {
             let config: Config = CONFIG.load(deps.storage)?;

@@ -165,8 +165,16 @@ pub enum ExecuteMsg {
     // ReconcileGovIncome {},
 
     // from generator
+    /// Update rewards and return it to user.
+    ClaimRewards {
+        /// the LP token contract address
+        lp_tokens: Vec<String>,
+    },
+    /// Withdraw LP tokens from the Generator
     Withdraw {
+        /// The address of the LP token to withdraw
         lp_token: String,
+        /// The amount to withdraw
         amount: Uint128,
     },
     /// Creates a request to change the contract's ownership
