@@ -4,22 +4,19 @@
   "description": "This structure stores general parameters for the contract.",
   "type": "object",
   "required": [
-    "beneficiary",
     "factory_contract",
     "operator",
-    "stablecoin"
+    "owner",
+    "stablecoin",
+    "target_list"
   ],
   "properties": {
-    "beneficiary": {
-      "description": "The beneficiary address to received fees in stablecoin",
-      "type": "string"
-    },
     "factory_contract": {
       "description": "The factory contract address",
       "type": "string"
     },
     "max_spread": {
-      "description": "The maximum spread used when swapping fee tokens to stablecoin",
+      "description": "The maximum spread used when swapping fee tokens",
       "anyOf": [
         {
           "$ref": "#/definitions/Decimal"
@@ -33,6 +30,10 @@
       "description": "Address that's allowed to update bridge assets",
       "type": "string"
     },
+    "owner": {
+      "description": "Address that's allowed to update config",
+      "type": "string"
+    },
     "stablecoin": {
       "description": "The stablecoin asset info",
       "allOf": [
@@ -40,6 +41,25 @@
           "$ref": "#/definitions/AssetInfo"
         }
       ]
+    },
+    "target_list": {
+      "description": "The beneficiary addresses to received fees in stablecoin",
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0
+          }
+        ],
+        "maxItems": 2,
+        "minItems": 2
+      }
     }
   },
   "definitions": {

@@ -7,32 +7,39 @@ use cosmwasm_std::{Decimal};
 use cw20::Cw20ReceiveMsg;
 use crate::adapters::router::RouterType;
 
+/// Maximum assets in the swap route
 pub const MAX_ASSETS: usize = 50;
 
-/// ## Description
 /// This structure describes the basic settings for creating a contract.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
+    /// The list of asset in the swap route
     pub asset_infos: Vec<AssetInfo>,
+    /// The router contract address
     pub router: String,
+    /// The type of router
     pub router_type: RouterType,
+    /// The decimal precision of the offer asset
     pub offer_precision: Option<u8>,
+    /// The decimal precision of the ask asset
     pub ask_precision: Option<u8>,
 }
 
-/// ## Description
 /// This structure describes the execute messages of the contract.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
-    /// ## Description
     /// Receives a message of type [`Cw20ReceiveMsg`]
     Receive(Cw20ReceiveMsg),
     /// Swap an offer asset to the other
     Swap {
+        /// Offer asset
         offer_asset: Asset,
+        /// Belief price of the asset
         belief_price: Option<Decimal>,
+        /// Maximum spread from the belief price
         max_spread: Option<Decimal>,
+        /// Receiver address
         to: Option<String>,
     },
 }
@@ -44,13 +51,15 @@ pub enum ExecuteMsg {
 pub enum Cw20HookMsg {
     /// Sell a given amount of asset
     Swap {
+        /// Belief price of the asset
         belief_price: Option<Decimal>,
+        /// Maximum spread from the belief price        
         max_spread: Option<Decimal>,
+        /// Receiver address
         to: Option<String>,
     },
 }
 
-/// ## Description
 /// This structure describes the query messages of the contract.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -61,12 +70,13 @@ pub enum QueryMsg {
     Config {},
     /// Returns information about a swap simulation in a [`SimulationResponse`] object.
     Simulation {
+        /// Offer asset
         offer_asset: Asset,
+        /// Ask asset info when there are more than two assets in the pool
         ask_asset_info: Option<AssetInfo>,
     },
 }
 
-/// ## Description
 /// This structure describes a migration message.
 /// We currently take no arguments for migrations.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

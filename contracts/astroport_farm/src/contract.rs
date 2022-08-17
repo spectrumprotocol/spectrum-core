@@ -24,7 +24,8 @@ use spectrum::astroport_farm::{
 };
 use spectrum::compound_proxy::Compounder;
 
-/// (we require 0-1)
+/// ## Description
+/// Validates that decimal value is in the range 0 to 1
 fn validate_percentage(value: Decimal, field: &str) -> StdResult<()> {
     if value > Decimal::one() {
         Err(StdError::generic_err(field.to_string() + " must be 0 to 1"))
@@ -33,6 +34,9 @@ fn validate_percentage(value: Decimal, field: &str) -> StdResult<()> {
     }
 }
 
+/// ## Description
+/// Creates a new contract with the specified parameters in the [`InstantiateMsg`].
+/// Returns the [`Response`] with the specified attributes if the operation was successful, or a [`ContractError`] if the contract was not created.
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
@@ -67,6 +71,8 @@ pub fn instantiate(
     Ok(Response::default())
 }
 
+/// ## Description
+/// Exposes execute functions available in the contract.
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     deps: DepsMut,
@@ -127,6 +133,10 @@ pub fn execute(
     }
 }
 
+/// ## Description
+/// Receives a message of type [`Cw20ReceiveMsg`] and processes it depending on the received template.
+/// If the template is not found in the received message, then a [`ContractError`] is returned,
+/// otherwise returns a [`Response`] with the specified attributes if the operation was successful
 fn receive_cw20(
     deps: DepsMut,
     env: Env,
@@ -145,6 +155,8 @@ fn receive_cw20(
     }
 }
 
+/// ## Description
+/// Updates contract config. Returns a [`ContractError`] on failure or the [`CONFIG`] data will be updated.
 #[allow(clippy::too_many_arguments)]
 pub fn update_config(
     deps: DepsMut,
@@ -184,25 +196,13 @@ pub fn update_config(
 
 /// # Description
 /// Handle the callbacks describes in the [`CallbackMsg`]. Returns an [`ContractError`] on failure, otherwise returns the [`Response`]
-/// object with the specified submessages if the operation was successful.
-/// # Params
-/// * **deps** is the object of type [`DepsMut`].
-///
-/// * **env** is the object of type [`Env`].
-///
-/// * **info** is the object of type [`MessageInfo`].
-///
-/// * **msg** is the object of type [`CallbackMsg`]. Sets the callback action.
-///
-/// ## Executor
-/// Callback functions can only be called this contract itself
 pub fn handle_callback(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
     msg: CallbackMsg,
 ) -> Result<Response, ContractError> {
-    // Callback functions can only be called this contract itself
+    // Callback functions can only be called by this contract itself
     if info.sender != env.contract.address {
         return Err(ContractError::Unauthorized {});
     }
@@ -215,6 +215,8 @@ pub fn handle_callback(
     }
 }
 
+/// ## Description
+/// Exposes all the queries available in the contract.
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
@@ -226,11 +228,15 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     }
 }
 
+/// ## Description
+/// Returns contract config
 fn query_config(deps: Deps) -> StdResult<Config> {
     let config = CONFIG.load(deps.storage)?;
     Ok(config)
 }
 
+/// ## Description
+/// Returns contract state
 fn query_state(deps: Deps) -> StdResult<StateInfo> {
     let state = STATE.load(deps.storage)?;
     Ok(StateInfo {
@@ -239,6 +245,8 @@ fn query_state(deps: Deps) -> StdResult<StateInfo> {
     })
 }
 
+/// ## Description
+/// Used for contract migration. Returns a default object of type [`Response`].
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
     Ok(Response::default())

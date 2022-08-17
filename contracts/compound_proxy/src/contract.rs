@@ -12,17 +12,14 @@ use cw20::Expiration;
 use spectrum::compound_proxy::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 
 use astroport::asset::{addr_validate_to_lower, Asset};
-use cw2::set_contract_version;
 use spectrum::adapters::asset::AssetEx;
 use spectrum::adapters::pair::Pair;
 
-/// Contract name that is used for migration.
-const CONTRACT_NAME: &str = "spectrum-compound-proxy";
-/// Contract version that is used for migration.
-const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Scaling denominator for commission
 const COMMISSION_DENOM: u64 = 10000u64;
 
+/// ## Description
+/// Validates that commission bps must be less than or equal 10000
 fn validate_commission(commission_bps: u64) -> StdResult<u64> {
     if commission_bps >= 10000u64 {
         Err(StdError::generic_err("commission rate must be 0 to 9999"))
@@ -31,7 +28,8 @@ fn validate_commission(commission_bps: u64) -> StdResult<u64> {
     }
 }
 
-/// (we require 0-1)
+/// ## Description
+/// Validates that decimal value is in the range 0 to 1
 fn validate_percentage(value: Decimal, field: &str) -> StdResult<Decimal> {
     if value > Decimal::one() {
         Err(StdError::generic_err(field.to_string() + " must be 0 to 1"))
@@ -42,14 +40,7 @@ fn validate_percentage(value: Decimal, field: &str) -> StdResult<Decimal> {
 
 /// ## Description
 /// Creates a new contract with the specified parameters in the [`InstantiateMsg`].
-/// Returns the [`Response`] with the specified attributes if the operation was successful, or a [`ContractError`] if the contract was not created
-/// ## Params
-/// * **deps** is the object of type [`DepsMut`].
-///
-/// * **env** is the object of type [`Env`].
-///
-/// * **_info** is the object of type [`MessageInfo`].
-/// * **msg** is a message of type [`InstantiateMsg`] which contains the basic settings for creating a contract
+/// Returns the [`Response`] with the specified attributes if the operation was successful, or a [`ContractError`] if the contract was not created.
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
@@ -57,7 +48,6 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
-    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     let commission_bps = validate_commission(msg.commission_bps)?;
     let slippage_tolerance = validate_percentage(msg.slippage_tolerance, "slippage_tolerance")?;
@@ -81,35 +71,7 @@ pub fn instantiate(
 }
 
 /// ## Description
-/// Available the execute messages of the contract.
-/// ## Params
-/// * **deps** is the object of type [`Deps`].
-///
-/// * **env** is the object of type [`Env`].
-///
-/// * **info** is the object of type [`MessageInfo`].
-///
-/// * **msg** is the object of type [`ExecuteMsg`].
-///
-/// ## Queries
-/// * **ExecuteMsg::UpdateConfig { params: Binary }** Not supported.
-///
-/// * **ExecuteMsg::Receive(msg)** Receives a message of type [`Cw20ReceiveMsg`] and processes
-/// it depending on the received template.
-///
-/// * **ExecuteMsg::ProvideLiquidity {
-///             assets,
-///             slippage_tolerance,
-///             auto_stake,
-///             receiver,
-///         }** Provides liquidity with the specified input parameters.
-///
-/// * **ExecuteMsg::Swap {
-///             offer_asset,
-///             belief_price,
-///             max_spread,
-///             to,
-///         }** Performs an swap operation with the specified parameters.
+/// Exposes execute functions available in the contract.
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     deps: DepsMut,
@@ -131,24 +93,7 @@ pub fn execute(
 }
 
 /// ## Description
-/// Performs an swap operation with the specified parameters. CONTRACT - a user must do token approval.
-/// Returns an [`ContractError`] on failure, otherwise returns the [`Response`] with the specified attributes if the operation was successful.
-/// ## Params
-/// * **deps** is the object of type [`DepsMut`].
-///
-/// * **env** is the object of type [`Env`].
-///
-/// * **info** is the object of type [`MessageInfo`].
-///
-/// * **sender** is the object of type [`Addr`]. Sets the default recipient of the swap operation.
-///
-/// * **offer_asset** is the object of type [`Asset`]. Proposed asset for swapping.
-///
-/// * **belief_price** is the object of type [`Option<Decimal>`]. Used to calculate the maximum spread.
-///
-/// * **max_spread** is the object of type [`Option<Decimal>`]. Sets the maximum spread of the swap operation.
-///
-/// * **to** is the object of type [`Option<Addr>`]. Sets the recipient of the swap operation.
+/// Performs rewards compounding to LP token. Sender must do token approval upon calling this function.
 #[allow(clippy::too_many_arguments)]
 pub fn compound(
     deps: DepsMut,
@@ -188,25 +133,13 @@ pub fn compound(
 
 /// # Description
 /// Handle the callbacks describes in the [`CallbackMsg`]. Returns an [`ContractError`] on failure, otherwise returns the [`Response`]
-/// object with the specified submessages if the operation was successful.
-/// # Params
-/// * **deps** is the object of type [`DepsMut`].
-///
-/// * **env** is the object of type [`Env`].
-///
-/// * **info** is the object of type [`MessageInfo`].
-///
-/// * **msg** is the object of type [`CallbackMsg`]. Sets the callback action.
-///
-/// ## Executor
-/// Callback functions can only be called this contract itself
 pub fn handle_callback(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
     msg: CallbackMsg,
 ) -> Result<Response, ContractError> {
-    // Callback functions can only be called this contract itself
+    // Callback functions can only be called by this contract itself
     if info.sender != env.contract.address {
         return Err(ContractError::Unauthorized {});
     }
@@ -216,7 +149,9 @@ pub fn handle_callback(
     }
 }
 
-pub fn optimal_swap(
+/// # Description
+/// Performs optimal swap of assets in the pair contract.
+fn optimal_swap(
     deps: DepsMut,
     env: Env,
     _info: MessageInfo,
@@ -254,6 +189,9 @@ pub fn optimal_swap(
         .add_attribute("action", "optimal_swap"))
 }
 
+/// # Description
+/// Calculates the amount of asset in the pair contract that need to be swapped before providing liquidity.
+/// The swap messages will be added to **messages**.
 pub fn calculate_optimal_swap(
     querier: &QuerierWrapper,
     config: &Config,
@@ -343,6 +281,8 @@ pub fn calculate_optimal_swap(
     Ok((swap_asset_a_amount, swap_asset_b_amount, return_a_amount, return_b_amount))
 }
 
+/// ## Description
+/// Provides liquidity on the pair contract to get LP token.
 pub fn provide_liquidity(
     deps: DepsMut,
     env: Env,
@@ -387,28 +327,7 @@ pub fn provide_liquidity(
         .add_attribute("receiver", receiver))
 }
 
-/// ## Description
-/// Available the query messages of the contract.
-/// ## Params
-/// * **deps** is the object of type [`Deps`].
-///
-/// * **_env** is the object of type [`Env`].
-///
-/// * **msg** is the object of type [`QueryMsg`].
-///
-/// ## Queries
-/// * **QueryMsg::Config {}** Returns information about the controls settings in a
-/// [`ConfigResponse`] object.
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
-    match msg {
-        QueryMsg::Config {} => to_binary(&CONFIG.load(deps.storage)?),
-        QueryMsg::CompoundSimulation { rewards } => {
-            to_binary(&query_compound_simulation(deps, rewards)?)
-        }
-    }
-}
-
+/// Calculate swap amount
 fn get_swap_amount(
     amount_a: Uint256,
     amount_b: Uint256,
@@ -431,6 +350,7 @@ fn get_swap_amount(
         .map_err(|_| StdError::generic_err("overflow"))
 }
 
+/// Simulates return amount from the swap
 fn simulate(
     offer_pool: Uint256,
     ask_pool: Uint256,
@@ -456,13 +376,19 @@ fn simulate(
 }
 
 /// ## Description
+/// Exposes all the queries available in the contract.
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+    match msg {
+        QueryMsg::Config {} => to_binary(&CONFIG.load(deps.storage)?),
+        QueryMsg::CompoundSimulation { rewards } => {
+            to_binary(&query_compound_simulation(deps, rewards)?)
+        }
+    }
+}
+
+/// ## Description
 /// Used for migration of contract. Returns the default object of type [`Response`].
-/// ## Params
-/// * **_deps** is the object of type [`DepsMut`].
-///
-/// * **_env** is the object of type [`Env`].
-///
-/// * **_msg** is the object of type [`MigrateMsg`].
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
     Ok(Response::default())

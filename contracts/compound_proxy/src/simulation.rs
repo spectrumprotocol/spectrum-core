@@ -21,10 +21,7 @@ const N_COINS: u8 = 2;
 const AMP_PRECISION: u64 = 100;
 
 /// ## Description
-/// Returns information about the controls settings in a [`ConfigResponse`] object.
-/// ## Params
-/// * **deps** is the object of type [`Deps`].
-/// * **rewards** is the object of type [`Vec<Asset>`].
+/// Returns simulated amount of LP token from given rewards in a [`CompoundSimulationResponse`].
 pub fn query_compound_simulation(
     deps: Deps,
     rewards: Vec<Asset>,
@@ -215,13 +212,6 @@ fn adjust_precision(
 /// * **Equation**
 ///
 /// A * sum(x_i) * n**n + D = A * D * n**n + D**(n+1) / (n**n * prod(x_i))
-///
-/// ## Params
-/// * **leverage** is an object of type [`u128`].
-///
-/// * **amount_a** is an object of type [`u128`].
-///
-/// * **amount_b** is an object of type [`u128`].
 pub fn compute_d(leverage: u64, amount_a: u128, amount_b: u128) -> Option<u128> {
     let amount_a_times_coins =
         checked_u8_mul(&U256::from(amount_a), N_COINS)?.checked_add(U256::one())?;

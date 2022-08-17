@@ -1,8 +1,10 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ExecuteMsg",
+  "description": "This structure describes the execute messages available in the contract.",
   "oneOf": [
     {
+      "description": "Receives a message of type [`Cw20ReceiveMsg`]",
       "type": "object",
       "required": [
         "receive"
@@ -15,6 +17,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Update contract config",
       "type": "object",
       "required": [
         "update_config"
@@ -23,35 +26,22 @@
         "update_config": {
           "type": "object",
           "properties": {
-            "community_fee": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/Decimal"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "community_fee_collector": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
             "compound_proxy": {
+              "description": "The compound proxy contract address",
               "type": [
                 "string",
                 "null"
               ]
             },
             "controller": {
+              "description": "The controller address",
               "type": [
                 "string",
                 "null"
               ]
             },
-            "controller_fee": {
+            "fee": {
+              "description": "The performance fee",
               "anyOf": [
                 {
                   "$ref": "#/definitions/Decimal"
@@ -61,23 +51,8 @@
                 }
               ]
             },
-            "controller_fee_collector": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "platform_fee": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/Decimal"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "platform_fee_collector": {
+            "fee_collector": {
+              "description": "The fee collector contract address",
               "type": [
                 "string",
                 "null"
@@ -89,6 +64,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Unbond LP token",
       "type": "object",
       "required": [
         "unbond"
@@ -101,7 +77,12 @@
           ],
           "properties": {
             "amount": {
-              "$ref": "#/definitions/Uint128"
+              "description": "The LP amount to unbond",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Uint128"
+                }
+              ]
             }
           }
         }
@@ -109,6 +90,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Compound LP rewards",
       "type": "object",
       "required": [
         "compound"
@@ -118,6 +100,7 @@
           "type": "object",
           "properties": {
             "minimum_receive": {
+              "description": "The minimum expected amount of LP token",
               "anyOf": [
                 {
                   "$ref": "#/definitions/Uint128"
@@ -133,6 +116,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Bond asset with optimal swap",
       "type": "object",
       "required": [
         "bond_assets"
@@ -145,12 +129,14 @@
           ],
           "properties": {
             "assets": {
+              "description": "The list of asset to bond",
               "type": "array",
               "items": {
                 "$ref": "#/definitions/Asset"
               }
             },
             "minimum_receive": {
+              "description": "The minimum expected amount of LP token",
               "anyOf": [
                 {
                   "$ref": "#/definitions/Uint128"
@@ -221,7 +207,7 @@
       "additionalProperties": false
     },
     {
-      "description": "the callback of type [`CallbackMsg`]",
+      "description": "The callback of type [`CallbackMsg`]",
       "type": "object",
       "required": [
         "callback"
@@ -318,7 +304,6 @@
       "type": "string"
     },
     "CallbackMsg": {
-      "title": "Description",
       "description": "This structure describes the callback messages of the contract.",
       "oneOf": [
         {
@@ -334,6 +319,7 @@
               ],
               "properties": {
                 "minimum_receive": {
+                  "description": "The minimum expected amount of LP token",
                   "anyOf": [
                     {
                       "$ref": "#/definitions/Uint128"
@@ -344,7 +330,12 @@
                   ]
                 },
                 "prev_balance": {
-                  "$ref": "#/definitions/Uint128"
+                  "description": "The previous LP balance in the contract",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/Uint128"
+                    }
+                  ]
                 }
               }
             }
@@ -365,6 +356,7 @@
               ],
               "properties": {
                 "minimum_receive": {
+                  "description": "The minimum expected amount of LP token",
                   "anyOf": [
                     {
                       "$ref": "#/definitions/Uint128"
@@ -375,10 +367,20 @@
                   ]
                 },
                 "prev_balance": {
-                  "$ref": "#/definitions/Uint128"
+                  "description": "The previous LP balance in the contract",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/Uint128"
+                    }
+                  ]
                 },
                 "to": {
-                  "type": "string"
+                  "description": "The address to bond LP",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/Addr"
+                    }
+                  ]
                 }
               }
             }

@@ -1,6 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "RewardInfoResponse",
+  "description": "This structure holds the parameters for reward info query response",
   "type": "object",
   "required": [
     "reward_info",
@@ -8,14 +9,21 @@
   ],
   "properties": {
     "reward_info": {
-      "$ref": "#/definitions/RewardInfoResponseItem"
+      "description": "The detail on reward info",
+      "allOf": [
+        {
+          "$ref": "#/definitions/RewardInfoResponseItem"
+        }
+      ]
     },
     "staker_addr": {
+      "description": "The staker address",
       "type": "string"
     }
   },
   "definitions": {
     "RewardInfoResponseItem": {
+      "description": "This structure holds the detail for reward info",
       "type": "object",
       "required": [
         "bond_amount",
@@ -26,20 +34,37 @@
       ],
       "properties": {
         "bond_amount": {
-          "$ref": "#/definitions/Uint128"
+          "description": "The LP token amount bonded",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Uint128"
+            }
+          ]
         },
         "bond_share": {
-          "$ref": "#/definitions/Uint128"
+          "description": "The share of total LP token bonded",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Uint128"
+            }
+          ]
         },
         "deposit_amount": {
-          "$ref": "#/definitions/Uint128"
+          "description": "The weighted average deposit amount",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Uint128"
+            }
+          ]
         },
         "deposit_time": {
+          "description": "The weighted average deposit time",
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
         },
         "staking_token": {
+          "description": "The LP token contract address",
           "type": "string"
         }
       }

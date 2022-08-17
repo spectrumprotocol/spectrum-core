@@ -12,7 +12,6 @@ use cosmwasm_std::{
     entry_point, to_binary, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo,
     Order, Response, StdError, StdResult, Uint128, WasmMsg, attr,
 };
-use cw2::set_contract_version;
 use spectrum::fees_collector::{
     AssetWithLimit, BalancesResponse, ExecuteMsg, InstantiateMsg, MigrateMsg,
     QueryMsg,
@@ -20,24 +19,12 @@ use spectrum::fees_collector::{
 use std::collections::{HashMap, HashSet};
 use spectrum::adapters::asset::AssetEx;
 
-/// Contract name that is used for migration.
-const CONTRACT_NAME: &str = "spectrum-fees-collector";
-/// Contract version that is used for migration.
-const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Sets the default maximum spread (as a percentage) used when swapping fee tokens to stablecoin.
 const DEFAULT_MAX_SPREAD: u64 = 5; // 5%
 
 /// ## Description
-/// Creates a new contract with the specified parameters in [`InstantiateMsg`].
-/// Returns a default object of type [`Response`] if the operation was successful,
-/// or a [`ContractError`] if the contract was not created.
-/// ## Params
-/// * **deps** is an object of type [`DepsMut`].
-///
-/// * **_env** is an object of type [`Env`].
-///
-/// * **_info** is an object of type [`MessageInfo`].
-/// * **msg** is a message of type [`InstantiateMsg`] which contains the parameters used for creating the contract.
+/// Creates a new contract with the specified parameters in the [`InstantiateMsg`].
+/// Returns the [`Response`] with the specified attributes if the operation was successful, or a [`ContractError`] if the contract was not created.
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
@@ -45,7 +32,6 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
-    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     let max_spread = if let Some(max_spread) = msg.max_spread {
         if max_spread.gt(&Decimal::one()) {
@@ -76,38 +62,6 @@ pub fn instantiate(
 
 /// ## Description
 /// Exposes execute functions available in the contract.
-/// ## Params
-/// * **deps** is an object of type [`Deps`].
-///
-/// * **env** is an object of type [`Env`].
-///
-/// * **_info** is an object of type [`MessageInfo`].
-///
-/// * **msg** is an object of type [`ExecuteMsg`].
-///
-/// ## Queries
-/// * **ExecuteMsg::Collect { assets }** Swaps collected fee tokens to stablecoin
-/// and distributes the stablecoin to beneficiary.
-///
-/// * **ExecuteMsg::UpdateConfig {
-///             factory_contract,
-///             staking_contract,
-///             governance_contract,
-///             governance_percent,
-///             max_spread,
-///         }** Updates general contract settings stores in the [`Config`].
-///
-/// * **ExecuteMsg::UpdateBridges { add, remove }** Adds or removes bridge assets used to swap fee tokens to stablecoin.
-///
-/// * **ExecuteMsg::SwapBridgeAssets { assets }** Swap fee tokens (through bridges) to stablecoin.
-///
-/// * **ExecuteMsg::DistributeFees {}** Private method used by the contract to distribute fees rewards.
-///
-/// * **ExecuteMsg::ProposeNewOwner { owner, expires_in }** Creates a new request to change contract ownership.
-///
-/// * **ExecuteMsg::DropOwnershipProposal {}** Removes a request to change contract ownership.
-///
-/// * **ExecuteMsg::ClaimOwnership {}** Claims contract ownership.
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     deps: DepsMut,
@@ -170,15 +124,9 @@ pub fn execute(
 }
 
 /// ## Description
-/// Swaps fee tokens to stablecoin and distribute the resulting stablecoin to beneficiary.
+/// Swaps fee tokens to stablecoin and distribute the resulting stablecoin to the target list.
 /// Returns a [`ContractError`] on failure, otherwise returns a [`Response`] object if the
 /// operation was successful.
-/// # Params
-/// * **deps** is an object of type [`DepsMut`].
-///
-/// * **env** is an object of type [`Env`].
-///
-/// * **assets** is a vector that contains objects of type [`AssetWithLimit`]. These are the fee tokens being swapped to stablecoin.
 fn collect(
     deps: DepsMut,
     env: Env,
@@ -240,16 +188,6 @@ enum SwapTarget {
 /// ## Description
 /// Swap all non stablecoin tokens to stablecoin. Returns a [`ContractError`] on failure, otherwise returns
 /// a [`Response`] object if the operation was successful.
-/// # Params
-/// * **deps** is an object of type [`DepsMut`].
-///
-/// * **env** is an object of type [`Env`].
-///
-/// * **cfg** is an object of type [`Config`]. This is the Maker contract configuration.
-///
-/// * **assets** is a vector that contains objects of type [`AssetWithLimit`]. These are the assets to swap to stablecoin.
-///
-/// * **with_validation** is a parameter of type [`u64`]. Determines whether the swap operation is validated or not.
 fn swap_assets(
     deps: Deps,
     env: Env,
@@ -290,15 +228,7 @@ fn swap_assets(
 /// ## Description
 /// Checks if all required pools and bridges exists and performs a swap operation to stablecoin.
 /// Returns a [`ContractError`] on failure, otherwise returns a vector that contains objects
-/// of type [`SubMsg`] if the operation was successful.
-/// # Params
-/// * **deps** is an object of type [`DepsMut`].
-///
-/// * **cfg** is an object of type [`Config`]. This is the Maker contract configuration.
-///
-/// * **from_token** is an object of type [`AssetInfo`]. This is the token to swap to stablecoin.
-///
-/// * **amount_in** is an object of type [`Uint128`]. This is the amount of fee tokens to swap.
+/// of type [`SwapTarget`] if the operation was successful.
 fn swap(
     deps: Deps,
     config: &Config,
@@ -336,19 +266,6 @@ fn swap(
 
 /// ## Description
 /// Swaps collected fees using bridge assets. Returns a [`ContractError`] on failure.
-/// ## Params
-/// * **deps** is an object of type [`DepsMut`].
-///
-/// * **env** is an object of type [`Env`].
-///
-/// * **info** is an object of type [`MessageInfo`].
-///
-/// * **assets** is a vector field of type [`AssetWithLimit`]. These are the fee tokens to swap as well as amounts of tokens to swap.
-///
-/// * **depth** is an object of type [`u64`]. This is the maximum route length used to swap a fee token.
-///
-/// ##Executor
-/// Only the Maker contract itself can execute this.
 fn swap_bridge_assets(
     deps: DepsMut,
     env: Env,
@@ -398,17 +315,10 @@ fn swap_bridge_assets(
 }
 
 /// ## Description
-/// Distributes stablecoin rewards to beneficiary. Returns a [`ContractError`] on failure.
-/// ## Params
-/// * **deps** is an object of type [`DepsMut`].
-///
-/// * **env** is an object of type [`Env`].
-///
-/// * **info** is an object of type [`MessageInfo`].
-///
-/// ##Executor
-/// Only the Maker contract itself can execute this.
+/// Distributes stablecoin rewards to the target list. Returns a [`ContractError`] on failure.
 fn distribute_fees(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
+    
+    // Only the contract itself can call this function
     if info.sender != env.contract.address {
         return Err(ContractError::Unauthorized {});
     }
@@ -425,13 +335,7 @@ type DistributeMsgParts = (Vec<CosmosMsg>, Vec<(String, String)>);
 
 /// ## Description
 /// Private function that performs the stablecoin token distribution to beneficiary. Returns a [`ContractError`] on failure,
-/// otherwise returns a vector that contains the objects of type [`SubMsg`] if the operation was successful.
-/// # Params
-/// * **deps** is an object of type [`DepsMut`].
-///
-/// * **env** is an object of type [`Env`].
-///
-/// * **cfg** is an object of type [`Config`].
+/// otherwise returns a vector that contains the objects of type [`CosmosMsg`] if the operation was successful.
 fn distribute(
     deps: DepsMut,
     env: Env,
@@ -467,6 +371,8 @@ fn distribute(
     Ok((messages, attributes))
 }
 
+/// ## Description
+/// Updates contract config. Returns a [`ContractError`] on failure or the [`CONFIG`] data will be updated.
 #[allow(clippy::too_many_arguments)]
 pub fn update_config(
     deps: DepsMut,
@@ -510,18 +416,6 @@ pub fn update_config(
 
 /// ## Description
 /// Adds or removes bridge tokens used to swap fee tokens to stablecoin. Returns a [`ContractError`] on failure.
-/// ## Params
-/// * **deps** is an object of type [`DepsMut`].
-///
-/// * **info** is an object of type [`MessageInfo`].
-///
-/// * **add** is an [`Option`] field of type [`Vec<(AssetInfo, AssetInfo)>`]. This is a vector of bridge tokens added to swap fee tokens with.
-///
-/// * **remove** is an [`Option`] field of type [`Vec<AssetInfo>`]. This is a vector of bridge
-/// tokens removed from being used to swap certain fee tokens.
-///
-/// ##Executor
-/// Only the operator can execute this.
 fn update_bridges(
     deps: DepsMut,
     info: MessageInfo,
@@ -578,21 +472,6 @@ fn update_bridges(
 
 /// ## Description
 /// Exposes all the queries available in the contract.
-/// # Params
-/// * **deps** is an object of type [`DepsMut`].
-///
-/// * **env** is an object of type [`Env`].
-///
-/// * **msg** is an object of type [`QueryMsg`].
-///
-/// ## Queries
-/// * **QueryMsg::Config {}** Returns the Maker contract configuration using a [`ConfigResponse`] object.
-///
-/// * **QueryMsg::Balances { assets }** Returns the balances of certain fee tokens accrued by the Maker
-/// using a [`ConfigResponse`] object.
-///
-/// * **QueryMsg::Bridges {}** Returns the bridges used for swapping fee tokens
-/// using a vector of [`(String, String)`] denoting Asset -> Bridge connections.
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
@@ -603,13 +482,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
 }
 
 /// ## Description
-/// Returns Maker's fee token balances for specific tokens using a [`ConfigResponse`] object.
-/// ## Params
-/// * **deps** is an object of type [`Deps`].
-///
-/// * **env** is an object of type [`Env`].
-///
-/// * **assets** is a vector that contains objects of type [`AssetInfo`]. These are the assets for which we query the Maker's balances.
+/// Returns token balances for specific tokens using a [`ConfigResponse`] object.
 fn query_get_balances(deps: Deps, env: Env, assets: Vec<AssetInfo>) -> StdResult<BalancesResponse> {
     let mut resp = BalancesResponse { balances: vec![] };
 
@@ -629,10 +502,6 @@ fn query_get_balances(deps: Deps, env: Env, assets: Vec<AssetInfo>) -> StdResult
 
 /// ## Description
 /// Returns bridge tokens used for swapping fee tokens to stablecoin.
-/// ## Params
-/// * **deps** is an object of type [`Deps`].
-///
-/// * **env** is an object of type [`Env`].
 fn query_bridges(deps: Deps, _env: Env) -> StdResult<Vec<(String, String)>> {
     BRIDGES
         .range(deps.storage, None, None, Order::Ascending)
@@ -645,12 +514,6 @@ fn query_bridges(deps: Deps, _env: Env) -> StdResult<Vec<(String, String)>> {
 
 /// ## Description
 /// Used for contract migration. Returns a default object of type [`Response`].
-/// ## Params
-/// * **_deps** is an object of type [`Deps`].
-///
-/// * **_env** is an object of type [`Env`].
-///
-/// * **_msg** is an object of type [`MigrateMsg`].
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
     Ok(Response::default())

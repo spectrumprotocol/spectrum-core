@@ -16,6 +16,8 @@ use spectrum::adapters::asset::AssetEx;
 
 use spectrum::astroport_farm::CallbackMsg;
 
+/// ## Description
+/// Performs compound by sending LP rewards to compound proxy and reinvest received LP token
 pub fn compound(
     deps: DepsMut,
     env: Env,
@@ -25,6 +27,7 @@ pub fn compound(
 
     let config = CONFIG.load(deps.storage)?;
 
+    // Only controller can call this function
     if info.sender != config.controller {
         return Err(ContractError::Unauthorized {});
     }
@@ -119,6 +122,8 @@ pub fn compound(
         .add_attributes(attributes))
 }
 
+/// ## Description
+/// Stakes received LP token to the staking contract.
 pub fn stake(
     deps: DepsMut,
     env: Env,

@@ -14,25 +14,12 @@ use spectrum::pair_proxy::{
 
 use astroport::asset::{addr_validate_to_lower, Asset, AssetInfo, PairInfo};
 use astroport::querier::query_token_precision;
-use cw2::set_contract_version;
 use cw20::Cw20ReceiveMsg;
 use spectrum::adapters::router::Router;
 
-/// Contract name that is used for migration.
-const CONTRACT_NAME: &str = "spectrom-pair-proxy";
-/// Contract version that is used for migration.
-const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
-
 /// ## Description
 /// Creates a new contract with the specified parameters in the [`InstantiateMsg`].
-/// Returns the [`Response`] with the specified attributes if the operation was successful, or a [`ContractError`] if the contract was not created
-/// ## Params
-/// * **deps** is the object of type [`DepsMut`].
-///
-/// * **env** is the object of type [`Env`].
-///
-/// * **_info** is the object of type [`MessageInfo`].
-/// * **msg** is a message of type [`InstantiateMsg`] which contains the basic settings for creating a contract
+/// Returns the [`Response`] with the specified attributes if the operation was successful, or a [`ContractError`] if the contract was not created.
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
@@ -40,7 +27,6 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
-    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     // Validate swap assets
     let asset_len = msg.asset_infos.len();
@@ -93,35 +79,7 @@ pub fn instantiate(
 }
 
 /// ## Description
-/// Available the execute messages of the contract.
-/// ## Params
-/// * **deps** is the object of type [`Deps`].
-///
-/// * **env** is the object of type [`Env`].
-///
-/// * **info** is the object of type [`MessageInfo`].
-///
-/// * **msg** is the object of type [`ExecuteMsg`].
-///
-/// ## Queries
-/// * **ExecuteMsg::UpdateConfig { params: Binary }** Not supported.
-///
-/// * **ExecuteMsg::Receive(msg)** Receives a message of type [`Cw20ReceiveMsg`] and processes
-/// it depending on the received template.
-///
-/// * **ExecuteMsg::ProvideLiquidity {
-///             assets,
-///             slippage_tolerance,
-///             auto_stake,
-///             receiver,
-///         }** Provides liquidity with the specified input parameters.
-///
-/// * **ExecuteMsg::Swap {
-///             offer_asset,
-///             belief_price,
-///             max_spread,
-///             to,
-///         }** Performs an swap operation with the specified parameters.
+/// Exposes execute functions available in the contract.
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     deps: DepsMut,
@@ -165,14 +123,6 @@ pub fn execute(
 /// Receives a message of type [`Cw20ReceiveMsg`] and processes it depending on the received template.
 /// If the template is not found in the received message, then an [`ContractError`] is returned,
 /// otherwise returns the [`Response`] with the specified attributes if the operation was successful
-/// ## Params
-/// * **deps** is the object of type [`DepsMut`].
-///
-/// * **env** is the object of type [`Env`].
-///
-/// * **info** is the object of type [`MessageInfo`].
-///
-/// * **cw20_msg** is the object of type [`Cw20ReceiveMsg`].
 pub fn receive_cw20(
     deps: DepsMut,
     env: Env,
@@ -213,22 +163,6 @@ pub fn receive_cw20(
 /// ## Description
 /// Performs an swap operation with the specified parameters. CONTRACT - a user must do token approval.
 /// Returns an [`ContractError`] on failure, otherwise returns the [`Response`] with the specified attributes if the operation was successful.
-/// ## Params
-/// * **deps** is the object of type [`DepsMut`].
-///
-/// * **env** is the object of type [`Env`].
-///
-/// * **info** is the object of type [`MessageInfo`].
-///
-/// * **sender** is the object of type [`Addr`]. Sets the default recipient of the swap operation.
-///
-/// * **offer_asset** is the object of type [`Asset`]. Proposed asset for swapping.
-///
-/// * **belief_price** is the object of type [`Option<Decimal>`]. Used to calculate the maximum spread.
-///
-/// * **max_spread** is the object of type [`Option<Decimal>`]. Sets the maximum spread of the swap operation.
-///
-/// * **to** is the object of type [`Option<Addr>`]. Sets the recipient of the swap operation.
 #[allow(clippy::too_many_arguments)]
 pub fn swap(
     deps: DepsMut,
@@ -294,6 +228,7 @@ pub fn swap(
         .add_attribute("action", "swap"))
 }
 
+/// Computes minimum return amount from belief price and max spread
 fn compute_minimum_receive(
     offer_amount: Uint128,
     belief_price: Decimal,
@@ -310,19 +245,7 @@ fn compute_minimum_receive(
 }
 
 /// ## Description
-/// Available the query messages of the contract.
-/// ## Params
-/// * **deps** is the object of type [`Deps`].
-///
-/// * **_env** is the object of type [`Env`].
-///
-/// * **msg** is the object of type [`QueryMsg`].
-///
-/// ## Queries
-/// * **QueryMsg::Pair {}** Returns information about a pair in an object of type [`PairInfo`].
-///
-/// * **QueryMsg::Config {}** Returns information about the controls settings in a
-/// [`ConfigResponse`] object.
+/// Exposes all the queries available in the contract.
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
@@ -336,10 +259,6 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 
 /// ## Description
 /// Returns information about a swap simulation in a [`SimulationResponse`] object.
-/// ## Params
-/// * **deps** is an object of type [`Deps`].
-///
-/// * **offer_asset** is an object of type [`Asset`]. This is the asset to swap as well as an amount of the said asset.
 pub fn query_simulation(deps: Deps, offer_asset: Asset) -> StdResult<SimulationResponse> {
     let config = CONFIG.load(deps.storage)?;
 
@@ -378,13 +297,7 @@ pub fn query_simulation(deps: Deps, offer_asset: Asset) -> StdResult<SimulationR
 }
 
 /// ## Description
-/// Used for migration of contract. Returns the default object of type [`Response`].
-/// ## Params
-/// * **_deps** is the object of type [`DepsMut`].
-///
-/// * **_env** is the object of type [`Env`].
-///
-/// * **_msg** is the object of type [`MigrateMsg`].
+/// Used for contract migration. Returns a default object of type [`Response`].
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
     Ok(Response::default())

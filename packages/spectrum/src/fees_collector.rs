@@ -16,7 +16,7 @@ pub struct InstantiateMsg {
     pub stablecoin: AssetInfo,
     /// The beneficiary addresses to received fees in stablecoin
     pub target_list: Vec<(String, u64)>,
-    /// The maximum spread used when swapping fee tokens to stablecoin
+    /// The maximum spread used when swapping fee tokens
     pub max_spread: Option<Decimal>,
 }
 
@@ -29,15 +29,22 @@ pub enum ExecuteMsg {
         /// The assets to swap to stablecoin
         assets: Vec<AssetWithLimit>,
     },
+    /// Updates contract config
     UpdateConfig {
+        /// The operator address
         operator: Option<String>,
+        /// The factory contract address
         factory_contract: Option<String>,
+        /// The list of target address to receive fees in stablecoin
         target_list: Option<Vec<(String, u64)>>,
+        /// The maximum spread used when swapping fee tokens
         max_spread: Option<Decimal>,
     },
     /// Add bridge tokens used to swap specific fee tokens to stablecoin (effectively declaring a swap route)
     UpdateBridges {
+        /// List of bridge assets to be added
         add: Option<Vec<(AssetInfo, AssetInfo)>>,
+        /// List of asset to be removed
         remove: Option<Vec<AssetInfo>>,
     },
     /// Swap fee tokens via bridge assets
@@ -67,12 +74,14 @@ pub enum QueryMsg {
     Balances {
         assets: Vec<AssetInfo>,
     },
+    /// Returns list of bridge assets
     Bridges {},
 }
 
 /// A custom struct used to return multiple asset balances.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct BalancesResponse {
+    /// List of asset and balance in the contract
     pub balances: Vec<Asset>,
 }
 

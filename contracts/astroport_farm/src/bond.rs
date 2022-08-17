@@ -14,6 +14,8 @@ use spectrum::adapters::asset::AssetEx;
 use spectrum::astroport_farm::{RewardInfoResponse, RewardInfoResponseItem, CallbackMsg};
 use spectrum::helper::{compute_deposit_time};
 
+/// ## Description
+/// Send assets to compound proxy to create LP token and bond received LP token on behalf of sender.
 pub fn bond_assets(
     deps: DepsMut,
     env: Env,
@@ -60,6 +62,8 @@ pub fn bond_assets(
         .add_attribute("action", "bond_assets"))
 }
 
+/// ## Description
+/// Bond available LP token on the contract on behalf of the user.
 pub fn bond_to(
     deps: DepsMut,
     env: Env,
@@ -91,6 +95,8 @@ pub fn bond_to(
     )
 }
 
+/// ## Description
+/// Bond received LP token on behalf of the user.
 pub fn bond(
     deps: DepsMut,
     env: Env,
@@ -116,6 +122,7 @@ pub fn bond(
     )
 }
 
+/// Internal bond function used by bond and bond_to
 fn bond_internal(
     deps: DepsMut,
     env: Env,
@@ -161,7 +168,7 @@ fn bond_internal(
     ]))
 }
 
-// increase share amount in pool and reward info
+/// Increase share amount in pool and reward info
 fn increase_bond_amount(
     state: &mut State,
     reward_info: &mut RewardInfo,
@@ -180,6 +187,8 @@ fn increase_bond_amount(
     )
 }
 
+/// ## Description
+/// Unbond LP token of sender
 pub fn unbond(
     deps: DepsMut,
     env: Env,
@@ -234,6 +243,8 @@ pub fn unbond(
         ]))
 }
 
+/// ## Description
+/// Returns reward info for the staker.
 pub fn query_reward_info(
     deps: Deps,
     env: Env,
@@ -248,6 +259,7 @@ pub fn query_reward_info(
     })
 }
 
+/// Loads reward info from the storage
 fn read_reward_info(deps: Deps, env: Env, staker_addr: &Addr) -> StdResult<RewardInfoResponseItem> {
     let reward_info = REWARD
         .load(deps.storage, staker_addr)

@@ -15,9 +15,6 @@ pub enum ContractError {
     #[error("Invalid bridge {0} to {1}")]
     InvalidBridge(AssetInfo, AssetInfo),
 
-    #[error("Invalid bridge. Pool {0} to {1} not found")]
-    InvalidBridgeNoPool(AssetInfo, AssetInfo),
-
     #[error("Invalid bridge destination. {0} cannot be swapped to ASTRO")]
     InvalidBridgeDestination(AssetInfo),
 
@@ -27,20 +24,11 @@ pub enum ContractError {
     #[error("Cannot swap {0}. No swap destinations")]
     CannotSwap(AssetInfo),
 
-    #[error("Incorrect governance percent of its share")]
-    IncorrectGovernancePercent {},
-
     #[error("Incorrect max spread")]
     IncorrectMaxSpread {},
 
     #[error("Cannot collect. Remove duplicate asset")]
     DuplicatedAsset {},
-
-    #[error("Rewards collecting is already enabled")]
-    RewardsAlreadyEnabled {},
-
-    #[error("An error occurred during migration")]
-    MigrationError {},
 }
 
 impl From<OverflowError> for ContractError {

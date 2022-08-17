@@ -13,6 +13,7 @@ pub const BRIDGES_MAX_DEPTH: u64 = 2;
 /// Swap execution depth limit
 pub const BRIDGES_EXECUTION_MAX_DEPTH: u64 = 3;
 
+/// Creates swap message
 pub fn try_build_swap_msg(
     querier: &QuerierWrapper,
     config: &Config,
@@ -30,6 +31,7 @@ pub fn try_build_swap_msg(
     Ok(msg)
 }
 
+/// Creates swap message via bridge token pair
 pub fn build_swap_bridge_msg(
     env: Env,
     bridge_assets: Vec<AssetInfo>,
@@ -49,6 +51,7 @@ pub fn build_swap_bridge_msg(
     Ok(msg)
 }
 
+/// Validates bridge token
 pub fn validate_bridge(
     deps: Deps,
     factory_contract: Addr,

@@ -4,7 +4,7 @@
   "description": "This structure describes the execute messages of the contract.",
   "oneOf": [
     {
-      "description": "Compound rewards to staking token",
+      "description": "Compound rewards to LP token",
       "type": "object",
       "required": [
         "compound"
@@ -17,12 +17,14 @@
           ],
           "properties": {
             "rewards": {
+              "description": "List of reward asset send to compound",
               "type": "array",
               "items": {
                 "$ref": "#/definitions/Asset"
               }
             },
             "to": {
+              "description": "Receiver address for LP token",
               "type": [
                 "string",
                 "null"
@@ -34,7 +36,7 @@
       "additionalProperties": false
     },
     {
-      "description": "the callback of type [`CallbackMsg`]",
+      "description": "The callback of type [`CallbackMsg`]",
       "type": "object",
       "required": [
         "callback"
@@ -130,6 +132,7 @@
       "description": "This structure describes the callback messages of the contract.",
       "oneOf": [
         {
+          "description": "Performs optimal swap",
           "type": "object",
           "required": [
             "optimal_swap"
@@ -142,6 +145,7 @@
           "additionalProperties": false
         },
         {
+          "description": "Provides liquidity to the pair contract",
           "type": "object",
           "required": [
             "provide_liquidity"

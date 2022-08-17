@@ -4,6 +4,7 @@
   "description": "This structure describes the callback messages of the contract.",
   "oneOf": [
     {
+      "description": "Performs optimal swap",
       "type": "object",
       "required": [
         "optimal_swap"
@@ -16,6 +17,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Provides liquidity to the pair contract",
       "type": "object",
       "required": [
         "provide_liquidity"

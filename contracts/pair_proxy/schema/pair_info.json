@@ -11,13 +11,11 @@
   ],
   "properties": {
     "asset_infos": {
-      "description": "Asset information for the two assets in the pool",
+      "description": "Asset information for the assets in the pool",
       "type": "array",
       "items": {
         "$ref": "#/definitions/AssetInfo"
-      },
-      "maxItems": 2,
-      "minItems": 2
+      }
     },
     "contract_addr": {
       "description": "Pair contract address",
@@ -97,8 +95,7 @@
       ]
     },
     "PairType": {
-      "title": "Description",
-      "description": "This enum describes available types of pair. ## Available types ``` # use astroport::factory::PairType::{Custom, Stable, Xyk}; Xyk {}; Stable {}; Custom(String::from(\"Custom\")); ```",
+      "description": "This enum describes available pair types. ## Available pool types ``` # use astroport::factory::PairType::{Custom, Stable, Xyk}; Xyk {}; Stable {}; Custom(String::from(\"Custom\")); ```",
       "oneOf": [
         {
           "description": "XYK pair type",

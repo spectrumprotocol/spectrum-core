@@ -1,52 +1,53 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "InstantiateMsg",
+  "description": "This structure describes the parameters for creating a contract.",
   "type": "object",
   "required": [
-    "community_fee",
-    "community_fee_collector",
+    "base_reward_token",
     "compound_proxy",
     "controller",
-    "controller_fee",
-    "controller_fee_collector",
+    "fee",
+    "fee_collector",
+    "liquidity_token",
     "owner",
-    "pair_contract",
-    "platform_fee",
-    "platform_fee_collector",
     "staking_contract"
   ],
   "properties": {
-    "community_fee": {
-      "$ref": "#/definitions/Decimal"
-    },
-    "community_fee_collector": {
+    "base_reward_token": {
+      "description": "the base reward token contract address",
       "type": "string"
     },
     "compound_proxy": {
+      "description": "The compound proxy contract address",
       "type": "string"
     },
     "controller": {
+      "description": "The controller address to execute compound",
       "type": "string"
     },
-    "controller_fee": {
-      "$ref": "#/definitions/Decimal"
+    "fee": {
+      "description": "The performance fee",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Decimal"
+        }
+      ]
     },
-    "controller_fee_collector": {
+    "fee_collector": {
+      "description": "The fee collector contract address",
+      "type": "string"
+    },
+    "liquidity_token": {
+      "description": "The LP token contract address",
       "type": "string"
     },
     "owner": {
-      "type": "string"
-    },
-    "pair_contract": {
-      "type": "string"
-    },
-    "platform_fee": {
-      "$ref": "#/definitions/Decimal"
-    },
-    "platform_fee_collector": {
+      "description": "The owner address",
       "type": "string"
     },
     "staking_contract": {
+      "description": "The LP staking generator contract address",
       "type": "string"
     }
   },

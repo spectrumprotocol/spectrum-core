@@ -11,16 +11,17 @@
   ],
   "properties": {
     "commission_bps": {
-      "description": "the swap commission",
+      "description": "The swap commission",
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
     },
     "pair_contract": {
-      "description": "the pair contract address",
+      "description": "The pair contract address",
       "type": "string"
     },
     "pair_proxies": {
+      "description": "The list of pair proxy to swap reward token to the asset in the pair",
       "type": "array",
       "items": {
         "type": "array",
@@ -37,7 +38,12 @@
       }
     },
     "slippage_tolerance": {
-      "$ref": "#/definitions/Decimal"
+      "description": "The slippage tolerance when swapping",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Decimal"
+        }
+      ]
     }
   },
   "definitions": {

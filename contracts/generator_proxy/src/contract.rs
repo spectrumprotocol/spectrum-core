@@ -11,6 +11,9 @@ use crate::model::{CallbackMsg, Config, Cw20HookMsg, ExecuteMsg, InstantiateMsg,
 use crate::query::{query_pool_info, query_reward_info, query_state, query_user_info};
 use crate::state::{CONFIG, STATE, OWNERSHIP_PROPOSAL};
 
+/// ## Description
+/// Creates a new contract with the specified parameters in the [`InstantiateMsg`].
+/// Returns the [`Response`] with the specified attributes if the operation was successful, or a [`ContractError`] if the contract was not created.
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
@@ -43,11 +46,13 @@ pub fn instantiate(
     Ok(Response::default())
 }
 
+/// ## Description
+/// Exposes execute functions available in the contract.
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::Receive(cw20_msg) => execute_receive(deps, env, info, cw20_msg),
-        ExecuteMsg::Callback(callback_msg) => execute_callback(deps, env, info, callback_msg),
+        ExecuteMsg::Receive(cw20_msg) => receive_cw20(deps, env, info, cw20_msg),
+        ExecuteMsg::Callback(callback_msg) => handle_callback(deps, env, info, callback_msg),
 
         ExecuteMsg::UpdateConfig {
             controller,
@@ -98,7 +103,11 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> R
     }
 }
 
-fn execute_receive(
+/// ## Description
+/// Receives a message of type [`Cw20ReceiveMsg`] and processes it depending on the received template.
+/// If the template is not found in the received message, then a [`ContractError`] is returned,
+/// otherwise returns a [`Response`] with the specified attributes if the operation was successful
+fn receive_cw20(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
@@ -111,16 +120,18 @@ fn execute_receive(
     }
 }
 
-fn execute_callback(
+/// # Description
+/// Handle the callbacks describes in the [`CallbackMsg`]. Returns an [`ContractError`] on failure, otherwise returns the [`Response`]
+fn handle_callback(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
     msg: CallbackMsg,
 ) -> Result<Response, ContractError> {
+    // Callback functions can only be called by this contract itself
     if info.sender != env.contract.address {
         return Err(ContractError::CallbackUnauthorized {});
     }
-
     match msg {
         CallbackMsg::AfterClaimed { lp_token } => callback_after_claimed(deps, env, lp_token),
         CallbackMsg::Deposit { lp_token, staker_addr, amount } => callback_deposit(deps, env, lp_token, staker_addr, amount),
@@ -130,6 +141,8 @@ fn execute_callback(
     }
 }
 
+/// ## Description
+/// Exposes all the queries available in the contract.
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
     let result = match msg {
@@ -144,6 +157,8 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
     Ok(result)
 }
 
+/// ## Description
+/// Used for contract migration. Returns a default object of type [`Response`].
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn migrate(_deps: DepsMut, _env: Env, _msg: Empty) -> Result<Response, ContractError> {
     Ok(Response::default())

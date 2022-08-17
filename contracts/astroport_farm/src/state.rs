@@ -90,7 +90,6 @@ impl RewardInfo {
     }
 }
 
-/// ## Description
 /// Stores the latest proposal to change contract ownership
 pub const OWNERSHIP_PROPOSAL: Item<OwnershipProposal> = Item::new("ownership_proposal");
 

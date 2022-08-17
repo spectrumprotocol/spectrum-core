@@ -14,12 +14,6 @@ pub enum ContractError {
     #[error("Invalid message")]
     InvalidMessage {},
 
-    #[error("Cannot update owner")]
-    CannotUpdateOwner {},
-
-    #[error("Asset already registered")]
-    AssetRegistered {},
-
     #[error("Cannot unbond more than balance")]
     UnbondExceedBalance {},
 

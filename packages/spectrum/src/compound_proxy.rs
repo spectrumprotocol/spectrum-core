@@ -4,14 +4,17 @@ use serde::{Deserialize, Serialize};
 use astroport::asset::{Asset, AssetInfo};
 
 use cosmwasm_std::{to_binary, Addr, CosmosMsg, StdResult, WasmMsg, Decimal, Uint128, Coin};
+
 /// This structure describes the basic settings for creating a contract.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
-    /// the pair contract address
+    /// The pair contract address
     pub pair_contract: String,
-    /// the swap commission
+    /// The swap commission
     pub commission_bps: u64,
+    /// The list of pair proxy to swap reward token to the asset in the pair
     pub pair_proxies: Vec<(AssetInfo, String)>,
+    /// The slippage tolerance when swapping
     pub slippage_tolerance: Decimal,
 }
 
@@ -19,12 +22,14 @@ pub struct InstantiateMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
-    /// Compound rewards to staking token
+    /// Compound rewards to LP token
     Compound {
+        /// List of reward asset send to compound
         rewards: Vec<Asset>,
+        /// Receiver address for LP token
         to: Option<String>,
     },
-    /// the callback of type [`CallbackMsg`]
+    /// The callback of type [`CallbackMsg`]
     Callback(CallbackMsg),
 }
 
@@ -32,7 +37,9 @@ pub enum ExecuteMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum CallbackMsg {
+    /// Performs optimal swap
     OptimalSwap {},
+    /// Provides liquidity to the pair contract
     ProvideLiquidity {
         receiver: String,
     },
