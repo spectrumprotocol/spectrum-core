@@ -24,12 +24,11 @@ pub fn instantiate(
 
     let config = Config {
         generator: Generator(addr_validate_to_lower(deps.api, &msg.generator)?),
-        astro_gov: msg.astro_gov.check(deps.api)?,
+        // astro_gov: msg.astro_gov.check(deps.api)?,
         owner: addr_validate_to_lower(deps.api, &msg.owner)?,
         controller: addr_validate_to_lower(deps.api, &msg.controller)?,
         astro_token: addr_validate_to_lower(deps.api, &msg.astro_token)?,
-        fee_distributor: addr_validate_to_lower(deps.api, &msg.fee_distributor)?,
-        income_distributor: addr_validate_to_lower(deps.api, &msg.income_distributor)?,
+        fee_collector: addr_validate_to_lower(deps.api, &msg.fee_collector)?,
         max_quota: msg.max_quota,
         staker_rate: msg.staker_rate,
         boost_fee: msg.boost_fee,

@@ -306,6 +306,8 @@ pub fn callback_claim_rewards(
 
     // load
     let mut user_info = USER_INFO.load(deps.storage, (&lp_token, &staker_addr))?;
+    let pool_info = POOL_INFO.load(deps.storage, &lp_token)?;
+    reconcile_to_user_info(&pool_info, &mut user_info)?;
 
     // send
     let mut messages: Vec<CosmosMsg> = vec![];
