@@ -3,8 +3,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::{Addr, Decimal, Uint128};
+use spectrum::adapters::generator::Generator;
 use spectrum::compound_proxy::Compounder;
-use spectrum::generator_proxy::Generator;
 use spectrum::helper::ScalingUint128;
 
 use crate::ownership::OwnershipProposal;
