@@ -5,17 +5,16 @@ use serde::{Deserialize, Serialize};
 use astroport::restricted_vector::RestrictedVector;
 use spectrum::adapters::generator::Generator;
 use spectrum::helper::ScalingUint128;
-use crate::astro_gov::{AstroGov, AstroGovUnchecked};
+// use crate::astro_gov::{AstroGov, AstroGovUnchecked};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub generator: String,
-    pub astro_gov: AstroGovUnchecked,
+    // pub astro_gov: AstroGovUnchecked,
     pub owner: String,
     pub controller: String,
     pub astro_token: String,
-    pub fee_distributor: String,
-    pub income_distributor: String,
+    pub fee_collector: String,
     pub max_quota: Uint128,
     pub staker_rate: Decimal,
     pub boost_fee: Decimal,
@@ -24,12 +23,11 @@ pub struct InstantiateMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
     pub generator: Generator,
-    pub astro_gov: AstroGov,
+    // pub astro_gov: AstroGov,
     pub owner: Addr,
     pub controller: Addr,
     pub astro_token: Addr,
-    pub fee_distributor: Addr,
-    pub income_distributor: Addr,
+    pub fee_collector: Addr,
     pub max_quota: Uint128,
     pub staker_rate: Decimal,
     pub boost_fee: Decimal,
