@@ -62,124 +62,148 @@ pub fn query_compound_simulation(
 
     let total_share = query_supply(&deps.querier, &config.pair_info.liquidity_token)?;
 
-    let lp_amount = match config.pair_info.pair_type {
-        PairType::Xyk {} => {
-            let asset_a = Asset {
-                info: asset_a_info,
-                amount: asset_a_amount,
-            };
-            let asset_b = Asset {
-                info: asset_b_info,
-                amount: asset_b_amount,
-            };
-            let mut _messages: Vec<CosmosMsg> = vec![];
-            let (swap_asset_a_amount, swap_asset_b_amount, return_a_amount, return_b_amount) = calculate_optimal_swap(
-                &deps.querier,
-                &config,
-                asset_a,
-                asset_b,
-                None,
-                None,
-                &mut _messages,
-            )?;
+    let (lp_amount, swap_asset_a_amount, swap_asset_b_amount, return_a_amount, return_b_amount) =
+        match config.pair_info.pair_type {
+            PairType::Xyk {} => {
+                let asset_a = Asset {
+                    info: asset_a_info,
+                    amount: asset_a_amount,
+                };
+                let asset_b = Asset {
+                    info: asset_b_info,
+                    amount: asset_b_amount,
+                };
+                let mut _messages: Vec<CosmosMsg> = vec![];
+                let (swap_asset_a_amount, swap_asset_b_amount, return_a_amount, return_b_amount) =
+                    calculate_optimal_swap(
+                        &deps.querier,
+                        &config,
+                        asset_a,
+                        asset_b,
+                        None,
+                        None,
+                        &mut _messages,
+                    )?;
 
-            if !swap_asset_a_amount.is_zero() {
-                asset_a_amount -= swap_asset_a_amount;
-                asset_b_amount += return_b_amount;
-                pools[0].amount += swap_asset_a_amount;
-                pools[1].amount -= return_b_amount;
-            }
+                if !swap_asset_a_amount.is_zero() {
+                    asset_a_amount -= swap_asset_a_amount;
+                    asset_b_amount += return_b_amount;
+                    pools[0].amount += swap_asset_a_amount;
+                    pools[1].amount -= return_b_amount;
+                }
 
-            if !swap_asset_b_amount.is_zero() {
-                asset_b_amount -= swap_asset_b_amount;
-                asset_a_amount += return_a_amount;
-                pools[1].amount += swap_asset_b_amount;
-                pools[0].amount -= return_a_amount;
-            }
+                if !swap_asset_b_amount.is_zero() {
+                    asset_b_amount -= swap_asset_b_amount;
+                    asset_a_amount += return_a_amount;
+                    pools[1].amount += swap_asset_b_amount;
+                    pools[0].amount -= return_a_amount;
+                }
 
-            if total_share.is_zero() {
-                Uint128::new(
-                    (U256::from(asset_a_amount.u128()) * U256::from(asset_b_amount.u128()))
-                        .integer_sqrt()
-                        .as_u128(),
-                )
-            } else {
-                std::cmp::min(
-                    asset_a_amount.multiply_ratio(total_share, pools[0].amount),
-                    asset_b_amount.multiply_ratio(total_share, pools[1].amount),
-                )
-            }
-        }
-        PairType::Stable {} => {
-            let token_precision_0 = query_token_precision(&deps.querier, &asset_a_info)?;
-            let token_precision_1 = query_token_precision(&deps.querier, &asset_b_info)?;
-
-            let greater_precision = token_precision_0.max(token_precision_1);
-
-            let deposit_amount_0 =
-                adjust_precision(asset_a_amount, token_precision_0, greater_precision)?;
-            let deposit_amount_1 =
-                adjust_precision(asset_b_amount, token_precision_1, greater_precision)?;
-
-            if total_share.is_zero() {
-                let liquidity_token_precision = query_token_precision(
-                    &deps.querier,
-                    &AssetInfo::Token {
-                        contract_addr: config.pair_info.liquidity_token,
-                    },
-                )?;
-
-                // Initial share = collateral amount
-                adjust_precision(
+                let lp_amount = if total_share.is_zero() {
                     Uint128::new(
-                        (U256::from(deposit_amount_0.u128()) * U256::from(deposit_amount_1.u128()))
+                        (U256::from(asset_a_amount.u128()) * U256::from(asset_b_amount.u128()))
                             .integer_sqrt()
                             .as_u128(),
-                    ),
-                    greater_precision,
-                    liquidity_token_precision,
-                )?
-            } else {
-                let leverage = if let Some(params) = pair.query_config(&deps.querier)?.params {
-                    let stable_pool_config: StablePoolConfig = from_binary(&params)?;
-                    let amp = stable_pool_config.amp.numerator() * Uint128::from(AMP_PRECISION)
-                        / stable_pool_config.amp.denominator();
-                    u64::try_from(amp.u128()).unwrap_or(25u64)
+                    )
                 } else {
-                    25u64
+                    std::cmp::min(
+                        asset_a_amount.multiply_ratio(total_share, pools[0].amount),
+                        asset_b_amount.multiply_ratio(total_share, pools[1].amount),
+                    )
+                };
+                (
+                    lp_amount,
+                    swap_asset_a_amount,
+                    swap_asset_b_amount,
+                    return_a_amount,
+                    return_b_amount,
+                )
+            }
+            PairType::Stable {} => {
+                let token_precision_0 = query_token_precision(&deps.querier, &asset_a_info)?;
+                let token_precision_1 = query_token_precision(&deps.querier, &asset_b_info)?;
+
+                let greater_precision = token_precision_0.max(token_precision_1);
+
+                let deposit_amount_0 =
+                    adjust_precision(asset_a_amount, token_precision_0, greater_precision)?;
+                let deposit_amount_1 =
+                    adjust_precision(asset_b_amount, token_precision_1, greater_precision)?;
+
+                let lp_amount = if total_share.is_zero() {
+                    let liquidity_token_precision = query_token_precision(
+                        &deps.querier,
+                        &AssetInfo::Token {
+                            contract_addr: config.pair_info.liquidity_token,
+                        },
+                    )?;
+
+                    // Initial share = collateral amount
+                    adjust_precision(
+                        Uint128::new(
+                            (U256::from(deposit_amount_0.u128())
+                                * U256::from(deposit_amount_1.u128()))
+                            .integer_sqrt()
+                            .as_u128(),
+                        ),
+                        greater_precision,
+                        liquidity_token_precision,
+                    )?
+                } else {
+                    let leverage = if let Some(params) = pair.query_config(&deps.querier)?.params {
+                        let stable_pool_config: StablePoolConfig = from_binary(&params)?;
+                        let amp = stable_pool_config.amp.numerator() * Uint128::from(AMP_PRECISION)
+                            / stable_pool_config.amp.denominator();
+                        u64::try_from(amp.u128()).unwrap_or(25u64)
+                    } else {
+                        25u64
+                    };
+
+                    let mut pool_amount_0 =
+                        adjust_precision(pools[0].amount, token_precision_0, greater_precision)?;
+                    let mut pool_amount_1 =
+                        adjust_precision(pools[1].amount, token_precision_1, greater_precision)?;
+
+                    let d_before_addition_liquidity =
+                        compute_d(leverage, pool_amount_0.u128(), pool_amount_1.u128()).unwrap();
+
+                    pool_amount_0 = pool_amount_0.checked_add(deposit_amount_0)?;
+                    pool_amount_1 = pool_amount_1.checked_add(deposit_amount_1)?;
+
+                    let d_after_addition_liquidity =
+                        compute_d(leverage, pool_amount_0.u128(), pool_amount_1.u128()).unwrap();
+
+                    // d after adding liquidity may be less than or equal to d before adding liquidity because of rounding
+                    if d_before_addition_liquidity >= d_after_addition_liquidity {
+                        Uint128::zero()
+                    } else {
+                        total_share.multiply_ratio(
+                            d_after_addition_liquidity - d_before_addition_liquidity,
+                            d_before_addition_liquidity,
+                        )
+                    }
                 };
 
-                let mut pool_amount_0 =
-                    adjust_precision(pools[0].amount, token_precision_0, greater_precision)?;
-                let mut pool_amount_1 =
-                    adjust_precision(pools[1].amount, token_precision_1, greater_precision)?;
-
-                let d_before_addition_liquidity =
-                    compute_d(leverage, pool_amount_0.u128(), pool_amount_1.u128()).unwrap();
-
-                pool_amount_0 = pool_amount_0.checked_add(deposit_amount_0)?;
-                pool_amount_1 = pool_amount_1.checked_add(deposit_amount_1)?;
-
-                let d_after_addition_liquidity =
-                    compute_d(leverage, pool_amount_0.u128(), pool_amount_1.u128()).unwrap();
-
-                // d after adding liquidity may be less than or equal to d before adding liquidity because of rounding
-                if d_before_addition_liquidity >= d_after_addition_liquidity {
-                    Uint128::zero()
-                } else {
-                    total_share.multiply_ratio(
-                        d_after_addition_liquidity - d_before_addition_liquidity,
-                        d_before_addition_liquidity,
-                    )
-                }
+                (
+                    lp_amount,
+                    Uint128::zero(),
+                    Uint128::zero(),
+                    Uint128::zero(),
+                    Uint128::zero(),
+                )
             }
-        }
-        PairType::Custom(_) => {
-            return Err(StdError::generic_err("Custom pair type not supported"));
-        }
-    };
+            PairType::Custom(_) => {
+                return Err(StdError::generic_err("Custom pair type not supported"));
+            }
+        };
 
-    Ok(CompoundSimulationResponse { lp_amount })
+    Ok(CompoundSimulationResponse {
+        lp_amount,
+        swap_asset_a_amount,
+        swap_asset_b_amount,
+        return_a_amount,
+        return_b_amount,
+    })
 }
 
 /// ## Description

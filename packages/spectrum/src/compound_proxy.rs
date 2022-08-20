@@ -74,6 +74,14 @@ pub enum QueryMsg {
 pub struct CompoundSimulationResponse {
     /// The amount of LP returned from compound
     pub lp_amount: Uint128,
+    /// The amount of asset A to be swapped
+    pub swap_asset_a_amount: Uint128,
+    /// The amount of asset B to be swapped
+    pub swap_asset_b_amount: Uint128,
+    /// The amount of asset A returned from swap
+    pub return_a_amount: Uint128,
+    /// The amount of asset B returned from swap
+    pub return_b_amount: Uint128,
 }
 
 /// This structure describes a migration message.

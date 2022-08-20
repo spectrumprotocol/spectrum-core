@@ -4,11 +4,47 @@
   "description": "This structure holds the parameters that are returned from a compound simulation response",
   "type": "object",
   "required": [
-    "lp_amount"
+    "lp_amount",
+    "return_a_amount",
+    "return_b_amount",
+    "swap_asset_a_amount",
+    "swap_asset_b_amount"
   ],
   "properties": {
     "lp_amount": {
       "description": "The amount of LP returned from compound",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Uint128"
+        }
+      ]
+    },
+    "return_a_amount": {
+      "description": "The amount of asset A returned from swap",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Uint128"
+        }
+      ]
+    },
+    "return_b_amount": {
+      "description": "The amount of asset B returned from swap",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Uint128"
+        }
+      ]
+    },
+    "swap_asset_a_amount": {
+      "description": "The amount of asset A to be swapped",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Uint128"
+        }
+      ]
+    },
+    "swap_asset_b_amount": {
+      "description": "The amount of asset B to be swapped",
       "allOf": [
         {
           "$ref": "#/definitions/Uint128"
