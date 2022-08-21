@@ -1,6 +1,6 @@
 use std::cmp;
 use std::collections::HashMap;
-use cosmwasm_std::{Addr, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, QuerierWrapper, Response, StdResult, Uint128};
+use cosmwasm_std::{Addr, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, QuerierWrapper, Response, StdError, StdResult, Uint128};
 use astroport::asset::{addr_validate_to_lower, Asset, token_asset};
 use astroport::querier::query_token_balance;
 use crate::error::ContractError;
@@ -159,7 +159,8 @@ pub fn callback_after_claimed(
     // load
     let config = CONFIG.load(deps.storage)?;
     let mut pool_info = POOL_INFO.load(deps.storage, &lp_token)?;
-    let astro_user_info = config.generator.query_user_info(&deps.querier, &lp_token, &env.contract.address)?;
+    let astro_user_info = config.generator.query_user_info(&deps.querier, &lp_token, &env.contract.address)?
+        .ok_or_else(|| StdError::generic_err("UserInfoV2 not found"))?;
 
     // reconcile astro
     let mut astro_reward = REWARD_INFO.may_load(deps.storage, &config.astro_token)?
@@ -211,7 +212,8 @@ pub fn callback_after_bond_changed(
     let mut pool_info = POOL_INFO.load(deps.storage, &lp_token)?;
 
     // debt will reset after share changed
-    let astro_user_info = config.generator.query_user_info(&deps.querier, &lp_token, &env.contract.address)?;
+    let astro_user_info = config.generator.query_user_info(&deps.querier, &lp_token, &env.contract.address)?
+        .ok_or_else(|| StdError::generic_err("UserInfoV2 not found"))?;
     pool_info.prev_reward_user_index = astro_user_info.reward_user_index;
     pool_info.prev_reward_debt_proxy = astro_user_info.reward_debt_proxy;
 
@@ -358,7 +360,8 @@ pub fn query_pending_token(
         .unwrap_or_default();
     let mut user_info = USER_INFO.may_load(deps.storage, (&lp_token, &user))?
         .unwrap_or_else(|| UserInfo::create(&pool_info));
-    let astro_user_info = config.generator.query_user_info(&deps.querier, &lp_token, &env.contract.address)?;
+    let astro_user_info = config.generator.query_user_info(&deps.querier, &lp_token, &env.contract.address)?
+        .unwrap_or_default();
     let pending_token = config.generator.query_pending_token(&deps.querier, &lp_token, &env.contract.address)?;
 
     // reconcile astro
