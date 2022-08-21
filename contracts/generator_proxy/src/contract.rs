@@ -67,8 +67,10 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> R
         // ExecuteMsg::ExtendLockTime { time } => execute_extend_lock_time(deps, env, info, time),
         // ExecuteMsg::ReconcileGovIncome {} => execute_reconcile_gov_income(deps, env, info),
         // ExecuteMsg::SendIncome {} => execute_send_income(deps, env, info),
+
         ExecuteMsg::ClaimRewards { lp_tokens } => execute_claim_rewards(deps, env, info, lp_tokens),
         ExecuteMsg::Withdraw { lp_token, amount, } => execute_withdraw(deps, env, info, lp_token, amount),
+
         ExecuteMsg::ProposeNewOwner { owner, expires_in } => {
             let config: Config = CONFIG.load(deps.storage)?;
 

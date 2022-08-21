@@ -88,46 +88,11 @@ impl UserInfo {
     }
 }
 
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct LockedIncome {
-    pub start: u64,
-    pub end: u64,
-    pub amount: Uint128,
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct RewardInfo {
     pub reconciled_amount: Uint128,
     pub fee: Uint128,
     pub staker_income: Uint128,
-    pub locked_income: Option<LockedIncome>,
-}
-
-impl RewardInfo {
-    pub fn realize_unlocked_amount(
-        &mut self,
-        now: u64,
-    ) {
-        if let Some(locked_income) = &self.locked_income {
-            if now >= locked_income.end {
-                self.staker_income += locked_income.amount;
-                self.locked_income = None;
-            } else if now > locked_income.start {
-                let unlocked_amount = locked_income.amount.multiply_ratio(
-                    now - locked_income.start,
-                    locked_income.end - locked_income.start,
-                );
-                self.staker_income += unlocked_amount;
-                self.locked_income = Some(LockedIncome {
-                    start: now,
-                    end: locked_income.end,
-                    amount: locked_income.amount - unlocked_amount,
-                });
-            }
-        }
-    }
-
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

@@ -280,8 +280,8 @@ pub fn callback_withdraw(
     reconcile_to_user_info(&pool_info, &mut user_info)?;
     let total_bond_amount = config.generator.query_deposit(&deps.querier, &lp_token, &env.contract.address)?;
     let share = pool_info.calc_bond_share(total_bond_amount, amount, true);
-    user_info.bond_share -= share;
-    pool_info.total_bond_share -= share;
+    user_info.bond_share = user_info.bond_share.checked_sub(share)?;
+    pool_info.total_bond_share = pool_info.total_bond_share.checked_sub(share)?;
 
     // save
     USER_INFO.save(deps.storage, (&lp_token, &staker_addr), &user_info)?;
