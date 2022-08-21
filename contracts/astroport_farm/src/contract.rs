@@ -44,7 +44,7 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
-    validate_percentage(msg.fee, "community_fee")?;
+    validate_percentage(msg.fee, "fee")?;
 
     CONFIG.save(
         deps.storage,
