@@ -97,6 +97,11 @@ fn reconcile_astro_to_pool_info(
     pool_info: &mut PoolInfo,
     astro_reward: &mut RewardInfo,
 ) -> StdResult<()> {
+
+    if astro_user_info.virtual_amount.is_zero() || pool_info.total_bond_share.is_zero() {
+        return Ok(());
+    }
+
     let astro_amount = query_token_balance(querier, config.astro_token.clone(), contract_addr.clone())?;
     let add_astro_amount = astro_amount.saturating_sub(astro_reward.reconciled_amount);
     let target_add_astro_amount = (astro_user_info.reward_user_index - pool_info.prev_reward_user_index) * astro_user_info.virtual_amount;
@@ -130,6 +135,11 @@ fn reconcile_token_to_pool_info(
     pool_info: &mut PoolInfo,
     token_reward: &mut RewardInfo,
 ) -> StdResult<()> {
+
+    if pool_info.total_bond_share.is_zero() {
+        return Ok(());
+    }
+
     let token_amount = query_token_balance(querier, token.clone(), contract_addr.clone())?;
     let add_token_amount = token_amount.saturating_sub(token_reward.reconciled_amount);
     let net_token_amount = cmp::min(add_token_amount, target_add_token_amount) + add_pending_amount;
@@ -344,7 +354,8 @@ pub fn query_pending_token(
     let lp_token = addr_validate_to_lower(deps.api, &lp_token)?;
     let user = addr_validate_to_lower(deps.api, &user)?;
     let config = CONFIG.load(deps.storage)?;
-    let mut pool_info = POOL_INFO.load(deps.storage, &lp_token)?;
+    let mut pool_info = POOL_INFO.may_load(deps.storage, &lp_token)?
+        .unwrap_or_default();
     let mut user_info = USER_INFO.may_load(deps.storage, (&lp_token, &user))?
         .unwrap_or_else(|| UserInfo::create(&pool_info));
     let astro_user_info = config.generator.query_user_info(&deps.querier, &lp_token, &env.contract.address)?;
@@ -424,7 +435,8 @@ pub fn query_deposit(
     let lp_token = addr_validate_to_lower(deps.api, &lp_token)?;
     let user = addr_validate_to_lower(deps.api, &user)?;
     let config = CONFIG.load(deps.storage)?;
-    let pool_info = POOL_INFO.load(deps.storage, &lp_token)?;
+    let pool_info = POOL_INFO.may_load(deps.storage, &lp_token)?
+        .unwrap_or_default();
     let user_info = USER_INFO.may_load(deps.storage, (&lp_token, &user))?
         .unwrap_or_else(|| UserInfo::create(&pool_info));
 

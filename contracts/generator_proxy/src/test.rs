@@ -139,6 +139,21 @@ fn deposit(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Resul
     let mut env = mock_env();
     env.block.time = Timestamp::from_seconds(EPOCH_START);
 
+    let msg = QueryMsg::Deposit {
+        lp_token: LP_TOKEN.to_string(),
+        user: USER1.to_string(),
+    };
+    let res: Uint128 = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(res, Uint128::zero());
+
+    let msg = QueryMsg::PendingToken {
+        lp_token: LP_TOKEN.to_string(),
+        user: USER1.to_string(),
+    };
+    let res: PendingTokenResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(res.pending, Uint128::zero());
+    assert_eq!(res.pending_on_proxy, None);
+
     let info = mock_info(LP_TOKEN, &[]);
     let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
         sender: USER1.to_string(),

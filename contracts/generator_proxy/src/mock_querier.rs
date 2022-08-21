@@ -78,6 +78,8 @@ impl WasmMockQuerier {
                 let value = self.raw.get(&(contract_addr.clone(), key.clone()));
                 if let Some(binary) = value {
                     Ok(binary.clone())
+                } else if contract_addr == &GENERATOR.to_string() {
+                    to_binary(&UserInfoV2::default())
                 } else {
                     Err(StdError::generic_err("Raw data not found"))
                 }
