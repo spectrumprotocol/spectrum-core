@@ -158,6 +158,7 @@ pub enum ExecuteMsg {
 pub enum CallbackMsg {
     AfterClaimed {
         lp_token: Addr,
+        prev_balances: Vec<(Addr, Uint128)>,
     },
     Deposit {
         lp_token: Addr,

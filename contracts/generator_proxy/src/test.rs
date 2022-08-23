@@ -209,7 +209,9 @@ fn deposit(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Resul
     deps.querier.set_user_info(&Addr::unchecked(LP_TOKEN), &Addr::unchecked(MOCK_CONTRACT_ADDR), &UserInfoV2 {
         amount: Uint128::from(100u128),
         reward_user_index: Decimal::zero(),
-        reward_debt_proxy: RestrictedVector::default(),
+        reward_debt_proxy: RestrictedVector::from(vec![
+            (Addr::unchecked(REWARD_TOKEN), Uint128::zero()),
+        ]),
         virtual_amount: Uint128::from(80u128),
     })?;
 
@@ -251,6 +253,10 @@ fn deposit(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Resul
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
                 msg: to_binary(&ExecuteMsg::Callback(CallbackMsg::AfterClaimed {
                     lp_token: Addr::unchecked(LP_TOKEN),
+                    prev_balances: vec![
+                        (Addr::unchecked(ASTRO_TOKEN), Uint128::zero()),
+                        (Addr::unchecked(REWARD_TOKEN), Uint128::zero()),
+                    ]
                 }))?,
                 funds: vec![],
             }),
@@ -277,6 +283,10 @@ fn deposit(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Resul
 
     let msg = ExecuteMsg::Callback(CallbackMsg::AfterClaimed {
         lp_token: Addr::unchecked(LP_TOKEN),
+        prev_balances: vec![
+            (Addr::unchecked(ASTRO_TOKEN), Uint128::zero()),
+            (Addr::unchecked(REWARD_TOKEN), Uint128::zero()),
+        ]
     });
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
     assert_error(res, "Callbacks cannot be invoked externally");
@@ -447,6 +457,10 @@ fn claim_rewards(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) ->
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
                 msg: to_binary(&ExecuteMsg::Callback(CallbackMsg::AfterClaimed {
                     lp_token: Addr::unchecked(LP_TOKEN),
+                    prev_balances: vec![
+                        (Addr::unchecked(ASTRO_TOKEN), Uint128::from(10u128)),
+                        (Addr::unchecked(REWARD_TOKEN), Uint128::from(20u128)),
+                    ]
                 }))?,
                 funds: vec![],
             }),
@@ -473,6 +487,10 @@ fn claim_rewards(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) ->
     let info = mock_info(MOCK_CONTRACT_ADDR, &vec![]);
     let msg = ExecuteMsg::Callback(CallbackMsg::AfterClaimed {
         lp_token: Addr::unchecked(LP_TOKEN),
+        prev_balances: vec![
+            (Addr::unchecked(ASTRO_TOKEN), Uint128::from(10u128)),
+            (Addr::unchecked(REWARD_TOKEN), Uint128::from(20u128)),
+        ]
     });
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
     assert!(res.is_ok());
@@ -600,6 +618,10 @@ fn withdraw(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Resu
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
                 msg: to_binary(&ExecuteMsg::Callback(CallbackMsg::AfterClaimed {
                     lp_token: Addr::unchecked(LP_TOKEN),
+                    prev_balances: vec![
+                        (Addr::unchecked(ASTRO_TOKEN), Uint128::from(42u128)),
+                        (Addr::unchecked(REWARD_TOKEN), Uint128::from(36u128)),
+                    ]
                 }))?,
                 funds: vec![],
             }),
@@ -617,6 +639,10 @@ fn withdraw(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Resu
     let info = mock_info(MOCK_CONTRACT_ADDR, &vec![]);
     let msg = ExecuteMsg::Callback(CallbackMsg::AfterClaimed {
         lp_token: Addr::unchecked(LP_TOKEN),
+        prev_balances: vec![
+            (Addr::unchecked(ASTRO_TOKEN), Uint128::from(42u128)),
+            (Addr::unchecked(REWARD_TOKEN), Uint128::from(36u128)),
+        ]
     });
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
     assert!(res.is_ok());

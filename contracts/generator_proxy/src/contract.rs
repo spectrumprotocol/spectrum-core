@@ -135,7 +135,7 @@ fn handle_callback(
         return Err(ContractError::CallbackUnauthorized {});
     }
     match msg {
-        CallbackMsg::AfterClaimed { lp_token } => callback_after_claimed(deps, env, lp_token),
+        CallbackMsg::AfterClaimed { lp_token, prev_balances } => callback_after_claimed(deps, env, lp_token, prev_balances),
         CallbackMsg::Deposit { lp_token, staker_addr, amount } => callback_deposit(deps, env, lp_token, staker_addr, amount),
         CallbackMsg::Withdraw { lp_token, staker_addr, amount } => callback_withdraw(deps, env, lp_token, staker_addr, amount),
         CallbackMsg::AfterBondChanged { lp_token } => callback_after_bond_changed(deps, env, lp_token),
