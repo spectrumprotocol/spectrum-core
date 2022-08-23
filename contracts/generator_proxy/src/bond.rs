@@ -427,6 +427,7 @@ pub fn callback_withdraw(
     let withdraw_msg = config.generator.withdraw_msg(lp_token.to_string(), amount)?;
     Ok(Response::new()
         .add_message(withdraw_msg)
+        .add_message(token_asset(lp_token.clone(), amount).transfer_msg(&staker_addr)?)
         .add_message(CallbackMsg::AfterBondChanged {
             lp_token,
         }.to_cosmos_msg(&env.contract.address)?)

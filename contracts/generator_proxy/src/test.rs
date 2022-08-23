@@ -681,6 +681,14 @@ fn withdraw(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Resu
                 })?,
             }),
             CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: LP_TOKEN.to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                    recipient: USER1.to_string(),
+                    amount: Uint128::from(100u128),
+                })?,
+                funds: vec![],
+            }),
+            CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
                 msg: to_binary(&ExecuteMsg::Callback(CallbackMsg::AfterBondChanged {
                     lp_token: Addr::unchecked(LP_TOKEN),
