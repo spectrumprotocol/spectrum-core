@@ -32,7 +32,7 @@ pub fn execute_deposit(
             &astro_user_info
         )?;
         messages.push(config.generator.claim_rewards_msg(vec![info.sender.to_string()])?);
-        messages.push(CallbackMsg::AfterClaimed {
+        messages.push(CallbackMsg::AfterBondClaimed {
             lp_token: info.sender.clone(),
             prev_balances,
         }.to_cosmos_msg(&env.contract.address)?);
@@ -69,7 +69,7 @@ pub fn execute_withdraw(
 
     Ok(Response::new()
         .add_message(config.generator.claim_rewards_msg(vec![lp_token.to_string()])?)
-        .add_message(CallbackMsg::AfterClaimed {
+        .add_message(CallbackMsg::AfterBondClaimed {
             lp_token: lp_token.clone(),
             prev_balances,
         }.to_cosmos_msg(&env.contract.address)?)
@@ -103,7 +103,7 @@ pub fn execute_claim_rewards(
             &lp_token,
             &astro_user_info
         )?;
-        messages.push(CallbackMsg::AfterClaimed {
+        messages.push(CallbackMsg::AfterBondClaimed {
             lp_token: lp_token.clone(),
             prev_balances,
         }.to_cosmos_msg(&env.contract.address)?);
@@ -271,7 +271,7 @@ fn reconcile_token_reward(
     Ok(())
 }
 
-pub fn callback_after_claimed(
+pub fn callback_after_bond_claimed(
     deps: DepsMut,
     env: Env,
     lp_token: Addr,
@@ -348,7 +348,7 @@ pub fn callback_after_bond_changed(
     Ok(Response::default())
 }
 
-fn reconcile_to_user_info(
+pub fn reconcile_to_user_info(
     pool_info: &PoolInfo,
     user_info: &mut UserInfo,
 ) -> StdResult<()> {
@@ -454,7 +454,7 @@ pub fn callback_claim_rewards(
         }
 
         let mut reward_info = REWARD_INFO.load(deps.storage, token)?;
-        reward_info.reconciled_amount -= amount;
+        reward_info.reconciled_amount = reward_info.reconciled_amount.checked_sub(*amount)?;
         REWARD_INFO.save(deps.storage, token, &reward_info)?;
 
         let asset = token_asset(token.clone(), *amount);

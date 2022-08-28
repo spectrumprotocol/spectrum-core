@@ -1,7 +1,7 @@
 pub mod state;
 pub mod error;
 pub mod contract;
-pub mod config;
+pub mod oper;
 pub mod model;
 pub mod astro_gov;
 pub mod bond;

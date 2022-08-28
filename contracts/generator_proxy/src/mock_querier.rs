@@ -8,6 +8,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use astroport::asset::token_asset;
 use astroport::generator::{PendingTokenResponse, UserInfoV2};
+use astroport_governance::voting_escrow::{LockInfoResponse, VotingPowerResponse};
+use crate::astro_gov::Lock;
 
 pub fn mock_dependencies() -> OwnedDeps<MockStorage, MockApi, WasmMockQuerier> {
     let custom_querier: WasmMockQuerier = WasmMockQuerier::new();
@@ -24,6 +26,12 @@ const ASTRO_TOKEN: &str = "astro";
 const REWARD_TOKEN: &str = "reward";
 const GENERATOR: &str = "generator";
 const USER_INFO: Map<(&Addr, &Addr), UserInfoV2> = Map::new("user_info");
+const LOCK: Map<Addr, Lock> = Map::new("locked");
+const REWARDS_PER_WEEK: Map<u64, Uint128> = Map::new("rewards_per_week");
+const LAST_CLAIM_PERIOD: Map<Addr, u64> = Map::new("last_claim_period");
+
+const VOTING_ESCROW: &str = "voting_escrow";
+const FEE_DISTRIBUTOR: &str = "fee_distributor";
 
 pub struct WasmMockQuerier {
     balances: HashMap<(String, String), Uint128>,
@@ -45,6 +53,27 @@ impl WasmMockQuerier {
     pub fn set_user_info(&mut self, lp_token: &Addr, user: &Addr, user_info: &UserInfoV2) -> StdResult<()> {
         let key = Binary::from(USER_INFO.key((lp_token, user)).deref());
         self.raw.insert((GENERATOR.to_string(), key), to_binary(user_info)?);
+
+        Ok(())
+    }
+
+    pub fn set_lock(&mut self, user: Addr, lock: &Lock) -> StdResult<()> {
+        let key = Binary::from(LOCK.key(user).deref());
+        self.raw.insert((VOTING_ESCROW.to_string(), key), to_binary(lock)?);
+
+        Ok(())
+    }
+
+    pub fn set_last_claim_period(&mut self, user: Addr, period: u64) -> StdResult<()> {
+        let key = Binary::from(LAST_CLAIM_PERIOD.key(user).deref());
+        self.raw.insert((FEE_DISTRIBUTOR.to_string(), key), to_binary(&period)?);
+
+        Ok(())
+    }
+
+    pub fn set_rewards_per_week(&mut self, period: u64, amount: Uint128) -> StdResult<()> {
+        let key = Binary::from(REWARDS_PER_WEEK.key(period).deref());
+        self.raw.insert((FEE_DISTRIBUTOR.to_string(), key), to_binary(&amount)?);
 
         Ok(())
     }
@@ -113,7 +142,31 @@ impl WasmMockQuerier {
                         token_asset(Addr::unchecked(REWARD_TOKEN), reward),
                     ]),
                 })
-            }
+            },
+            MockQueryMsg::LockInfo { user } => {
+                let key = Binary::from(LOCK.key(Addr::unchecked(user)).deref());
+                let value = self.raw.get(&(contract_addr.clone(), key));
+                let lock: Lock = if let Some(value) = value {
+                    from_binary(value)?
+                } else {
+                    Lock::default()
+                };
+                to_binary(&LockInfoResponse {
+                    amount: lock.amount,
+                    coefficient: Default::default(),
+                    start: lock.start,
+                    end: lock.end,
+                    slope: Default::default()
+                })
+            },
+            MockQueryMsg::UserVotingPowerAtPeriod { user, .. } => {
+                let voting_power = self.get_balance(contract_addr.clone(), user);
+                to_binary(&VotingPowerResponse { voting_power })
+            },
+            MockQueryMsg::TotalVotingPowerAtPeriod { .. } => {
+                let voting_power = self.get_balance(contract_addr.clone(), contract_addr.clone());
+                to_binary(&VotingPowerResponse { voting_power })
+            },
         }
     }
 }
@@ -132,6 +185,9 @@ enum MockQueryMsg {
         lp_token: String,
         user: String
     },
+    LockInfo { user: String },
+    UserVotingPowerAtPeriod { user: String, period: u64 },
+    TotalVotingPowerAtPeriod { period: u64 },
 }
 
 impl Querier for WasmMockQuerier {

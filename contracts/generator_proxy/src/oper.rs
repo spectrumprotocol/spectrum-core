@@ -1,8 +1,9 @@
-use cosmwasm_std::{Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult, Uint128};
-use astroport::asset::{addr_validate_to_lower};
+use cosmwasm_std::{CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult, Uint128};
+use astroport::asset::{addr_validate_to_lower, token_asset};
+use spectrum::adapters::asset::AssetEx;
 use crate::error::ContractError;
 use crate::model::{Config};
-use crate::state::{CONFIG};
+use crate::state::{CONFIG, REWARD_INFO};
 
 pub fn validate_percentage(value: Decimal, field: &str) -> StdResult<()> {
     if value > Decimal::one() {
@@ -65,6 +66,56 @@ pub fn execute_update_parameters(
     CONFIG.save(deps.storage, &config)?;
 
     Ok(Response::default())
+}
+
+pub fn execute_controller_vote(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    votes: Vec<(String, u16)>,
+) -> Result<Response, ContractError> {
+
+    // only controller can vote
+    let config = CONFIG.load(deps.storage)?;
+    if info.sender != config.controller {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    let vote_msg = config.astro_gov.controller_vote_msg(votes)?;
+
+    Ok(Response::new()
+        .add_message(vote_msg)
+    )
+}
+
+pub fn execute_send_income(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+) -> Result<Response, ContractError> {
+
+    // this method can only invoked by controller
+    let config = CONFIG.load(deps.storage)?;
+    if info.sender != config.controller {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    let mut messages: Vec<CosmosMsg> = vec![];
+    let mut reward_info = REWARD_INFO.load(deps.storage, &config.astro_token)?;
+    let fee = reward_info.fee;
+    reward_info.fee = Uint128::zero();
+    reward_info.reconciled_amount -= fee;
+
+    // save
+    REWARD_INFO.save(deps.storage, &config.astro_token, &reward_info)?;
+
+    if !fee.is_zero() {
+        messages.push(token_asset(config.astro_token, fee).transfer_msg(&config.fee_collector)?);
+    }
+
+    Ok(Response::new()
+        .add_messages(messages)
+    )
 }
 
 pub fn query_config(

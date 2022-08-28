@@ -1,15 +1,16 @@
 use astroport::common::{propose_new_owner, drop_ownership_proposal, claim_ownership};
-use cosmwasm_std::{entry_point, DepsMut, Env, MessageInfo, Response, from_binary, Deps, Binary, to_binary, Empty, StdError};
+use cosmwasm_std::{entry_point, DepsMut, Env, MessageInfo, Response, from_binary, Deps, Binary, to_binary, Empty, StdError, Uint128, Decimal};
 use cw20::Cw20ReceiveMsg;
 use astroport::asset::addr_validate_to_lower;
 use astroport_governance::utils::get_period;
 use spectrum::adapters::generator::Generator;
-use crate::bond::{callback_after_bond_changed, callback_after_claimed, callback_claim_rewards, callback_deposit, callback_withdraw, execute_deposit, execute_withdraw, query_deposit, query_pending_token, execute_claim_rewards};
-use crate::config::{execute_update_config, execute_update_parameters, query_config, validate_percentage};
+use crate::bond::{callback_after_bond_changed, callback_after_bond_claimed, callback_claim_rewards, callback_deposit, callback_withdraw, execute_deposit, execute_withdraw, query_deposit, query_pending_token, execute_claim_rewards};
+use crate::oper::{execute_controller_vote, execute_send_income, execute_update_config, execute_update_parameters, query_config, validate_percentage};
 use crate::error::ContractError;
-use crate::model::{CallbackMsg, Config, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg, State};
-use crate::query::{query_pool_info, query_reward_info, query_state, query_user_info};
-use crate::state::{CONFIG, STATE, OWNERSHIP_PROPOSAL};
+use crate::model::{CallbackMsg, Config, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg, StakingState};
+use crate::query::{query_pool_info, query_reward_info, query_staker_info, query_staking_state, query_user_info};
+use crate::staking::{callback_after_staking_claimed, execute_claim_income, execute_relock, execute_request_unstake, execute_stake, execute_withdraw_unstaked};
+use crate::state::{CONFIG, OWNERSHIP_PROPOSAL, STAKING_STATE};
 
 /// ## Description
 /// Creates a new contract with the specified parameters in the [`InstantiateMsg`].
@@ -27,7 +28,7 @@ pub fn instantiate(
 
     let config = Config {
         generator: Generator(addr_validate_to_lower(deps.api, &msg.generator)?),
-        // astro_gov: msg.astro_gov.check(deps.api)?,
+        astro_gov: msg.astro_gov.check(deps.api)?,
         owner: addr_validate_to_lower(deps.api, &msg.owner)?,
         controller: addr_validate_to_lower(deps.api, &msg.controller)?,
         astro_token: addr_validate_to_lower(deps.api, &msg.astro_token)?,
@@ -38,10 +39,16 @@ pub fn instantiate(
     };
     CONFIG.save(deps.storage, &config)?;
 
-    let state = State {
-        next_claim_period: get_period(env.block.time.seconds())?,
+    let period = get_period(env.block.time.seconds())?;
+    let state = StakingState {
+        total_bond_share: Uint128::zero(),
+        reward_index: Decimal::zero(),
+        next_claim_period: period,
+        total_unstaking_amount: Uint128::zero(),
+        total_unstaked_amount: Uint128::zero(),
+        unstaking_period: period,
     };
-    STATE.save(deps.storage, &state)?;
+    STAKING_STATE.save(deps.storage, &state)?;
 
     Ok(Response::default())
 }
@@ -63,10 +70,8 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> R
             staker_rate,
         } => execute_update_parameters(deps, env, info, max_quota, staker_rate),
 
-        // ExecuteMsg::ControllerVote { votes } => execute_controller_vote(deps, env, info, votes),
-        // ExecuteMsg::ExtendLockTime { time } => execute_extend_lock_time(deps, env, info, time),
-        // ExecuteMsg::ReconcileGovIncome {} => execute_reconcile_gov_income(deps, env, info),
-        // ExecuteMsg::SendIncome {} => execute_send_income(deps, env, info),
+        ExecuteMsg::ControllerVote { votes } => execute_controller_vote(deps, env, info, votes),
+        ExecuteMsg::SendIncome {} => execute_send_income(deps, env, info),
 
         ExecuteMsg::ClaimRewards { lp_tokens } => execute_claim_rewards(deps, env, info, lp_tokens),
         ExecuteMsg::Withdraw { lp_token, amount, } => execute_withdraw(deps, env, info, lp_token, amount),
@@ -102,6 +107,11 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> R
             })
             .map_err(|e| e.into())
         },
+
+        ExecuteMsg::Relock {} => execute_relock(deps, env, info),
+        ExecuteMsg::RequestUnstake { amount } => execute_request_unstake(deps, env, info, amount),
+        ExecuteMsg::WithdrawUnstaked { amount } => execute_withdraw_unstaked(deps, env, info, amount),
+        ExecuteMsg::ClaimIncome {} => execute_claim_income(deps, env, info),
     }
 }
 
@@ -118,7 +128,7 @@ fn receive_cw20(
     let staker_addr = addr_validate_to_lower(deps.api, &cw20_msg.sender)?;
     match from_binary(&cw20_msg.msg)? {
         Cw20HookMsg::Deposit {} => execute_deposit(deps, env, info, staker_addr, cw20_msg.amount),
-        // Cw20HookMsg::Stake {} => execute_convert(deps, env, info, staker_addr, cw20_msg.amount),
+        Cw20HookMsg::Stake {} => execute_stake(deps, env, info, staker_addr, cw20_msg.amount),
     }
 }
 
@@ -135,11 +145,12 @@ fn handle_callback(
         return Err(ContractError::CallbackUnauthorized {});
     }
     match msg {
-        CallbackMsg::AfterClaimed { lp_token, prev_balances } => callback_after_claimed(deps, env, lp_token, prev_balances),
+        CallbackMsg::AfterBondClaimed { lp_token, prev_balances } => callback_after_bond_claimed(deps, env, lp_token, prev_balances),
         CallbackMsg::Deposit { lp_token, staker_addr, amount } => callback_deposit(deps, env, lp_token, staker_addr, amount),
         CallbackMsg::Withdraw { lp_token, staker_addr, amount } => callback_withdraw(deps, env, lp_token, staker_addr, amount),
         CallbackMsg::AfterBondChanged { lp_token } => callback_after_bond_changed(deps, env, lp_token),
         CallbackMsg::ClaimRewards { lp_token, staker_addr } => callback_claim_rewards(deps, env, lp_token, staker_addr),
+        CallbackMsg::AfterStakingClaimed { prev_balance } => callback_after_staking_claimed(deps, env, prev_balance),
     }
 }
 
@@ -154,7 +165,8 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<Binary, ContractErro
         QueryMsg::PoolInfo { lp_token } => to_binary(&query_pool_info(deps, env, lp_token)?),
         QueryMsg::UserInfo { lp_token, user } => to_binary(&query_user_info(deps, env, lp_token, user)?),
         QueryMsg::RewardInfo { token } => to_binary(&query_reward_info(deps, env, token)?),
-        QueryMsg::State { } => to_binary(&query_state(deps, env)?),
+        QueryMsg::StakingState { } => to_binary(&query_staking_state(deps, env)?),
+        QueryMsg::StakerInfo { user } => to_binary(&query_staker_info(deps, env, user)?),
     }?;
     Ok(result)
 }

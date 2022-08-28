@@ -14,7 +14,6 @@ pub struct AstroGovBase<T> {
     pub generator_controller: T,
     pub voting_escrow: T,
     pub xastro_token: T,
-    pub assembly: T,
 }
 
 pub type AstroGovUnchecked = AstroGovBase<String>;
@@ -27,7 +26,6 @@ impl From<AstroGov> for AstroGovUnchecked {
             generator_controller: governance.generator_controller.to_string(),
             voting_escrow: governance.voting_escrow.to_string(),
             xastro_token: governance.xastro_token.to_string(),
-            assembly: governance.assembly.to_string(),
         }
     }
 }
@@ -39,7 +37,6 @@ impl AstroGovUnchecked {
             generator_controller: addr_validate_to_lower(api, &self.generator_controller)?,
             voting_escrow: addr_validate_to_lower(api, &self.voting_escrow)?,
             xastro_token: addr_validate_to_lower(api, &self.xastro_token)?,
-            assembly: addr_validate_to_lower(api, &self.assembly)?,
         })
     }
 }
@@ -136,6 +133,16 @@ impl AstroGov {
             msg: to_binary(&VotingExecuteMsg::ExtendLockTime {
                 time,
             })?,
+            funds: vec![],
+        }))
+    }
+
+    pub fn withdraw_msg(
+        &self,
+    ) -> StdResult<CosmosMsg> {
+        Ok(CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: self.voting_escrow.to_string(),
+            msg: to_binary(&VotingExecuteMsg::Withdraw {})?,
             funds: vec![],
         }))
     }
