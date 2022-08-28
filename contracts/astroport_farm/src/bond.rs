@@ -230,6 +230,7 @@ pub fn unbond(
 
     // update state
     STATE.save(deps.storage, &state)?;
+    REWARD.save(deps.storage, &staker_addr, &reward_info)?;
 
     Ok(Response::new()
         .add_messages(vec![
