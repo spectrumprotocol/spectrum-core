@@ -50,21 +50,15 @@ impl State {
         }
     }
 
-    pub fn calc_user_balance(
+    pub fn calc_bond_amount(
         &self,
         lp_balance: Uint128,
         bond_share: Uint128,
-        scaling_operation: ScalingOperation,
     ) -> Uint128 {
         if self.total_bond_share.is_zero() {
             Uint128::zero()
         } else {
-            match scaling_operation {
-                ScalingOperation::Truncate =>
-                    lp_balance.multiply_ratio(bond_share, self.total_bond_share),
-                ScalingOperation::Ceil => lp_balance
-                    .multiply_ratio_and_ceil(bond_share, self.total_bond_share),
-            }
+            lp_balance.multiply_ratio(bond_share, self.total_bond_share)
         }
     }
 }
@@ -79,6 +73,8 @@ pub struct RewardInfo {
 
 pub const REWARD: Map<&Addr, RewardInfo> = Map::new("reward");
 
+const DAY: u64 = 86400;
+
 impl RewardInfo {
     pub fn create() -> RewardInfo {
         RewardInfo {
@@ -86,6 +82,16 @@ impl RewardInfo {
             deposit_cost: Uint128::zero(),
             deposit_amount: Uint128::zero(),
             deposit_time: 0u64,
+        }
+    }
+
+    pub fn calc_user_balance(&self, state: &State, lp_balance: Uint128, time: u64) -> Uint128 {
+        let amount = state.calc_bond_amount(lp_balance, self.bond_share);
+        let deposit_time = time - self.deposit_time;
+        if deposit_time < DAY && amount > self.deposit_amount {
+            self.deposit_amount + (amount - self.deposit_amount).multiply_ratio(deposit_time, DAY)
+        } else {
+            amount
         }
     }
 }

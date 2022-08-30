@@ -407,6 +407,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
     );
 
     // update generator balance
+    env.block.time = Timestamp::from_seconds(100102);
     deps.querier.set_balance(
         GENERATOR_PROXY.to_string(),
         LP_TOKEN.to_string(),
@@ -761,7 +762,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
     );
 
     // update time
-    env.block.time = Timestamp::from_seconds(201);
+    env.block.time = Timestamp::from_seconds(200201);
 
     // set LP token balance of the contract
     deps.querier.set_balance(
@@ -831,7 +832,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                 RewardInfoResponseItem {
                     bond_share: Uint128::from(58333u128),
                     deposit_amount: Uint128::from(59999u128),
-                    deposit_time: 117,
+                    deposit_time: 33448,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(70000u128),
                 }

@@ -12,7 +12,7 @@ use cw20::{Expiration};
 
 use spectrum::adapters::asset::AssetEx;
 use spectrum::astroport_farm::{RewardInfoResponse, RewardInfoResponseItem, CallbackMsg};
-use spectrum::helper::{compute_deposit_time};
+use spectrum::helper::{compute_deposit_time, ScalingUint128};
 
 /// ## Description
 /// Send assets to compound proxy to create LP token and bond received LP token on behalf of sender.
@@ -180,10 +180,9 @@ fn increase_bond_amount(
     state.total_bond_share += bond_share;
     reward_info.bond_share += bond_share;
 
-    state.calc_user_balance(
+    state.calc_bond_amount(
         lp_balance + bond_amount,
         bond_share,
-        ScalingOperation::Truncate,
     )
 }
 
@@ -209,18 +208,17 @@ pub fn unbond(
     let mut state = STATE.load(deps.storage)?;
     let mut reward_info = REWARD.load(deps.storage, &staker_addr)?;
 
-    let user_balance = state.calc_user_balance(
+    let user_balance = reward_info.calc_user_balance(
+        &state,
         lp_balance,
-        reward_info.bond_share,
-        ScalingOperation::Truncate,
+        env.block.time.seconds(),
     );
 
     if user_balance < amount {
         return Err(ContractError::UnbondExceedBalance {});
     }
 
-    let bond_share = state.calc_bond_share(amount, lp_balance, ScalingOperation::Ceil);
-
+    let bond_share = reward_info.bond_share.multiply_ratio_and_ceil(amount, user_balance);
     state.total_bond_share = state.total_bond_share.checked_sub(bond_share)?;
     reward_info.bond_share = reward_info.bond_share.checked_sub(bond_share)?;
 
@@ -280,10 +278,10 @@ fn read_reward_info(deps: Deps, env: Env, staker_addr: &Addr) -> StdResult<Rewar
         &env.contract.address,
     )?;
 
-    let bond_amount = state.calc_user_balance(
+    let bond_amount = reward_info.calc_user_balance(
+        &state,
         lp_balance,
-        reward_info.bond_share,
-        ScalingOperation::Truncate,
+        env.block.time.seconds(),
     );
     Ok(RewardInfoResponseItem {
         staking_token: staking_token.to_string(),
