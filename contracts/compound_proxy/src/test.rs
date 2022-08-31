@@ -3,12 +3,12 @@ use astroport::pair::{
     Cw20HookMsg as AstroportPairCw20HookMsg, ExecuteMsg as AstroportPairExecuteMsg,
 };
 use cosmwasm_std::testing::{mock_env, mock_info, MOCK_CONTRACT_ADDR};
-use cosmwasm_std::{coin, to_binary, Addr, Coin, CosmosMsg, Decimal, Order, StdResult, Uint128, WasmMsg, from_binary};
+use cosmwasm_std::{coin, to_binary, Addr, Coin, CosmosMsg, Decimal, Order, StdResult, Uint128, WasmMsg, from_binary, Uint256};
 use cw20::{Cw20ExecuteMsg, Expiration};
 use spectrum::adapters::pair::Pair;
 use spectrum::compound_proxy::{CallbackMsg, ExecuteMsg, InstantiateMsg, QueryMsg};
 
-use crate::contract::{execute, instantiate, query};
+use crate::contract::{execute, get_swap_amount, instantiate, query};
 use crate::error::ContractError;
 use crate::mock_querier::mock_dependencies;
 use crate::state::{Config, PAIR_PROXY};
@@ -306,6 +306,27 @@ fn provide_liquidity() -> Result<(), ContractError> {
             }),
         ]
     );
+
+    Ok(())
+}
+
+#[test]
+fn test_get_swap_amount() -> StdResult<()> {
+    let amount_a = Uint256::from(1146135045u128);
+    let amount_b = Uint256::from(9093887u128);
+    let pool_a = Uint256::from(114613504500u128);
+    let pool_b = Uint256::from(909388700u128);
+    let commission_bps = 30u64;
+
+    let result = get_swap_amount(
+        amount_a,
+        amount_b,
+        pool_a,
+        pool_b,
+        commission_bps,
+    )?;
+
+    assert_eq!(result, Uint128::zero());
 
     Ok(())
 }
