@@ -58,6 +58,8 @@ pub enum ExecuteMsg {
         assets: Vec<Asset>,
         /// The minimum expected amount of LP token
         minimum_receive: Option<Uint128>,
+        /// The flag to skip optimal swap
+        no_swap: Option<bool>
     },
     /// Creates a request to change the contract's ownership
     ProposeNewOwner {

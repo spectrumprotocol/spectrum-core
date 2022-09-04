@@ -28,6 +28,8 @@ pub enum ExecuteMsg {
         rewards: Vec<Asset>,
         /// Receiver address for LP token
         to: Option<String>,
+        /// Skip optimal swap
+        no_swap: Option<bool>, 
     },
     /// The callback of type [`CallbackMsg`]
     Callback(CallbackMsg),
@@ -93,11 +95,12 @@ pub struct MigrateMsg {}
 pub struct Compounder(pub Addr);
 
 impl Compounder {
-    pub fn compound_msg(&self, rewards: Vec<Asset>, funds: Vec<Coin>) -> StdResult<CosmosMsg> {
+    pub fn compound_msg(&self, rewards: Vec<Asset>, funds: Vec<Coin>, no_swap: Option<bool>) -> StdResult<CosmosMsg> {
         Ok(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: self.0.to_string(),
             msg: to_binary(&ExecuteMsg::Compound {
                 rewards,
+                no_swap,
                 to: None,
             })?,
             funds,

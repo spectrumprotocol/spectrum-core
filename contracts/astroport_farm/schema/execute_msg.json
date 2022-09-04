@@ -145,6 +145,13 @@
                   "type": "null"
                 }
               ]
+            },
+            "no_swap": {
+              "description": "The flag to skip optimal swap",
+              "type": [
+                "boolean",
+                "null"
+              ]
             }
           }
         }

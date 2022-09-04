@@ -96,7 +96,7 @@ pub fn execute(
             fee_collector,
         ),
         ExecuteMsg::Unbond { amount } => unbond(deps, env, info, amount),
-        ExecuteMsg::BondAssets { assets, minimum_receive } => bond_assets(deps, env, info, assets, minimum_receive),
+        ExecuteMsg::BondAssets { assets, minimum_receive, no_swap} => bond_assets(deps, env, info, assets, minimum_receive, no_swap),
         ExecuteMsg::Compound { minimum_receive } => compound(deps, env, info, minimum_receive),
         ExecuteMsg::ProposeNewOwner { owner, expires_in } => {
             let config: Config = CONFIG.load(deps.storage)?;

@@ -107,6 +107,7 @@ fn compound() -> Result<(), ContractError> {
             amount: Uint128::from(1000000u128),
         }],
         to: None,
+        no_swap: None,
     };
 
     let env = mock_env();
@@ -118,7 +119,7 @@ fn compound() -> Result<(), ContractError> {
         }],
     );
 
-    let res = execute(deps.as_mut(), env.clone(), info, msg)?;
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg)?;
     assert_eq!(
         res.messages
             .into_iter()
@@ -132,6 +133,35 @@ fn compound() -> Result<(), ContractError> {
                     0: CallbackMsg::OptimalSwap {}
                 })?,
             }),
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: env.contract.address.to_string(),
+                funds: vec![],
+                msg: to_binary(&ExecuteMsg::Callback {
+                    0: CallbackMsg::ProvideLiquidity {
+                        receiver: "addr0000".to_string()
+                    }
+                })?,
+            }),
+        ]
+    );
+
+    let msg = ExecuteMsg::Compound {
+        rewards: vec![Asset {
+            info: AssetInfo::NativeToken {
+                denom: "uluna".to_string(),
+            },
+            amount: Uint128::from(1000000u128),
+        }],
+        to: None,
+        no_swap: Some(true),
+    };
+    let res = execute(deps.as_mut(), env.clone(), info, msg)?;
+    assert_eq!(
+        res.messages
+            .into_iter()
+            .map(|it| it.msg)
+            .collect::<Vec<CosmosMsg>>(),
+        vec![
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: env.contract.address.to_string(),
                 funds: vec![],
