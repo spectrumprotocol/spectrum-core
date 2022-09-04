@@ -44,6 +44,7 @@ fn test() -> Result<(), ContractError> {
     config(&mut deps)?;
     owner(&mut deps)?;
     bond(&mut deps)?;
+    deposit_time(&mut deps)?;
     compound(&mut deps)?;
     callback(&mut deps)?;
 
@@ -407,6 +408,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
     );
 
     // update generator balance
+    env.block.time = Timestamp::from_seconds(100102);
     deps.querier.set_balance(
         GENERATOR_PROXY.to_string(),
         LP_TOKEN.to_string(),
@@ -761,7 +763,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
     );
 
     // update time
-    env.block.time = Timestamp::from_seconds(201);
+    env.block.time = Timestamp::from_seconds(200201);
 
     // set LP token balance of the contract
     deps.querier.set_balance(
@@ -831,7 +833,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                 RewardInfoResponseItem {
                     bond_share: Uint128::from(58333u128),
                     deposit_amount: Uint128::from(59999u128),
-                    deposit_time: 117,
+                    deposit_time: 33448,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(70000u128),
                 }
@@ -847,6 +849,183 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
         StateInfo {
             total_bond_share: Uint128::from(58333u128),
             earning: Uint128::zero()
+        }
+    );
+
+    Ok(())
+}
+
+fn deposit_time(
+    deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>,
+) -> Result<(), ContractError> {
+    let mut env = mock_env();
+    env.block.time = Timestamp::from_seconds(300000);
+
+    // user_3 bond 10000 LP
+    let info = mock_info(LP_TOKEN, &[]);
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: USER_3.to_string(),
+        amount: Uint128::from(10000u128),
+        msg: to_binary(&Cw20HookMsg::Bond { staker_addr: None }).unwrap(),
+    });
+    let res = execute(deps.as_mut(), env.clone(), info, msg);
+    assert!(res.is_ok());
+
+    // increase generator balance by 10000 + 5000 (from compound)
+    deps.querier.set_balance(
+        GENERATOR_PROXY.to_string(),
+        LP_TOKEN.to_string(),
+        Uint128::from(85000u128),
+    );
+
+    // query reward info for user_3, should get only 10000
+    let msg = QueryMsg::RewardInfo {
+        staker_addr: USER_3.to_string(),
+    };
+    let res: RewardInfoResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        RewardInfoResponse {
+            staker_addr: USER_3.to_string(),
+            reward_info: {
+                RewardInfoResponseItem {
+                    bond_share: Uint128::from(8333u128),
+                    deposit_amount: Uint128::from(9999u128),
+                    deposit_time: 300000,
+                    staking_token: LP_TOKEN.to_string(),
+                    bond_amount: Uint128::from(9999u128),
+                }
+            }
+        }
+    );
+
+    env.block.time = Timestamp::from_seconds(343200);
+
+    // query reward info for user_3, should increase to 10312 instead of 10624
+    let msg = QueryMsg::RewardInfo {
+        staker_addr: USER_3.to_string(),
+    };
+    let res: RewardInfoResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        RewardInfoResponse {
+            staker_addr: USER_3.to_string(),
+            reward_info: {
+                RewardInfoResponseItem {
+                    bond_share: Uint128::from(8333u128),
+                    deposit_amount: Uint128::from(9999u128),
+                    deposit_time: 300000,
+                    staking_token: LP_TOKEN.to_string(),
+                    bond_amount: Uint128::from(10311u128),
+                }
+            }
+        }
+    );
+
+    // query reward info for user_1, should be 74375
+    let msg = QueryMsg::RewardInfo {
+        staker_addr: USER_1.to_string(),
+    };
+    let res: RewardInfoResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        RewardInfoResponse {
+            staker_addr: USER_1.to_string(),
+            reward_info: {
+                RewardInfoResponseItem {
+                    bond_share: Uint128::from(58333u128),
+                    deposit_amount: Uint128::from(59999u128),
+                    deposit_time: 33448,
+                    staking_token: LP_TOKEN.to_string(),
+                    bond_amount: Uint128::from(74375u128),
+                }
+            }
+        }
+    );
+
+    // minimum time reached
+    env.block.time = Timestamp::from_seconds(386400);
+
+    // query reward info for user_3, should increase 10624
+    let msg = QueryMsg::RewardInfo {
+        staker_addr: USER_3.to_string(),
+    };
+    let res: RewardInfoResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        RewardInfoResponse {
+            staker_addr: USER_3.to_string(),
+            reward_info: {
+                RewardInfoResponseItem {
+                    bond_share: Uint128::from(8333u128),
+                    deposit_amount: Uint128::from(9999u128),
+                    deposit_time: 300000,
+                    staking_token: LP_TOKEN.to_string(),
+                    bond_amount: Uint128::from(10624u128),
+                }
+            }
+        }
+    );
+
+    // rewind time
+    env.block.time = Timestamp::from_seconds(343200);
+
+    // unbond for user_3
+    let info = mock_info(USER_3, &[]);
+    let msg = ExecuteMsg::Unbond {
+        amount: Uint128::from(10311u128),
+    };
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg)?;
+    assert_eq!(
+        res.messages
+            .into_iter()
+            .map(|it| it.msg)
+            .collect::<Vec<CosmosMsg>>(),
+        [
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: GENERATOR_PROXY.to_string(),
+                msg: to_binary(&GeneratorExecuteMsg::Withdraw {
+                    lp_token: LP_TOKEN.to_string(),
+                    amount: Uint128::from(10311u128)
+                })?,
+                funds: vec![],
+            }),
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: LP_TOKEN.to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                    recipient: USER_3.to_string(),
+                    amount: Uint128::from(10311u128)
+                })?,
+                funds: vec![],
+            }),
+        ]
+    );
+
+    // increase generator balance by 10311
+    deps.querier.set_balance(
+        GENERATOR_PROXY.to_string(),
+        LP_TOKEN.to_string(),
+        Uint128::from(74689u128),
+    );
+
+    // query reward info for user_1, should be 74375 + 312 (from user_3 penalty)= 74687
+    let msg = QueryMsg::RewardInfo {
+        staker_addr: USER_1.to_string(),
+    };
+    let res: RewardInfoResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        RewardInfoResponse {
+            staker_addr: USER_1.to_string(),
+            reward_info: {
+                RewardInfoResponseItem {
+                    bond_share: Uint128::from(58333u128),
+                    deposit_amount: Uint128::from(59999u128),
+                    deposit_time: 33448,
+                    staking_token: LP_TOKEN.to_string(),
+                    bond_amount: Uint128::from(74689u128),
+                }
+            }
         }
     );
 
