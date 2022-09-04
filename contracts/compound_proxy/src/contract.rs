@@ -328,7 +328,7 @@ pub fn provide_liquidity(
 }
 
 /// Calculate swap amount
-fn get_swap_amount(
+pub(crate) fn get_swap_amount(
     amount_a: Uint256,
     amount_b: Uint256,
     pool_a: Uint256,
@@ -343,7 +343,7 @@ fn get_swap_amount(
     let a = Uint256::from(commission_bps * commission_bps) * area_ax
         + Uint256::from(4u64 * (COMMISSION_DENOM - commission_bps) * COMMISSION_DENOM) * area_bx;
     let b = Uint256::from(commission_bps) * area_ax + area_ax.isqrt() * a.isqrt();
-    let result = b / Uint256::from(2u64 * COMMISSION_DENOM) / pool_bx - pool_a;
+    let result = (b / Uint256::from(2u64 * COMMISSION_DENOM) / pool_bx).saturating_sub(pool_a);
 
     result
         .try_into()
