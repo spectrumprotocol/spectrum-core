@@ -23,10 +23,9 @@ pub struct Config {
 
 pub const CONFIG: Item<Config> = Item::new("config");
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema)]
+#[derive(Serialize, Deserialize, Clone,Debug, PartialEq, JsonSchema)]
 pub struct State {
     pub total_bond_share: Uint128,
-    pub earning: Uint128,
 }
 
 pub const STATE: Item<State> = Item::new("state");

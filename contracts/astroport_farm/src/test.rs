@@ -1,7 +1,7 @@
 use crate::contract::{execute, instantiate, query};
 use crate::error::ContractError;
 use crate::mock_querier::{mock_dependencies, WasmMockQuerier};
-use crate::state::{Config};
+use crate::state::{Config, State};
 
 use astroport::asset::{Asset, AssetInfo};
 use astroport::generator::{
@@ -17,7 +17,7 @@ use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg, Expiration};
 use spectrum::adapters::generator::Generator;
 use spectrum::astroport_farm::{
     CallbackMsg, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg, RewardInfoResponse,
-    RewardInfoResponseItem, StateInfo,
+    RewardInfoResponseItem,
 };
 use spectrum::compound_proxy::{Compounder, ExecuteMsg as CompoundProxyExecuteMsg};
 
@@ -438,12 +438,11 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
 
     // query state
     let msg = QueryMsg::State {};
-    let res: StateInfo = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    let res: State = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
     assert_eq!(
         res,
-        StateInfo {
+        State {
             total_bond_share: Uint128::from(150000u128),
-            earning: Uint128::zero()
         }
     );
 
@@ -900,12 +899,11 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
 
     // query state
     let msg = QueryMsg::State {};
-    let res: StateInfo = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    let res: State = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
     assert_eq!(
         res,
-        StateInfo {
+        State {
             total_bond_share: Uint128::from(58333u128),
-            earning: Uint128::zero()
         }
     );
 

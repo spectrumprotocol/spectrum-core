@@ -152,15 +152,6 @@ pub struct RewardInfoResponseItem {
     pub deposit_time: u64,
 }
 
-/// This structure holds the detail for contract state
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
-pub struct StateInfo {
-    /// The total LP bond share
-    pub total_bond_share: Uint128,
-    /// The total earning from performance fee
-    pub earning: Uint128,
-}
-
 /// This structure describes a migration message.
 /// We currently take no arguments for migrations
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

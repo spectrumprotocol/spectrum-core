@@ -20,7 +20,6 @@ use crate::bond::{query_reward_info, unbond};
 use crate::state::STATE;
 use spectrum::astroport_farm::{
     CallbackMsg, InstantiateMsg, Cw20HookMsg, ExecuteMsg, MigrateMsg, QueryMsg,
-    StateInfo,
 };
 use spectrum::compound_proxy::Compounder;
 
@@ -63,7 +62,6 @@ pub fn instantiate(
     STATE.save(
         deps.storage,
         &State {
-            earning: Uint128::zero(),
             total_bond_share: Uint128::zero(),
         },
     )?;
@@ -237,12 +235,9 @@ fn query_config(deps: Deps) -> StdResult<Config> {
 
 /// ## Description
 /// Returns contract state
-fn query_state(deps: Deps) -> StdResult<StateInfo> {
+fn query_state(deps: Deps) -> StdResult<State> {
     let state = STATE.load(deps.storage)?;
-    Ok(StateInfo {
-        total_bond_share: state.total_bond_share,
-        earning: state.earning,
-    })
+    Ok(state)
 }
 
 /// ## Description
