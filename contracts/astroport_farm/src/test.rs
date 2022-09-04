@@ -699,6 +699,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
     let msg = ExecuteMsg::BondAssets {
         assets: assets.clone(),
         minimum_receive: Some(Uint128::from(10000u128)),
+        no_swap: None,
     };
 
     let res = execute(deps.as_mut(), env.clone(), info, msg.clone());
@@ -714,6 +715,61 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
             amount: Uint128::from(40000u128),
         }],
     );
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone())?;
+    assert_eq!(
+        res.messages
+            .into_iter()
+            .map(|it| it.msg)
+            .collect::<Vec<CosmosMsg>>(),
+        [
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: REWARD_TOKEN.to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
+                    owner: USER_1.to_string(),
+                    recipient: MOCK_CONTRACT_ADDR.to_string(),
+                    amount: Uint128::from(20000u128)
+                })?,
+                funds: vec![],
+            }),
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: REWARD_TOKEN.to_string(),
+                msg: to_binary(&Cw20ExecuteMsg::IncreaseAllowance {
+                    spender: COMPOUND_PROXY.to_string(),
+                    amount: Uint128::from(20000u128),
+                    expires: Some(Expiration::AtHeight(601))
+                })?,
+                funds: vec![],
+            }),
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: COMPOUND_PROXY.to_string(),
+                msg: to_binary(&CompoundProxyExecuteMsg::Compound {
+                    rewards: assets.clone(),
+                    to: None,
+                    no_swap: None,
+                })?,
+                funds: vec![Coin {
+                    denom: IBC_TOKEN.to_string(),
+                    amount: Uint128::from(40000u128),
+                }],
+            }),
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: MOCK_CONTRACT_ADDR.to_string(),
+                msg: to_binary(&ExecuteMsg::Callback(CallbackMsg::BondTo {
+                    to: Addr::unchecked(USER_1),
+                    prev_balance: Uint128::from(142u128),
+                    minimum_receive: Some(Uint128::from(10000u128)),
+                }))?,
+                funds: vec![],
+            }),
+        ]
+    );
+
+    let msg = ExecuteMsg::BondAssets {
+        assets: assets.clone(),
+        minimum_receive: Some(Uint128::from(10000u128)),
+        no_swap: Some(true),
+    };
+
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg)?;
     assert_eq!(
         res.messages
@@ -744,6 +800,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                 msg: to_binary(&CompoundProxyExecuteMsg::Compound {
                     rewards: assets,
                     to: None,
+                    no_swap: Some(true),
                 })?,
                 funds: vec![Coin {
                     denom: IBC_TOKEN.to_string(),
@@ -1134,6 +1191,7 @@ fn compound(
                         },
                     ],
                     to: None,
+                    no_swap: None,
                 })?,
                 funds: vec![],
             }),

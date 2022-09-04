@@ -103,7 +103,7 @@ pub fn compound(
     }
 
     if !compound_rewards.is_empty() {
-        let compound = config.compound_proxy.compound_msg(compound_rewards, compound_funds)?;
+        let compound = config.compound_proxy.compound_msg(compound_rewards, compound_funds, None)?;
         messages.push(compound);
 
         let prev_balance = query_token_balance(&deps.querier, staking_token, &env.contract.address)?;

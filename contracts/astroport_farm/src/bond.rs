@@ -22,6 +22,7 @@ pub fn bond_assets(
     info: MessageInfo,
     assets: Vec<Asset>,
     minimum_receive: Option<Uint128>,
+    no_swap: Option<bool>,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     let staking_token = config.liquidity_token;
@@ -44,7 +45,7 @@ pub fn bond_assets(
         }
     }
 
-    let compound = config.compound_proxy.compound_msg(assets, funds)?;
+    let compound = config.compound_proxy.compound_msg(assets, funds, no_swap)?;
     messages.push(compound);
 
     let prev_balance = query_token_balance(&deps.querier, staking_token, &env.contract.address)?;

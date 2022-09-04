@@ -16,6 +16,13 @@
             "rewards"
           ],
           "properties": {
+            "no_swap": {
+              "description": "Skip optimal swap",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "rewards": {
               "description": "List of reward asset send to compound",
               "type": "array",

@@ -80,13 +80,13 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::Compound { rewards, to } => {
+        ExecuteMsg::Compound { rewards, to, no_swap } => {
             let to_addr = if let Some(to_addr) = to {
                 Some(addr_validate_to_lower(deps.api, &to_addr)?)
             } else {
                 None
             };
-            compound(deps, env, info.clone(), info.sender, rewards, to_addr)
+            compound(deps, env, info.clone(), info.sender, rewards, to_addr, no_swap)
         }
         ExecuteMsg::Callback(msg) => handle_callback(deps, env, info, msg),
     }
@@ -102,8 +102,10 @@ pub fn compound(
     sender: Addr,
     rewards: Vec<Asset>,
     to: Option<Addr>,
+    no_swap: Option<bool>,
 ) -> Result<Response, ContractError> {
     let receiver = to.unwrap_or(sender);
+    let no_swap = no_swap.unwrap_or(false);
 
     let mut messages: Vec<CosmosMsg> = vec![];
 
@@ -118,7 +120,10 @@ pub fn compound(
         }
     }
 
-    messages.push(CallbackMsg::OptimalSwap {}.into_cosmos_msg(&env.contract.address)?);
+    if !no_swap {
+        messages.push(CallbackMsg::OptimalSwap {}.into_cosmos_msg(&env.contract.address)?);
+    }
+
     messages.push(
         CallbackMsg::ProvideLiquidity {
             receiver: receiver.to_string(),
