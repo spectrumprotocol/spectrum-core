@@ -70,7 +70,7 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::Collect { assets } => collect(deps, env, assets),
+        ExecuteMsg::Collect { assets } => collect(deps, env, info, assets),
         ExecuteMsg::UpdateBridges { add, remove } => update_bridges(deps, info, add, remove),
         ExecuteMsg::UpdateConfig {
             operator,
@@ -130,11 +130,15 @@ pub fn execute(
 fn collect(
     deps: DepsMut,
     env: Env,
+    info: MessageInfo,
     assets: Vec<AssetWithLimit>,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-
     let stablecoin = config.stablecoin.clone();
+
+    if info.sender != config.operator {
+        return Err(ContractError::Unauthorized {});
+    }
 
     // Check for duplicate assets
     let mut uniq = HashSet::new();
@@ -238,27 +242,27 @@ fn swap(
     let stablecoin = config.stablecoin.clone();
     let uluna = native_asset_info(ULUNA_DENOM.to_string());
 
-    // 2. Check if bridge tokens exist
+    // Check if bridge tokens exist
     let bridge_token = BRIDGES.load(deps.storage, from_token.to_string());
     if let Ok(asset) = bridge_token {
         let msg = try_build_swap_msg(&deps.querier, config, from_token, asset.clone(), amount_in)?;
         return Ok(SwapTarget::Bridge { asset, msg });
     }
 
-    // 4. Check for a pair with LUNA
+    // Check for a direct pair with stablecoin
+    let swap_to_stablecoin =
+        try_build_swap_msg(&deps.querier, config, from_token.clone(), stablecoin, amount_in);
+    if let Ok(msg) = swap_to_stablecoin {
+        return Ok(SwapTarget::Stable(msg));
+    }
+
+    // Check for a pair with LUNA
     if from_token.ne(&uluna) {
         let swap_to_uluna =
             try_build_swap_msg(&deps.querier, config, from_token.clone(), uluna.clone(), amount_in);
         if let Ok(msg) = swap_to_uluna {
             return Ok(SwapTarget::Bridge { asset: uluna, msg });
         }
-    }
-
-    // 5. Check for a direct pair with stablecoin
-    let swap_to_stablecoin =
-        try_build_swap_msg(&deps.querier, config, from_token.clone(), stablecoin, amount_in);
-    if let Ok(msg) = swap_to_stablecoin {
-        return Ok(SwapTarget::Stable(msg));
     }
 
     Err(ContractError::CannotSwap(from_token))
