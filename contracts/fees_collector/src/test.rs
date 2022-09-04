@@ -1,11 +1,15 @@
 use astroport::asset::{AssetInfo, PairInfo};
+use astroport::pair::{
+    Cw20HookMsg as AstroportPairCw20HookMsg,
+};
 use astroport::factory::PairType;
 use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
     from_binary, Addr, BankMsg, Coin, CosmosMsg, Decimal, OwnedDeps, Response, StdError, Timestamp,
-    Uint128,
+    Uint128, WasmMsg, to_binary,
 };
-use spectrum::fees_collector::{ExecuteMsg, InstantiateMsg, QueryMsg};
+use cw20::Cw20ExecuteMsg;
+use spectrum::fees_collector::{AssetWithLimit, ExecuteMsg, InstantiateMsg, QueryMsg};
 
 use crate::contract::{execute, instantiate, query};
 use crate::error::ContractError;
@@ -31,6 +35,7 @@ fn test() -> Result<(), ContractError> {
     config(&mut deps)?;
     owner(&mut deps)?;
     bridges(&mut deps)?;
+    collect(&mut deps)?;
     distribute_fees(&mut deps)?;
 
     Ok(())
@@ -333,7 +338,7 @@ fn bridges(
                     denom: IBC_TOKEN.to_string(),
                 },
             ],
-            contract_addr: Addr::unchecked("token1ibc"),
+            contract_addr: Addr::unchecked("token2ibc"),
             liquidity_token: Addr::unchecked("liquidity0002"),
             pair_type: PairType::Stable {},
         },
@@ -352,11 +357,9 @@ fn bridges(
 
     let msg = ExecuteMsg::UpdateBridges {
         add: None,
-        remove: Some(vec![
-            AssetInfo::Token {
-                contract_addr: Addr::unchecked(TOKEN_1),
-            }
-        ]),
+        remove: Some(vec![AssetInfo::Token {
+            contract_addr: Addr::unchecked(TOKEN_1),
+        }]),
     };
 
     let res = execute(deps.as_mut(), env.clone(), info, msg);
@@ -364,8 +367,153 @@ fn bridges(
 
     // query bridges
     let bridges: Vec<(String, String)> =
-    from_binary(&query(deps.as_ref(), env.clone(), QueryMsg::Bridges {}).unwrap()).unwrap();
+        from_binary(&query(deps.as_ref(), env.clone(), QueryMsg::Bridges {}).unwrap()).unwrap();
     assert!(bridges.is_empty());
+
+    Ok(())
+}
+
+fn collect(
+    deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>,
+) -> Result<(), ContractError> {
+    let env = mock_env();
+    
+    // update bridges
+    let info = mock_info(OPERATOR_1, &[]);
+    let msg = ExecuteMsg::UpdateBridges {
+        add: Some(vec![(
+            AssetInfo::Token {
+                contract_addr: Addr::unchecked(TOKEN_1),
+            },
+            AssetInfo::Token {
+                contract_addr: Addr::unchecked(TOKEN_2),
+            },
+        )]),
+        remove: None,
+    };
+    let res = execute(deps.as_mut(), env.clone(), info, msg);
+    assert!(res.is_ok());
+
+    let msg = ExecuteMsg::Collect {
+        assets: vec![AssetWithLimit {
+            info: AssetInfo::Token {
+                contract_addr: Addr::unchecked(TOKEN_1),
+            },
+            limit: None,
+        }],
+    };
+
+    let info = mock_info(USER_1, &[]);
+
+    // unauthorized check
+    let res = execute(deps.as_mut(), env.clone(), info, msg.clone());
+    assert_error(res, "Unauthorized");
+
+    // distribute fee only if no balance
+    let info = mock_info(OPERATOR_1, &[]);
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
+    assert_eq!(
+        res.messages
+            .into_iter()
+            .map(|it| it.msg)
+            .collect::<Vec<CosmosMsg>>(),
+        vec![
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: env.contract.address.to_string(),
+                funds: vec![],
+                msg: to_binary(&ExecuteMsg::DistributeFees {})?,
+            }),
+        ]
+    );
+
+    // set balance
+    deps.querier.set_balance(
+        TOKEN_1.to_string(),
+        MOCK_CONTRACT_ADDR.to_string(),
+        Uint128::from(1000000u128),
+    );
+
+    // collect success
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+    assert_eq!(
+        res.messages
+            .into_iter()
+            .map(|it| it.msg)
+            .collect::<Vec<CosmosMsg>>(),
+        vec![
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: TOKEN_1.to_string(),
+                funds: vec![],
+                msg: to_binary(&Cw20ExecuteMsg::Send {
+                    contract: "token1token2".to_string(),
+                    amount: Uint128::new(1000000u128),
+                    msg: to_binary(&AstroportPairCw20HookMsg::Swap {
+                        ask_asset_info: None,
+                        belief_price: None,
+                        max_spread: Some(Decimal::percent(1)),
+                        to: None,
+                    })?
+                })?,
+            }),
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: env.contract.address.to_string(),
+                funds: vec![],
+                msg: to_binary(&ExecuteMsg::SwapBridgeAssets { assets: vec![AssetInfo::Token { contract_addr: Addr::unchecked(TOKEN_2) }], depth: 0 })?,
+            }),
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: env.contract.address.to_string(),
+                funds: vec![],
+                msg: to_binary(&ExecuteMsg::DistributeFees {})?,
+            }),
+        ]
+    );
+
+    // set balance
+    deps.querier.set_balance(
+        TOKEN_2.to_string(),
+        MOCK_CONTRACT_ADDR.to_string(),
+        Uint128::from(2000000u128),
+    );
+
+    let msg = ExecuteMsg::Collect {
+        assets: vec![AssetWithLimit {
+            info: AssetInfo::Token {
+                contract_addr: Addr::unchecked(TOKEN_2),
+            },
+            limit: Some(Uint128::from(1500000u128)),
+        }],
+    };
+
+    // collect success
+    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    assert_eq!(
+        res.messages
+            .into_iter()
+            .map(|it| it.msg)
+            .collect::<Vec<CosmosMsg>>(),
+        vec![
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: TOKEN_2.to_string(),
+                funds: vec![],
+                msg: to_binary(&Cw20ExecuteMsg::Send {
+                    contract: "token2ibc".to_string(),
+                    amount: Uint128::new(1500000u128),
+                    msg: to_binary(&AstroportPairCw20HookMsg::Swap {
+                        ask_asset_info: None,
+                        belief_price: None,
+                        max_spread: Some(Decimal::percent(1)),
+                        to: None,
+                    })?
+                })?,
+            }),
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: env.contract.address.to_string(),
+                funds: vec![],
+                msg: to_binary(&ExecuteMsg::DistributeFees {})?,
+            }),
+        ]
+    );
+
 
     Ok(())
 }
