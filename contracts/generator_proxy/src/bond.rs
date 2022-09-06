@@ -31,7 +31,7 @@ pub fn execute_deposit(
             &info.sender,
             &astro_user_info
         )?;
-        messages.push(config.generator.claim_rewards_msg(vec![info.sender.to_string()])?);
+        messages.push(config.generator.withdraw_msg(info.sender.to_string(), Uint128::zero())?);
         messages.push(CallbackMsg::AfterBondClaimed {
             lp_token: info.sender.clone(),
             prev_balances,
@@ -68,7 +68,7 @@ pub fn execute_withdraw(
     )?;
 
     Ok(Response::new()
-        .add_message(config.generator.claim_rewards_msg(vec![lp_token.to_string()])?)
+        .add_message(config.generator.withdraw_msg(lp_token.to_string(), Uint128::zero())?)
         .add_message(CallbackMsg::AfterBondClaimed {
             lp_token: lp_token.clone(),
             prev_balances,
@@ -89,10 +89,12 @@ pub fn execute_claim_rewards(
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
 
-    let mut messages: Vec<CosmosMsg> = vec![
-        config.generator.claim_rewards_msg(lp_tokens.clone())?
-    ];
+    let mut messages: Vec<CosmosMsg> = vec![];
+
     for lp_token in lp_tokens {
+
+        messages.push(config.generator.withdraw_msg(lp_token.to_string(), Uint128::zero())?);
+
         let lp_token = addr_validate_to_lower(deps.api, &lp_token)?;
         let astro_user_info = config.generator.query_user_info(&deps.querier, &lp_token, &env.contract.address)?
             .ok_or_else(|| StdError::generic_err("UserInfo is not found"))?;
