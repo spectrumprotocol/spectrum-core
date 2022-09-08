@@ -54,8 +54,9 @@ pub fn compound(
     let mut rewards: Vec<Asset> = vec![];
     let mut compound_rewards: Vec<Asset> = vec![];
 
-    let claim_rewards = config.staking_contract.withdraw_msg(staking_token.to_string(), Uint128::zero())?;
-
+    let claim_rewards = config.staking_contract.claim_rewards_msg(
+        vec![staking_token.to_string()],
+    )?;
     messages.push(claim_rewards);
 
     rewards.push(
