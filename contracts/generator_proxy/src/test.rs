@@ -278,8 +278,9 @@ fn deposit(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Resul
         [
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: GENERATOR.to_string(),
-                msg: to_binary(&GeneratorExecuteMsg::ClaimRewards {
-                    lp_tokens: vec![LP_TOKEN.to_string()],
+                msg: to_binary(&GeneratorExecuteMsg::Withdraw { 
+                    lp_token: LP_TOKEN.to_string(),
+                    amount: Uint128::zero() 
                 })?,
                 funds: vec![],
             }),
@@ -483,8 +484,9 @@ fn claim_rewards(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) ->
         [
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: GENERATOR.to_string(),
-                msg: to_binary(&GeneratorExecuteMsg::ClaimRewards {
-                    lp_tokens: vec![LP_TOKEN.to_string()],
+                msg: to_binary(&GeneratorExecuteMsg::Withdraw { 
+                    lp_token: LP_TOKEN.to_string(),
+                    amount: Uint128::zero() 
                 })?,
                 funds: vec![],
             }),
@@ -648,8 +650,9 @@ fn withdraw(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Resu
         [
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: GENERATOR.to_string(),
-                msg: to_binary(&GeneratorExecuteMsg::ClaimRewards {
-                    lp_tokens: vec![LP_TOKEN.to_string()],
+                msg: to_binary(&GeneratorExecuteMsg::Withdraw { 
+                    lp_token: LP_TOKEN.to_string(),
+                    amount: Uint128::zero() 
                 })?,
                 funds: vec![],
             }),
