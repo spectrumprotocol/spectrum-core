@@ -16,6 +16,7 @@ use crate::model::{CallbackMsg, Config, Cw20HookMsg, ExecuteMsg, InstantiateMsg,
 
 const ASTRO_TOKEN: &str = "astro";
 const REWARD_TOKEN: &str = "reward";
+const REWARD_PROXY: &str = "reward_proxy";
 const USER1: &str = "user1";
 const USER2: &str = "user2";
 const USER3: &str = "user3";
@@ -239,11 +240,12 @@ fn deposit(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Resul
             }),
         ]);
     deps.querier.set_balance(GENERATOR.to_string(), LP_TOKEN.to_string(), Uint128::from(100u128));
+    deps.querier.set_reward_proxy(&Addr::unchecked(REWARD_PROXY), &Addr::unchecked(REWARD_TOKEN))?;
     deps.querier.set_user_info(&Addr::unchecked(LP_TOKEN), &Addr::unchecked(MOCK_CONTRACT_ADDR), &UserInfoV2 {
         amount: Uint128::from(100u128),
         reward_user_index: Decimal::zero(),
         reward_debt_proxy: RestrictedVector::from(vec![
-            (Addr::unchecked(REWARD_TOKEN), Uint128::zero()),
+            (Addr::unchecked(REWARD_PROXY), Uint128::zero()),
         ]),
         virtual_amount: Uint128::from(80u128),
     })?;
@@ -278,9 +280,9 @@ fn deposit(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Resul
         [
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: GENERATOR.to_string(),
-                msg: to_binary(&GeneratorExecuteMsg::Withdraw { 
+                msg: to_binary(&GeneratorExecuteMsg::Withdraw {
                     lp_token: LP_TOKEN.to_string(),
-                    amount: Uint128::zero() 
+                    amount: Uint128::zero()
                 })?,
                 funds: vec![],
             }),
@@ -311,7 +313,7 @@ fn deposit(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Resul
         amount: Uint128::from(100u128),
         reward_user_index: Decimal::permille(125),
         reward_debt_proxy: RestrictedVector::from(vec![
-            (Addr::unchecked(REWARD_TOKEN), Uint128::from(20u128)),
+            (Addr::unchecked(REWARD_PROXY), Uint128::from(20u128)),
         ]),
         virtual_amount: Uint128::from(80u128),
     })?;
@@ -452,7 +454,7 @@ fn claim_rewards(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) ->
         amount: Uint128::from(160u128),
         reward_user_index: Decimal::permille(125),
         reward_debt_proxy: RestrictedVector::from(vec![
-            (Addr::unchecked(REWARD_TOKEN), Uint128::zero())
+            (Addr::unchecked(REWARD_PROXY), Uint128::zero())
         ]),
         virtual_amount: Uint128::from(160u128),
     })?;
@@ -484,9 +486,9 @@ fn claim_rewards(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) ->
         [
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: GENERATOR.to_string(),
-                msg: to_binary(&GeneratorExecuteMsg::Withdraw { 
+                msg: to_binary(&GeneratorExecuteMsg::Withdraw {
                     lp_token: LP_TOKEN.to_string(),
-                    amount: Uint128::zero() 
+                    amount: Uint128::zero()
                 })?,
                 funds: vec![],
             }),
@@ -516,7 +518,7 @@ fn claim_rewards(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) ->
         amount: Uint128::from(160u128),
         reward_user_index: Decimal::permille(325),
         reward_debt_proxy: RestrictedVector::from(vec![
-            (Addr::unchecked(REWARD_TOKEN), Uint128::from(16u128))
+            (Addr::unchecked(REWARD_PROXY), Uint128::from(16u128))
         ]),
         virtual_amount: Uint128::from(160u128),
     })?;
@@ -650,9 +652,9 @@ fn withdraw(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Resu
         [
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: GENERATOR.to_string(),
-                msg: to_binary(&GeneratorExecuteMsg::Withdraw { 
+                msg: to_binary(&GeneratorExecuteMsg::Withdraw {
                     lp_token: LP_TOKEN.to_string(),
-                    amount: Uint128::zero() 
+                    amount: Uint128::zero()
                 })?,
                 funds: vec![],
             }),

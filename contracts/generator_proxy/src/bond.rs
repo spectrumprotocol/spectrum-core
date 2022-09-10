@@ -45,6 +45,7 @@ pub fn execute_deposit(
             staker_addr,
             amount,
         }.to_cosmos_msg(&env.contract.address)?)
+        .add_attribute("action", "deposit")
     )
 }
 
@@ -78,6 +79,7 @@ pub fn execute_withdraw(
             staker_addr: info.sender,
             amount,
         }.to_cosmos_msg(&env.contract.address)?)
+        .add_attribute("action", "withdraw")
     )
 }
 
@@ -117,6 +119,7 @@ pub fn execute_claim_rewards(
 
     Ok(Response::new()
         .add_messages(messages)
+        .add_attribute("action", "claim_rewards")
     )
 }
 
