@@ -6,7 +6,7 @@ use cw_storage_plus::Map;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use astroport::asset::token_asset;
+use astroport::asset::{AssetInfo, token_asset, token_asset_info};
 use astroport::generator::{PendingTokenResponse, UserInfoV2};
 use astroport_governance::voting_escrow::{LockInfoResponse, VotingPowerResponse};
 use crate::astro_gov::Lock;
@@ -26,6 +26,7 @@ const ASTRO_TOKEN: &str = "astro";
 const REWARD_TOKEN: &str = "reward";
 const GENERATOR: &str = "generator";
 const USER_INFO: Map<(&Addr, &Addr), UserInfoV2> = Map::new("user_info");
+const PROXY_REWARD_ASSET: Map<&Addr, AssetInfo> = Map::new("proxy_reward_asset");
 const LOCK: Map<Addr, Lock> = Map::new("locked");
 const REWARDS_PER_WEEK: Map<u64, Uint128> = Map::new("rewards_per_week");
 const LAST_CLAIM_PERIOD: Map<Addr, u64> = Map::new("last_claim_period");
@@ -53,6 +54,13 @@ impl WasmMockQuerier {
     pub fn set_user_info(&mut self, lp_token: &Addr, user: &Addr, user_info: &UserInfoV2) -> StdResult<()> {
         let key = Binary::from(USER_INFO.key((lp_token, user)).deref());
         self.raw.insert((GENERATOR.to_string(), key), to_binary(user_info)?);
+
+        Ok(())
+    }
+
+    pub fn set_reward_proxy(&mut self, proxy_addr: &Addr, token: &Addr) -> StdResult<()> {
+        let key = Binary::from(PROXY_REWARD_ASSET.key(proxy_addr).deref());
+        self.raw.insert((GENERATOR.to_string(), key), to_binary(&token_asset_info(token.clone()))?);
 
         Ok(())
     }
