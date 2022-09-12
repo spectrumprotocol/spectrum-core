@@ -305,16 +305,18 @@ pub fn provide_liquidity(
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut funds: Vec<Coin> = vec![];
     for asset in assets.iter() {
-        if asset.is_native_token() {
-            funds.push(Coin {
-                denom: asset.info.to_string(),
-                amount: asset.amount,
-            });
-        } else {
-            messages.push(asset.increase_allowance_msg(
-                pair_contract.to_string(),
-                Some(Expiration::AtHeight(env.block.height + 1)),
-            )?);
+        if !asset.amount.is_zero() {
+            if asset.is_native_token() {
+                funds.push(Coin {
+                    denom: asset.info.to_string(),
+                    amount: asset.amount,
+                });
+            } else {
+                messages.push(asset.increase_allowance_msg(
+                    pair_contract.to_string(),
+                    Some(Expiration::AtHeight(env.block.height + 1)),
+                )?);
+            }
         }
     }
 
