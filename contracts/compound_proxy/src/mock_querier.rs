@@ -93,8 +93,7 @@ impl WasmMockQuerier {
                         ),
                         _ => panic!("DO NOT ENTER HERE"),
                     }
-                }
-                else if contract_addr == "pair_contract" {
+                } else if contract_addr == "pair_contract" {
                     match from_binary(&msg).unwrap() {
                         Pair { .. } => SystemResult::Ok(
                             to_binary(&PairInfo {
@@ -104,7 +103,7 @@ impl WasmMockQuerier {
                                     },
                                     {
                                         AssetInfo::NativeToken { denom: "uluna".to_string() }
-                                    }
+                                    },
                                 ],
                                 contract_addr: Addr::unchecked("pair_contract"),
                                 liquidity_token: Addr::unchecked("liquidity_token"),
@@ -114,8 +113,27 @@ impl WasmMockQuerier {
                         ),
                         _ => panic!("DO NOT ENTER HERE"),
                     }
-                }
-                else {
+                } else if contract_addr == "pair_contract_2" {
+                    match from_binary(&msg).unwrap() {
+                        Pair { .. } => SystemResult::Ok(
+                            to_binary(&PairInfo {
+                                asset_infos: vec![
+                                    {
+                                        AssetInfo::NativeToken { denom: "uluna".to_string() }
+                                    },
+                                    {
+                                        AssetInfo::NativeToken { denom: "ibc/B3504E092456BA618CC28AC671A71FB08C6CA0FD0BE7C8A5B5A3E2DD933CC9E4".to_string() }
+                                    }
+                                ],
+                                contract_addr: Addr::unchecked("pair_contract_2"),
+                                liquidity_token: Addr::unchecked("liquidity_token"),
+                                pair_type: astroport::factory::PairType::Xyk {  },
+                            })
+                                .into(),
+                        ),
+                        _ => panic!("DO NOT ENTER HERE"),
+                    }
+                } else {
                     match from_binary(&msg).unwrap() {
                         Cw20QueryMsg::TokenInfo {} => {
                             let balances: &HashMap<String, Uint128> =
