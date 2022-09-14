@@ -32,16 +32,18 @@ pub fn bond_assets(
 
     for asset in assets.iter() {
         asset.deposit_asset(&info, &env.contract.address, &mut messages)?;
-        if asset.is_native_token() {
-            funds.push(Coin {
-                denom: asset.info.to_string(),
-                amount: asset.amount,
-            });
-        } else {
-            messages.push(asset.increase_allowance_msg(
-                config.compound_proxy.0.to_string(),
-                Some(Expiration::AtHeight(env.block.height + 1)),
-            )?);
+        if !asset.amount.is_zero() {
+            if asset.is_native_token() {
+                funds.push(Coin {
+                    denom: asset.info.to_string(),
+                    amount: asset.amount,
+                });
+            } else {
+                messages.push(asset.increase_allowance_msg(
+                    config.compound_proxy.0.to_string(),
+                    Some(Expiration::AtHeight(env.block.height + 1)),
+                )?);
+            }
         }
     }
 
