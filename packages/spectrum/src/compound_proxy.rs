@@ -95,7 +95,8 @@ pub struct MigrateMsg {}
 pub struct Compounder(pub Addr);
 
 impl Compounder {
-    pub fn compound_msg(&self, rewards: Vec<Asset>, funds: Vec<Coin>, no_swap: Option<bool>) -> StdResult<CosmosMsg> {
+    pub fn compound_msg(&self, rewards: Vec<Asset>, mut funds: Vec<Coin>, no_swap: Option<bool>) -> StdResult<CosmosMsg> {
+        funds.sort_by(|a, b| a.denom.cmp(&b.denom));
         Ok(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: self.0.to_string(),
             msg: to_binary(&ExecuteMsg::Compound {
