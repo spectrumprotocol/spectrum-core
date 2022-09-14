@@ -1,7 +1,7 @@
 use astroport::{
     asset::{Asset},
 };
-use cosmwasm_std::{attr, Attribute, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, Uint128};
+use cosmwasm_std::{attr, Attribute, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, Uint128, Decimal};
 
 use crate::{
     error::ContractError,
@@ -23,6 +23,7 @@ pub fn compound(
     env: Env,
     info: MessageInfo,
     minimum_receive: Option<Uint128>,
+    slippage_tolerance: Option<Decimal>,
 ) -> Result<Response, ContractError> {
 
     let config = CONFIG.load(deps.storage)?;
@@ -103,7 +104,7 @@ pub fn compound(
     }
 
     if !compound_rewards.is_empty() {
-        let compound = config.compound_proxy.compound_msg(compound_rewards, compound_funds, None)?;
+        let compound = config.compound_proxy.compound_msg(compound_rewards, compound_funds, None, slippage_tolerance)?;
         messages.push(compound);
 
         let prev_balance = query_token_balance(&deps.querier, staking_token, &env.contract.address)?;

@@ -1,4 +1,4 @@
-use astroport::asset::{Asset, AssetInfo, PairInfo};
+use astroport::asset::{Asset, AssetInfo, PairInfo, native_asset, token_asset};
 use astroport::pair::{
     Cw20HookMsg as AstroportPairCw20HookMsg, ExecuteMsg as AstroportPairExecuteMsg,
 };
@@ -108,6 +108,7 @@ fn compound() -> Result<(), ContractError> {
         }],
         to: None,
         no_swap: None,
+        slippage_tolerance: None,
     };
 
     let env = mock_env();
@@ -138,12 +139,31 @@ fn compound() -> Result<(), ContractError> {
                 funds: vec![],
                 msg: to_binary(&ExecuteMsg::Callback {
                     0: CallbackMsg::ProvideLiquidity {
-                        receiver: "addr0000".to_string()
+                        prev_balances: vec![
+                            token_asset(Addr::unchecked("token"), Uint128::zero()),
+                            native_asset("uluna".to_string(), Uint128::zero())
+                        ],
+                        receiver: "addr0000".to_string(),
+                        slippage_tolerance: None,
                     }
                 })?,
             }),
         ]
     );
+
+    deps.querier.with_balance(&[(
+        &String::from(MOCK_CONTRACT_ADDR),
+        &[Coin {
+            denom: "uluna".to_string(),
+            amount: Uint128::new(8),
+        }],
+    )]);
+    deps.querier.with_token_balances(&[(
+        &String::from("token"),
+        &[
+            (&String::from(MOCK_CONTRACT_ADDR), &Uint128::new(9)),
+        ],
+    )]);
 
     let msg = ExecuteMsg::Compound {
         rewards: vec![Asset {
@@ -154,6 +174,7 @@ fn compound() -> Result<(), ContractError> {
         }],
         to: None,
         no_swap: Some(true),
+        slippage_tolerance: Some(Decimal::percent(2)),
     };
     let res = execute(deps.as_mut(), env.clone(), info, msg)?;
     assert_eq!(
@@ -167,7 +188,12 @@ fn compound() -> Result<(), ContractError> {
                 funds: vec![],
                 msg: to_binary(&ExecuteMsg::Callback {
                     0: CallbackMsg::ProvideLiquidity {
-                        receiver: "addr0000".to_string()
+                        prev_balances: vec![
+                            token_asset(Addr::unchecked("token"), Uint128::from(9u128)),
+                            native_asset("uluna".to_string(), Uint128::from(8u128))
+                        ],
+                        receiver: "addr0000".to_string(),
+                        slippage_tolerance: Some(Decimal::percent(2))
                     }
                 })?,
             }),
@@ -265,11 +291,11 @@ fn provide_liquidity() -> Result<(), ContractError> {
             &[
                 Coin {
                     denom: "uluna".to_string(),
-                    amount: Uint128::new(1000000),
+                    amount: Uint128::new(1000001),
                 },
                 Coin {
                     denom: "ibc/B3504E092456BA618CC28AC671A71FB08C6CA0FD0BE7C8A5B5A3E2DD933CC9E4".to_string(),
-                    amount: Uint128::new(2000000),
+                    amount: Uint128::new(2000002),
                 },
             ],
         ),
@@ -291,6 +317,11 @@ fn provide_liquidity() -> Result<(), ContractError> {
 
     let msg = ExecuteMsg::Callback(CallbackMsg::ProvideLiquidity {
         receiver: "sender".to_string(),
+        prev_balances: vec![
+            native_asset("ibc/B3504E092456BA618CC28AC671A71FB08C6CA0FD0BE7C8A5B5A3E2DD933CC9E4".to_string(), Uint128::new(2)),
+            native_asset("uluna".to_string(), Uint128::new(1)),
+        ],
+        slippage_tolerance: None,
     });
 
     let res = execute(deps.as_mut(), env.clone(), info, msg.clone());

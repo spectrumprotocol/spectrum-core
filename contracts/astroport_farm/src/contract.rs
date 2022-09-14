@@ -19,7 +19,7 @@ use spectrum::adapters::generator::Generator;
 use crate::bond::{query_reward_info, unbond};
 use crate::state::STATE;
 use spectrum::astroport_farm::{
-    CallbackMsg, InstantiateMsg, Cw20HookMsg, ExecuteMsg, MigrateMsg, QueryMsg,
+    CallbackMsg, Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg,
 };
 use spectrum::compound_proxy::Compounder;
 
@@ -85,17 +85,26 @@ pub fn execute(
             controller,
             fee,
             fee_collector,
-        } => update_config(
-            deps,
-            info,
-            compound_proxy,
-            controller,
-            fee,
-            fee_collector,
-        ),
+        } => update_config(deps, info, compound_proxy, controller, fee, fee_collector),
         ExecuteMsg::Unbond { amount } => unbond(deps, env, info, amount),
-        ExecuteMsg::BondAssets { assets, minimum_receive, no_swap} => bond_assets(deps, env, info, assets, minimum_receive, no_swap),
-        ExecuteMsg::Compound { minimum_receive } => compound(deps, env, info, minimum_receive),
+        ExecuteMsg::BondAssets {
+            assets,
+            minimum_receive,
+            no_swap,
+            slippage_tolerance,
+        } => bond_assets(
+            deps,
+            env,
+            info,
+            assets,
+            minimum_receive,
+            no_swap,
+            slippage_tolerance,
+        ),
+        ExecuteMsg::Compound {
+            minimum_receive,
+            slippage_tolerance,
+        } => compound(deps, env, info, minimum_receive, slippage_tolerance),
         ExecuteMsg::ProposeNewOwner { owner, expires_in } => {
             let config: Config = CONFIG.load(deps.storage)?;
 
@@ -209,7 +218,11 @@ pub fn handle_callback(
             prev_balance,
             minimum_receive,
         } => stake(deps, env, info, prev_balance, minimum_receive),
-        CallbackMsg::BondTo { to, prev_balance, minimum_receive } => bond_to(deps, env, info, to, prev_balance, minimum_receive),
+        CallbackMsg::BondTo {
+            to,
+            prev_balance,
+            minimum_receive,
+        } => bond_to(deps, env, info, to, prev_balance, minimum_receive),
     }
 }
 

@@ -2,7 +2,7 @@ use astroport::asset::{addr_validate_to_lower, Asset, token_asset};
 use astroport::querier::query_token_balance;
 use cosmwasm_std::{
     attr, Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
-    Uint128, Coin,
+    Uint128, Coin, Decimal,
 };
 
 use crate::error::ContractError;
@@ -23,6 +23,7 @@ pub fn bond_assets(
     assets: Vec<Asset>,
     minimum_receive: Option<Uint128>,
     no_swap: Option<bool>,
+    slippage_tolerance: Option<Decimal>,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     let staking_token = config.liquidity_token;
@@ -47,7 +48,7 @@ pub fn bond_assets(
         }
     }
 
-    let compound = config.compound_proxy.compound_msg(assets, funds, no_swap)?;
+    let compound = config.compound_proxy.compound_msg(assets, funds, no_swap, slippage_tolerance)?;
     messages.push(compound);
 
     let prev_balance = query_token_balance(&deps.querier, staking_token, &env.contract.address)?;

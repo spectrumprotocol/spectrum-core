@@ -30,6 +30,8 @@ pub enum ExecuteMsg {
         to: Option<String>,
         /// Skip optimal swap
         no_swap: Option<bool>, 
+        /// slippage tolerance when providing LP
+        slippage_tolerance: Option<Decimal>,
     },
     /// The callback of type [`CallbackMsg`]
     Callback(CallbackMsg),
@@ -43,7 +45,9 @@ pub enum CallbackMsg {
     OptimalSwap {},
     /// Provides liquidity to the pair contract
     ProvideLiquidity {
+        prev_balances: Vec<Asset>,
         receiver: String,
+        slippage_tolerance: Option<Decimal>,
     },
 }
 
@@ -95,7 +99,7 @@ pub struct MigrateMsg {}
 pub struct Compounder(pub Addr);
 
 impl Compounder {
-    pub fn compound_msg(&self, rewards: Vec<Asset>, mut funds: Vec<Coin>, no_swap: Option<bool>) -> StdResult<CosmosMsg> {
+    pub fn compound_msg(&self, rewards: Vec<Asset>, mut funds: Vec<Coin>, no_swap: Option<bool>, slippage_tolerance: Option<Decimal>) -> StdResult<CosmosMsg> {
         funds.sort_by(|a, b| a.denom.cmp(&b.denom));
         Ok(CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: self.0.to_string(),
@@ -103,6 +107,7 @@ impl Compounder {
                 rewards,
                 no_swap,
                 to: None,
+                slippage_tolerance,
             })?,
             funds,
         }))
