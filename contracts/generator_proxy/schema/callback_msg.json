@@ -5,17 +5,34 @@
     {
       "type": "object",
       "required": [
-        "after_claimed"
+        "after_bond_claimed"
       ],
       "properties": {
-        "after_claimed": {
+        "after_bond_claimed": {
           "type": "object",
           "required": [
-            "lp_token"
+            "lp_token",
+            "prev_balances"
           ],
           "properties": {
             "lp_token": {
               "$ref": "#/definitions/Addr"
+            },
+            "prev_balances": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": [
+                  {
+                    "$ref": "#/definitions/Addr"
+                  },
+                  {
+                    "$ref": "#/definitions/Uint128"
+                  }
+                ],
+                "maxItems": 2,
+                "minItems": 2
+              }
             }
           }
         }
@@ -116,6 +133,26 @@
             },
             "staker_addr": {
               "$ref": "#/definitions/Addr"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "after_staking_claimed"
+      ],
+      "properties": {
+        "after_staking_claimed": {
+          "type": "object",
+          "required": [
+            "prev_balance"
+          ],
+          "properties": {
+            "prev_balance": {
+              "$ref": "#/definitions/Uint128"
             }
           }
         }

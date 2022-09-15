@@ -109,6 +109,17 @@
                   "type": "null"
                 }
               ]
+            },
+            "slippage_tolerance": {
+              "description": "Slippage tolerance when providing LP",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Decimal"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           }
         }
@@ -151,6 +162,17 @@
               "type": [
                 "boolean",
                 "null"
+              ]
+            },
+            "slippage_tolerance": {
+              "description": "Slippage tolerance when providing LP",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Decimal"
+                },
+                {
+                  "type": "null"
+                }
               ]
             }
           }

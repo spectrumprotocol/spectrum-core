@@ -91,6 +91,53 @@
       "additionalProperties": false
     },
     {
+      "type": "object",
+      "required": [
+        "controller_vote"
+      ],
+      "properties": {
+        "controller_vote": {
+          "type": "object",
+          "required": [
+            "votes"
+          ],
+          "properties": {
+            "votes": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer",
+                    "format": "uint16",
+                    "minimum": 0.0
+                  }
+                ],
+                "maxItems": 2,
+                "minItems": 2
+              }
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "send_income"
+      ],
+      "properties": {
+        "send_income": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
       "description": "Update rewards and return it to user.",
       "type": "object",
       "required": [
@@ -200,6 +247,74 @@
         }
       },
       "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "relock"
+      ],
+      "properties": {
+        "relock": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "request_unstake"
+      ],
+      "properties": {
+        "request_unstake": {
+          "type": "object",
+          "required": [
+            "amount"
+          ],
+          "properties": {
+            "amount": {
+              "$ref": "#/definitions/Uint128"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "withdraw_unstaked"
+      ],
+      "properties": {
+        "withdraw_unstaked": {
+          "type": "object",
+          "properties": {
+            "amount": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Uint128"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "claim_income"
+      ],
+      "properties": {
+        "claim_income": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
     }
   ],
   "definitions": {
@@ -216,17 +331,34 @@
         {
           "type": "object",
           "required": [
-            "after_claimed"
+            "after_bond_claimed"
           ],
           "properties": {
-            "after_claimed": {
+            "after_bond_claimed": {
               "type": "object",
               "required": [
-                "lp_token"
+                "lp_token",
+                "prev_balances"
               ],
               "properties": {
                 "lp_token": {
                   "$ref": "#/definitions/Addr"
+                },
+                "prev_balances": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": [
+                      {
+                        "$ref": "#/definitions/Addr"
+                      },
+                      {
+                        "$ref": "#/definitions/Uint128"
+                      }
+                    ],
+                    "maxItems": 2,
+                    "minItems": 2
+                  }
                 }
               }
             }
@@ -327,6 +459,26 @@
                 },
                 "staker_addr": {
                   "$ref": "#/definitions/Addr"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "after_staking_claimed"
+          ],
+          "properties": {
+            "after_staking_claimed": {
+              "type": "object",
+              "required": [
+                "prev_balance"
+              ],
+              "properties": {
+                "prev_balance": {
+                  "$ref": "#/definitions/Uint128"
                 }
               }
             }

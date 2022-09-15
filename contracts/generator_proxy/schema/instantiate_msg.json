@@ -3,6 +3,7 @@
   "title": "InstantiateMsg",
   "type": "object",
   "required": [
+    "astro_gov",
     "astro_token",
     "boost_fee",
     "controller",
@@ -13,6 +14,9 @@
     "staker_rate"
   ],
   "properties": {
+    "astro_gov": {
+      "$ref": "#/definitions/AstroGovBase_for_String"
+    },
     "astro_token": {
       "type": "string"
     },
@@ -39,6 +43,29 @@
     }
   },
   "definitions": {
+    "AstroGovBase_for_String": {
+      "type": "object",
+      "required": [
+        "fee_distributor",
+        "generator_controller",
+        "voting_escrow",
+        "xastro_token"
+      ],
+      "properties": {
+        "fee_distributor": {
+          "type": "string"
+        },
+        "generator_controller": {
+          "type": "string"
+        },
+        "voting_escrow": {
+          "type": "string"
+        },
+        "xastro_token": {
+          "type": "string"
+        }
+      }
+    },
     "Decimal": {
       "description": "A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0\n\nThe greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)",
       "type": "string"

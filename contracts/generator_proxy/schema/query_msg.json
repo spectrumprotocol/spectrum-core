@@ -81,18 +81,6 @@
     {
       "type": "object",
       "required": [
-        "state"
-      ],
-      "properties": {
-        "state": {
-          "type": "object"
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "required": [
         "pending_token"
       ],
       "properties": {
@@ -130,6 +118,38 @@
             "lp_token": {
               "type": "string"
             },
+            "user": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "staking_state"
+      ],
+      "properties": {
+        "staking_state": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "staker_info"
+      ],
+      "properties": {
+        "staker_info": {
+          "type": "object",
+          "required": [
+            "user"
+          ],
+          "properties": {
             "user": {
               "type": "string"
             }
