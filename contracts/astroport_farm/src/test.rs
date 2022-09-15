@@ -699,6 +699,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
         assets: assets.clone(),
         minimum_receive: Some(Uint128::from(10000u128)),
         no_swap: None,
+        slippage_tolerance: Some(Decimal::percent(2)),
     };
 
     let res = execute(deps.as_mut(), env.clone(), info, msg.clone());
@@ -745,6 +746,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                     rewards: assets.clone(),
                     to: None,
                     no_swap: None,
+                    slippage_tolerance: Some(Decimal::percent(2)),
                 })?,
                 funds: vec![Coin {
                     denom: IBC_TOKEN.to_string(),
@@ -767,6 +769,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
         assets: assets.clone(),
         minimum_receive: Some(Uint128::from(10000u128)),
         no_swap: Some(true),
+        slippage_tolerance: None,
     };
 
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg)?;
@@ -800,6 +803,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                     rewards: assets,
                     to: None,
                     no_swap: Some(true),
+                    slippage_tolerance: None,
                 })?,
                 funds: vec![Coin {
                     denom: IBC_TOKEN.to_string(),
@@ -1118,6 +1122,7 @@ fn compound(
     let info = mock_info(USER_1, &[]);
     let msg = ExecuteMsg::Compound {
         minimum_receive: Some(Uint128::from(29900u128)),
+        slippage_tolerance: Some(Decimal::percent(3)),
     };
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
     assert_error(res, "Unauthorized");
@@ -1190,6 +1195,7 @@ fn compound(
                     ],
                     to: None,
                     no_swap: None,
+                    slippage_tolerance: Some(Decimal::percent(3)),
                 })?,
                 funds: vec![],
             }),

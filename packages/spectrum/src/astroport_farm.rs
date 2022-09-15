@@ -51,6 +51,8 @@ pub enum ExecuteMsg {
     Compound {
         /// The minimum expected amount of LP token
         minimum_receive: Option<Uint128>,
+        /// Slippage tolerance when providing LP
+        slippage_tolerance: Option<Decimal>,
     },
     /// Bond asset with optimal swap
     BondAssets {
@@ -59,7 +61,9 @@ pub enum ExecuteMsg {
         /// The minimum expected amount of LP token
         minimum_receive: Option<Uint128>,
         /// The flag to skip optimal swap
-        no_swap: Option<bool>
+        no_swap: Option<bool>,
+        /// Slippage tolerance when providing LP
+        slippage_tolerance: Option<Decimal>,
     },
     /// Creates a request to change the contract's ownership
     ProposeNewOwner {

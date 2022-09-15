@@ -1,6 +1,7 @@
 use crate::error::ContractError;
 use crate::simulation::query_compound_simulation;
 use crate::state::{Config, CONFIG, PAIR_PROXY};
+use std::collections::HashMap;
 use std::convert::TryInto;
 
 use astroport::factory::PairType;
@@ -11,7 +12,7 @@ use cosmwasm_std::{
 use cw20::Expiration;
 use spectrum::compound_proxy::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 
-use astroport::asset::{addr_validate_to_lower, Asset};
+use astroport::asset::{addr_validate_to_lower, Asset, AssetInfoExt};
 use spectrum::adapters::asset::AssetEx;
 use spectrum::adapters::pair::Pair;
 
@@ -80,13 +81,13 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::Compound { rewards, to, no_swap } => {
+        ExecuteMsg::Compound { rewards, to, no_swap, slippage_tolerance } => {
             let to_addr = if let Some(to_addr) = to {
                 Some(addr_validate_to_lower(deps.api, &to_addr)?)
             } else {
                 None
             };
-            compound(deps, env, info.clone(), info.sender, rewards, to_addr, no_swap)
+            compound(deps, env, info.clone(), info.sender, rewards, to_addr, no_swap, slippage_tolerance)
         }
         ExecuteMsg::Callback(msg) => handle_callback(deps, env, info, msg),
     }
@@ -103,6 +104,7 @@ pub fn compound(
     rewards: Vec<Asset>,
     to: Option<Addr>,
     no_swap: Option<bool>,
+    slippage_tolerance: Option<Decimal>
 ) -> Result<Response, ContractError> {
     let receiver = to.unwrap_or(sender);
     let no_swap = no_swap.unwrap_or(false);
@@ -124,8 +126,13 @@ pub fn compound(
         messages.push(CallbackMsg::OptimalSwap {}.into_cosmos_msg(&env.contract.address)?);
     }
 
+    let config = CONFIG.load(deps.storage)?;
+    let assets = config.pair_info.query_pools(&deps.querier, env.contract.address.clone())?;
+
     messages.push(
         CallbackMsg::ProvideLiquidity {
+            prev_balances: assets,
+            slippage_tolerance,
             receiver: receiver.to_string(),
         }
         .into_cosmos_msg(&env.contract.address)?,
@@ -150,7 +157,7 @@ pub fn handle_callback(
     }
     match msg {
         CallbackMsg::OptimalSwap {} => optimal_swap(deps, env, info),
-        CallbackMsg::ProvideLiquidity { receiver } => provide_liquidity(deps, env, info, receiver),
+        CallbackMsg::ProvideLiquidity { prev_balances, slippage_tolerance, receiver } => provide_liquidity(deps, env, info, prev_balances, receiver, slippage_tolerance),
     }
 }
 
@@ -292,7 +299,9 @@ pub fn provide_liquidity(
     deps: DepsMut,
     env: Env,
     _info: MessageInfo,
+    prev_balances: Vec<Asset>,
     receiver: String,
+    slippage_tolerance: Option<Decimal>,
 ) -> Result<Response, ContractError> {
     let config: Config = CONFIG.load(deps.storage)?;
 
@@ -302,17 +311,25 @@ pub fn provide_liquidity(
         .pair_info
         .query_pools(&deps.querier, env.contract.address)?;
 
+    let prev_balance_map: HashMap<_, _>  = prev_balances.into_iter().map(|a| (a.info, a.amount)).collect();
+
     let mut messages: Vec<CosmosMsg> = vec![];
+    let mut provide_assets: Vec<Asset> = vec![];
     let mut funds: Vec<Coin> = vec![];
     for asset in assets.iter() {
-        if !asset.amount.is_zero() {
+        let prev_balance = *prev_balance_map.get(&asset.info).unwrap_or(&Uint128::zero());
+        let amount = asset.amount.checked_sub(prev_balance)?;
+        let provide_asset = asset.info.with_balance(amount);
+        provide_assets.push(provide_asset.clone());
+
+        if !provide_asset.amount.is_zero() {
             if asset.is_native_token() {
                 funds.push(Coin {
-                    denom: asset.info.to_string(),
-                    amount: asset.amount,
+                    denom: provide_asset.info.to_string(),
+                    amount: provide_asset.amount,
                 });
             } else {
-                messages.push(asset.increase_allowance_msg(
+                messages.push(provide_asset.increase_allowance_msg(
                     pair_contract.to_string(),
                     Some(Expiration::AtHeight(env.block.height + 1)),
                 )?);
@@ -321,8 +338,8 @@ pub fn provide_liquidity(
     }
 
     let provide_liquidity = Pair(pair_contract).provide_liquidity_msg(
-        assets,
-        Some(config.slippage_tolerance),
+        provide_assets,
+        Some(slippage_tolerance.unwrap_or(config.slippage_tolerance)),
         Some(receiver.to_string()),
         funds,
     )?;
