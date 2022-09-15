@@ -317,12 +317,12 @@ pub fn provide_liquidity(
     let mut provide_assets: Vec<Asset> = vec![];
     let mut funds: Vec<Coin> = vec![];
     for asset in assets.iter() {
-        if !asset.amount.is_zero() {
-            let prev_balance = *prev_balance_map.get(&asset.info).unwrap_or(&Uint128::zero());
-            let amount = asset.amount.checked_sub(prev_balance)?;
-            let provide_asset = asset.info.with_balance(amount);
-            provide_assets.push(provide_asset.clone());
-            
+        let prev_balance = *prev_balance_map.get(&asset.info).unwrap_or(&Uint128::zero());
+        let amount = asset.amount.checked_sub(prev_balance)?;
+        let provide_asset = asset.info.with_balance(amount);
+        provide_assets.push(provide_asset.clone());
+
+        if !provide_asset.amount.is_zero() {
             if asset.is_native_token() {
                 funds.push(Coin {
                     denom: provide_asset.info.to_string(),

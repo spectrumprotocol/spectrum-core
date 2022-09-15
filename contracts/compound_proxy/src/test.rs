@@ -328,8 +328,7 @@ fn provide_liquidity() -> Result<(), ContractError> {
     assert_eq!(res, Err(ContractError::Unauthorized {}));
 
     let info = mock_info(env.contract.address.as_str(), &[]);
-    let res = execute(deps.as_mut(), env, info, msg)?;
-
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone())?;
     assert_eq!(
         res.messages
             .into_iter()
@@ -355,6 +354,70 @@ fn provide_liquidity() -> Result<(), ContractError> {
                                 denom: "ibc/B3504E092456BA618CC28AC671A71FB08C6CA0FD0BE7C8A5B5A3E2DD933CC9E4".to_string(),
                             },
                             amount: Uint128::from(2000000u128),
+                        },
+                    ],
+                    slippage_tolerance: Some(Decimal::percent(1)),
+                    auto_stake: None,
+                    receiver: Some("sender".to_string()),
+                })?,
+            }),
+        ]
+    );
+
+    deps.querier.with_balance(&[
+        (
+            &String::from("pair_contract_2"),
+            &[
+                Coin {
+                    denom: "uluna".to_string(),
+                    amount: Uint128::new(1000000000),
+                },
+                Coin {
+                    denom: "ibc/B3504E092456BA618CC28AC671A71FB08C6CA0FD0BE7C8A5B5A3E2DD933CC9E4".to_string(),
+                    amount: Uint128::new(1000000000),
+                },
+            ],
+        ),
+        (
+            &String::from(MOCK_CONTRACT_ADDR),
+            &[
+                Coin {
+                    denom: "uluna".to_string(),
+                    amount: Uint128::new(1000001),
+                },
+                Coin {
+                    denom: "ibc/B3504E092456BA618CC28AC671A71FB08C6CA0FD0BE7C8A5B5A3E2DD933CC9E4".to_string(),
+                    amount: Uint128::new(2),
+                },
+            ],
+        ),
+    ]);
+
+    let res = execute(deps.as_mut(), env, info, msg)?;
+    assert_eq!(
+        res.messages
+            .into_iter()
+            .map(|it| it.msg)
+            .collect::<Vec<CosmosMsg>>(),
+        vec![
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: "pair_contract_2".to_string(),
+                funds: vec![
+                    coin(1000000, "uluna"),
+                ],
+                msg: to_binary(&AstroportPairExecuteMsg::ProvideLiquidity {
+                    assets: vec![
+                        Asset {
+                            info: AssetInfo::NativeToken {
+                                denom: "uluna".to_string(),
+                            },
+                            amount: Uint128::from(1000000u128),
+                        },
+                        Asset {
+                            info: AssetInfo::NativeToken {
+                                denom: "ibc/B3504E092456BA618CC28AC671A71FB08C6CA0FD0BE7C8A5B5A3E2DD933CC9E4".to_string(),
+                            },
+                            amount: Uint128::from(0u128),
                         },
                     ],
                     slippage_tolerance: Some(Decimal::percent(1)),
