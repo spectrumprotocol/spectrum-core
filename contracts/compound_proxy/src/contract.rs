@@ -153,11 +153,10 @@ pub fn compound(
         .map(|a| {
             let balance = a
                 .amount
-                .checked_sub(*native_reward_map.get(&a.info).unwrap_or(&Uint128::zero()))
-                .unwrap();
-            a.info.with_balance(balance)
+                .checked_sub(*native_reward_map.get(&a.info).unwrap_or(&Uint128::zero()))?;
+            Ok(a.info.with_balance(balance))
         })
-        .collect();
+        .collect::<StdResult<_>>()?;
 
     messages.push(
         CallbackMsg::ProvideLiquidity {

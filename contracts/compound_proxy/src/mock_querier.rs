@@ -8,8 +8,9 @@ use std::collections::HashMap;
 
 use astroport::factory::FeeInfoResponse;
 use astroport::factory::QueryMsg::FeeInfo;
-use astroport::pair::QueryMsg::Pair;
+use astroport::pair::QueryMsg::{Pair, Simulation};
 use cw20::{BalanceResponse, Cw20QueryMsg, TokenInfoResponse};
+use astroport::pair::SimulationResponse;
 
 /// mock_dependencies is a drop-in replacement for cosmwasm_std::testing::mock_dependencies
 /// this uses our CustomQuerier.
@@ -133,6 +134,32 @@ impl WasmMockQuerier {
                         ),
                         _ => panic!("DO NOT ENTER HERE"),
                     }
+                } else if contract_addr == "pair_astro_token" {
+                    match from_binary(&msg).unwrap() {
+                        Pair { .. } => SystemResult::Ok(
+                            to_binary(&PairInfo {
+                                asset_infos: vec![
+                                    {
+                                        AssetInfo::Token { contract_addr: Addr::unchecked("astro") }
+                                    },
+                                    {
+                                        AssetInfo::Token { contract_addr: Addr::unchecked("token") }
+                                    },
+                                ],
+                                contract_addr: Addr::unchecked("pair_astro_token"),
+                                liquidity_token: Addr::unchecked("astro_token_lp"),
+                                pair_type: astroport::factory::PairType::Xyk {  },
+                            }).into(),
+                        ),
+                        Simulation { .. } => SystemResult::Ok(
+                            to_binary(&SimulationResponse {
+                                return_amount: Uint128::from(1000000u128),
+                                commission_amount: Uint128::zero(),
+                                spread_amount: Uint128::zero(),
+                            }).into(),
+                        ),
+                        _ => panic!("DO NOT ENTER HERE"),
+                    }
                 } else {
                     match from_binary(&msg).unwrap() {
                         Cw20QueryMsg::TokenInfo {} => {
@@ -155,7 +182,7 @@ impl WasmMockQuerier {
                                     name: "mAPPL".to_string(),
                                     symbol: "mAPPL".to_string(),
                                     decimals: 6,
-                                    total_supply: total_supply,
+                                    total_supply,
                                 })
                                 .into(),
                             )

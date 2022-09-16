@@ -300,13 +300,12 @@ fn owner(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<
         env.clone(),
         info,
         ExecuteMsg::ClaimOwnership {},
-    )
-    .unwrap();
+    )?;
     assert_eq!(0, res.messages.len());
 
     // query config
     let config: Config =
-        from_binary(&query(deps.as_ref(), env.clone(), QueryMsg::Config {}).unwrap()).unwrap();
+        from_binary(&query(deps.as_ref(), env.clone(), QueryMsg::Config {})?)?;
     assert_eq!(OWNER, config.owner);
     Ok(())
 }
@@ -320,7 +319,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
     let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
         sender: USER_1.to_string(),
         amount: Uint128::from(100000u128),
-        msg: to_binary(&Cw20HookMsg::Bond { staker_addr: None }).unwrap(),
+        msg: to_binary(&Cw20HookMsg::Bond { staker_addr: None })?,
     });
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
     assert_error(res, "Unauthorized");
@@ -330,7 +329,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
     let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
         sender: USER_1.to_string(),
         amount: Uint128::from(100000u128),
-        msg: to_binary(&Cw20HookMsg::Bond { staker_addr: None }).unwrap(),
+        msg: to_binary(&Cw20HookMsg::Bond { staker_addr: None })?,
     });
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg)?;
     assert_eq!(
@@ -387,8 +386,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
         amount: Uint128::from(50000u128),
         msg: to_binary(&Cw20HookMsg::Bond {
             staker_addr: Some(USER_2.to_string()),
-        })
-        .unwrap(),
+        })?,
     });
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg)?;
     assert_eq!(
@@ -925,7 +923,7 @@ fn deposit_time(
     let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
         sender: USER_3.to_string(),
         amount: Uint128::from(10000u128),
-        msg: to_binary(&Cw20HookMsg::Bond { staker_addr: None }).unwrap(),
+        msg: to_binary(&Cw20HookMsg::Bond { staker_addr: None })?,
     });
     let res = execute(deps.as_mut(), env.clone(), info, msg);
     assert!(res.is_ok());
