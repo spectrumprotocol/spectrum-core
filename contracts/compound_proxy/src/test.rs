@@ -94,6 +94,14 @@ fn compound() -> Result<(), ContractError> {
 
     let sender = "addr0000";
 
+    deps.querier.with_balance(&[(
+        &String::from(MOCK_CONTRACT_ADDR),
+        &[Coin {
+            denom: "uluna".to_string(),
+            amount: Uint128::new(1000000),
+        }],
+    )]);
+
     let env = mock_env();
     let info = mock_info(sender, &[]);
     let res = instantiate(deps.as_mut(), env, info, msg);
@@ -155,7 +163,7 @@ fn compound() -> Result<(), ContractError> {
         &String::from(MOCK_CONTRACT_ADDR),
         &[Coin {
             denom: "uluna".to_string(),
-            amount: Uint128::new(8),
+            amount: Uint128::new(1000008),
         }],
     )]);
     deps.querier.with_token_balances(&[(

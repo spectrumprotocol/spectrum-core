@@ -12,7 +12,7 @@ use cosmwasm_std::{
 use cw20::Expiration;
 use spectrum::compound_proxy::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 
-use astroport::asset::{addr_validate_to_lower, Asset, AssetInfoExt};
+use astroport::asset::{addr_validate_to_lower, Asset, AssetInfo, AssetInfoExt};
 use spectrum::adapters::asset::AssetEx;
 use spectrum::adapters::pair::Pair;
 
@@ -49,7 +49,6 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
-
     let commission_bps = validate_commission(msg.commission_bps)?;
     let slippage_tolerance = validate_percentage(msg.slippage_tolerance, "slippage_tolerance")?;
     let pair_contract = addr_validate_to_lower(deps.api, msg.pair_contract.as_str())?;
@@ -81,13 +80,27 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::Compound { rewards, to, no_swap, slippage_tolerance } => {
+        ExecuteMsg::Compound {
+            rewards,
+            to,
+            no_swap,
+            slippage_tolerance,
+        } => {
             let to_addr = if let Some(to_addr) = to {
                 Some(addr_validate_to_lower(deps.api, &to_addr)?)
             } else {
                 None
             };
-            compound(deps, env, info.clone(), info.sender, rewards, to_addr, no_swap, slippage_tolerance)
+            compound(
+                deps,
+                env,
+                info.clone(),
+                info.sender,
+                rewards,
+                to_addr,
+                no_swap,
+                slippage_tolerance,
+            )
         }
         ExecuteMsg::Callback(msg) => handle_callback(deps, env, info, msg),
     }
@@ -104,21 +117,26 @@ pub fn compound(
     rewards: Vec<Asset>,
     to: Option<Addr>,
     no_swap: Option<bool>,
-    slippage_tolerance: Option<Decimal>
+    slippage_tolerance: Option<Decimal>,
 ) -> Result<Response, ContractError> {
     let receiver = to.unwrap_or(sender);
     let no_swap = no_swap.unwrap_or(false);
 
     let mut messages: Vec<CosmosMsg> = vec![];
-
+    let mut native_reward_map: HashMap<AssetInfo, Uint128> = HashMap::new();
     // Swap reward to asset in the pair
     for reward in rewards {
         reward.deposit_asset(&info, &env.contract.address, &mut messages)?;
+
         let pair_proxy = PAIR_PROXY.may_load(deps.storage, reward.info.to_string())?;
         if let Some(pair_proxy) = pair_proxy {
             let swap_reward =
                 pair_proxy.swap_msg(&reward, None, Some(Decimal::percent(50u64)), None)?;
             messages.push(swap_reward);
+        }
+
+        if reward.is_native_token() {
+            native_reward_map.insert(reward.info, reward.amount);
         }
     }
 
@@ -127,11 +145,23 @@ pub fn compound(
     }
 
     let config = CONFIG.load(deps.storage)?;
-    let assets = config.pair_info.query_pools(&deps.querier, env.contract.address.clone())?;
+    let assets = config
+        .pair_info
+        .query_pools(&deps.querier, env.contract.address.clone())?;
+    let prev_balances = assets
+        .iter()
+        .map(|a| {
+            let balance = a
+                .amount
+                .checked_sub(*native_reward_map.get(&a.info).unwrap_or(&Uint128::zero()))
+                .unwrap();
+            a.info.with_balance(balance)
+        })
+        .collect();
 
     messages.push(
         CallbackMsg::ProvideLiquidity {
-            prev_balances: assets,
+            prev_balances,
             slippage_tolerance,
             receiver: receiver.to_string(),
         }
@@ -157,17 +187,17 @@ pub fn handle_callback(
     }
     match msg {
         CallbackMsg::OptimalSwap {} => optimal_swap(deps, env, info),
-        CallbackMsg::ProvideLiquidity { prev_balances, slippage_tolerance, receiver } => provide_liquidity(deps, env, info, prev_balances, receiver, slippage_tolerance),
+        CallbackMsg::ProvideLiquidity {
+            prev_balances,
+            slippage_tolerance,
+            receiver,
+        } => provide_liquidity(deps, env, info, prev_balances, receiver, slippage_tolerance),
     }
 }
 
 /// # Description
 /// Performs optimal swap of assets in the pair contract.
-fn optimal_swap(
-    deps: DepsMut,
-    env: Env,
-    _info: MessageInfo,
-) -> Result<Response, ContractError> {
+fn optimal_swap(deps: DepsMut, env: Env, _info: MessageInfo) -> Result<Response, ContractError> {
     let config: Config = CONFIG.load(deps.storage)?;
 
     let mut messages: Vec<CosmosMsg> = vec![];
@@ -290,7 +320,12 @@ pub fn calculate_optimal_swap(
         }
     };
 
-    Ok((swap_asset_a_amount, swap_asset_b_amount, return_a_amount, return_b_amount))
+    Ok((
+        swap_asset_a_amount,
+        swap_asset_b_amount,
+        return_a_amount,
+        return_b_amount,
+    ))
 }
 
 /// ## Description
@@ -311,13 +346,18 @@ pub fn provide_liquidity(
         .pair_info
         .query_pools(&deps.querier, env.contract.address)?;
 
-    let prev_balance_map: HashMap<_, _>  = prev_balances.into_iter().map(|a| (a.info, a.amount)).collect();
+    let prev_balance_map: HashMap<_, _> = prev_balances
+        .into_iter()
+        .map(|a| (a.info, a.amount))
+        .collect();
 
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut provide_assets: Vec<Asset> = vec![];
     let mut funds: Vec<Coin> = vec![];
     for asset in assets.iter() {
-        let prev_balance = *prev_balance_map.get(&asset.info).unwrap_or(&Uint128::zero());
+        let prev_balance = *prev_balance_map
+            .get(&asset.info)
+            .unwrap_or(&Uint128::zero());
         let amount = asset.amount.checked_sub(prev_balance)?;
         let provide_asset = asset.info.with_balance(amount);
         provide_assets.push(provide_asset.clone());
