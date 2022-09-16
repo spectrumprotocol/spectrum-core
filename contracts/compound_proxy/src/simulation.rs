@@ -11,7 +11,7 @@ use cosmwasm_std::{from_binary, CosmosMsg, Deps, Fraction, StdError, StdResult, 
 
 use spectrum::compound_proxy::CompoundSimulationResponse;
 
-use astroport::asset::Asset;
+use astroport::asset::{Asset, AssetInfoExt};
 use astroport::factory::PairType;
 use spectrum::adapters::pair::Pair;
 
@@ -34,24 +34,26 @@ pub fn query_compound_simulation(
 
     for reward in rewards {
         let pair_proxy = PAIR_PROXY.may_load(deps.storage, reward.info.to_string())?;
-        if let Some(pair_proxy) = pair_proxy {
+        let add_asset = if let Some(pair_proxy) = pair_proxy {
             let simulation_response = pair_proxy.simulate(&deps.querier, &reward, None)?;
             let pair_proxy_info = pair_proxy.query_pair_info(&deps.querier)?;
-            if reward.info.equal(&pair_proxy_info.asset_infos[0])
-                && pair_proxy_info.asset_infos[1].equal(&asset_b_info)
-            {
-                asset_b_amount += simulation_response.return_amount;
-            } else if reward.info.equal(&pair_proxy_info.asset_infos[1])
-                && pair_proxy_info.asset_infos[0].equal(&asset_a_info)
-            {
-                asset_a_amount += simulation_response.return_amount;
+            let return_asset_info = if reward.info.equal(&pair_proxy_info.asset_infos[0]) {
+                &pair_proxy_info.asset_infos[1]
+            } else if reward.info.equal(&pair_proxy_info.asset_infos[1]) {
+                &pair_proxy_info.asset_infos[0]
             } else {
                 return Err(StdError::generic_err("Invalid pair proxy"));
-            }
-        } else if reward.info.equal(&asset_a_info) {
-            asset_a_amount += reward.amount;
-        } else if reward.info.equal(&asset_b_info) {
-            asset_b_amount += reward.amount;
+            };
+            return_asset_info.with_balance(simulation_response.return_amount)
+        } else {
+            reward
+        };
+        if add_asset.info.equal(&asset_a_info) {
+            asset_a_amount += add_asset.amount;
+        } else if add_asset.info.equal(&asset_b_info) {
+            asset_b_amount += add_asset.amount;
+        } else {
+            return Err(StdError::generic_err("Invalid reward"));
         }
     }
 

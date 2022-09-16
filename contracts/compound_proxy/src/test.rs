@@ -459,3 +459,60 @@ fn test_get_swap_amount() -> StdResult<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_compound_simulation() -> StdResult<()> {
+    let mut deps = mock_dependencies(&[]);
+
+    deps.querier.with_balance(&[(
+        &String::from("pair_contract"),
+        &[Coin {
+            denom: "uluna".to_string(),
+            amount: Uint128::new(1000000000),
+        }],
+    )]);
+    deps.querier.with_token_balances(&[
+        (
+            &String::from("token"),
+            &[
+                (&String::from("pair_contract"), &Uint128::new(1000000000)),
+            ],
+        ),
+        (
+            &String::from("liquidity_token"),
+            &[
+                (&String::from("xxxx"), &Uint128::new(1000000000)),
+            ],
+        )]);
+
+    let msg = InstantiateMsg {
+        pair_contract: "pair_contract".to_string(),
+        commission_bps: 30,
+        pair_proxies: vec![
+            (
+                AssetInfo::Token {
+                    contract_addr: Addr::unchecked("astro"),
+                },
+                "pair_astro_token".to_string(),
+            ),
+        ],
+        slippage_tolerance: Decimal::percent(1),
+    };
+
+    let sender = "addr0000";
+
+    let env = mock_env();
+    let info = mock_info(sender, &[]);
+    let res = instantiate(deps.as_mut(), env.clone(), info, msg);
+    assert!(res.is_ok());
+
+    let msg = QueryMsg::CompoundSimulation {
+        rewards: vec![
+            token_asset(Addr::unchecked("astro"), Uint128::from(100u128)),
+        ],
+    };
+    let res = query(deps.as_ref(), env.clone(), msg);
+    assert!(res.is_ok());
+
+    Ok(())
+}

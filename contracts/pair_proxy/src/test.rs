@@ -93,7 +93,7 @@ fn create(
     let res = instantiate(deps.as_mut(), env, info, instantiate_msg);
     assert!(res.is_ok());
 
-    let config = CONFIG.load(deps.as_mut().storage).unwrap();
+    let config = CONFIG.load(deps.as_mut().storage)?;
     assert_eq!(
         config,
         Config {
@@ -145,7 +145,7 @@ fn swap(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
         })?,
     });
 
-    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info, msg)?;
     assert_eq!(
         res.messages
             .into_iter()
@@ -203,7 +203,7 @@ fn swap(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
         to: None,
     };
 
-    let res = execute(deps.as_mut(), env, info, msg).unwrap();
+    let res = execute(deps.as_mut(), env, info, msg)?;
     assert_eq!(
         res.messages
             .into_iter()

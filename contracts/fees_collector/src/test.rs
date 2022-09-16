@@ -68,7 +68,7 @@ fn create(
     let res = instantiate(deps.as_mut(), env, info, instantiate_msg);
     assert!(res.is_ok());
 
-    let config = CONFIG.load(deps.as_mut().storage).unwrap();
+    let config = CONFIG.load(deps.as_mut().storage)?;
     assert_eq!(
         config,
         Config {
@@ -263,13 +263,12 @@ fn owner(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<
         env.clone(),
         info,
         ExecuteMsg::ClaimOwnership {},
-    )
-    .unwrap();
+    )?;
     assert_eq!(0, res.messages.len());
 
     // query config
     let config: Config =
-        from_binary(&query(deps.as_ref(), env.clone(), QueryMsg::Config {}).unwrap()).unwrap();
+        from_binary(&query(deps.as_ref(), env.clone(), QueryMsg::Config {})?)?;
     assert_eq!(OWNER, config.owner);
     Ok(())
 }
@@ -352,7 +351,7 @@ fn bridges(
 
     // query bridges
     let bridges: Vec<(String, String)> =
-        from_binary(&query(deps.as_ref(), env.clone(), QueryMsg::Bridges {}).unwrap()).unwrap();
+        from_binary(&query(deps.as_ref(), env.clone(), QueryMsg::Bridges {})?)?;
     assert_eq!(vec![(TOKEN_1.to_string(), TOKEN_2.to_string())], bridges);
 
     let msg = ExecuteMsg::UpdateBridges {
@@ -367,7 +366,7 @@ fn bridges(
 
     // query bridges
     let bridges: Vec<(String, String)> =
-        from_binary(&query(deps.as_ref(), env.clone(), QueryMsg::Bridges {}).unwrap()).unwrap();
+        from_binary(&query(deps.as_ref(), env.clone(), QueryMsg::Bridges {})?)?;
     assert!(bridges.is_empty());
 
     Ok(())
@@ -377,7 +376,7 @@ fn collect(
     deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>,
 ) -> Result<(), ContractError> {
     let env = mock_env();
-    
+
     // update bridges
     let info = mock_info(OPERATOR_1, &[]);
     let msg = ExecuteMsg::UpdateBridges {
@@ -411,7 +410,7 @@ fn collect(
 
     // distribute fee only if no balance
     let info = mock_info(OPERATOR_1, &[]);
-    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone())?;
     assert_eq!(
         res.messages
             .into_iter()
@@ -434,7 +433,7 @@ fn collect(
     );
 
     // collect success
-    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg)?;
     assert_eq!(
         res.messages
             .into_iter()
@@ -485,7 +484,7 @@ fn collect(
     };
 
     // collect success
-    let res = execute(deps.as_mut(), env.clone(), info, msg).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info, msg)?;
     assert_eq!(
         res.messages
             .into_iter()
@@ -539,7 +538,7 @@ fn distribute_fees(
     assert_error(res, "Unauthorized");
 
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
-    let res = execute(deps.as_mut(), env.clone(), info, msg.clone()).unwrap();
+    let res = execute(deps.as_mut(), env.clone(), info, msg.clone())?;
     assert_eq!(
         res.messages
             .into_iter()

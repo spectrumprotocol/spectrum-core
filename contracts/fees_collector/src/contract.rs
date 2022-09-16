@@ -50,8 +50,8 @@ pub fn instantiate(
         factory_contract: addr_validate_to_lower(deps.api, &msg.factory_contract)?,
         stablecoin: msg.stablecoin,
         target_list: msg.target_list.into_iter()
-                                .map(|(addr, weight)| (addr_validate_to_lower(deps.api, addr).unwrap(), weight))
-                                .collect(),
+                                .map(|(addr, weight)| Ok((addr_validate_to_lower(deps.api, addr)?, weight)))
+                                .collect::<StdResult<_>>()?,
         max_spread,
     };
 
@@ -321,7 +321,7 @@ fn swap_bridge_assets(
 /// ## Description
 /// Distributes stablecoin rewards to the target list. Returns a [`ContractError`] on failure.
 fn distribute_fees(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
-    
+
     // Only the contract itself can call this function
     if info.sender != env.contract.address {
         return Err(ContractError::Unauthorized {});
@@ -409,8 +409,8 @@ pub fn update_config(
 
     if let Some(target_list) = target_list {
         config.target_list = target_list.into_iter()
-        .map(|(addr, weight)| (addr_validate_to_lower(deps.api, addr).unwrap(), weight))
-        .collect()
+        .map(|(addr, weight)| Ok((addr_validate_to_lower(deps.api, addr)?, weight)))
+        .collect::<StdResult<_>>()?
     }
 
     CONFIG.save(deps.storage, &config)?;
