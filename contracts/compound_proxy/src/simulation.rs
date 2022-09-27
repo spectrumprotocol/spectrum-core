@@ -7,7 +7,7 @@ use crate::{
 use astroport::{asset::AssetInfo, pair::StablePoolConfig, querier::query_token_precision, U256};
 
 use astroport::querier::query_supply;
-use cosmwasm_std::{from_binary, CosmosMsg, Deps, Fraction, StdError, StdResult, Uint128};
+use cosmwasm_std::{from_binary, CosmosMsg, Deps, StdError, StdResult, Uint128};
 
 use spectrum::compound_proxy::CompoundSimulationResponse;
 
@@ -152,14 +152,12 @@ pub fn query_compound_simulation(
                         liquidity_token_precision,
                     )?
                 } else {
-                    let leverage = if let Some(params) = pair.query_config(&deps.querier)?.params {
-                        let stable_pool_config: StablePoolConfig = from_binary(&params)?;
-                        let amp = stable_pool_config.amp.numerator() * Uint128::from(AMP_PRECISION)
-                            / stable_pool_config.amp.denominator();
-                        u64::try_from(amp.u128()).unwrap_or(25u64)
-                    } else {
-                        25u64
-                    };
+                    let params = pair.query_config(&deps.querier)?.params
+                        .ok_or_else(|| StdError::generic_err("params not found"))?;
+                    let stable_pool_config: StablePoolConfig = from_binary(&params)?;
+                    let amp = stable_pool_config.amp * Uint128::from(AMP_PRECISION);
+                    let leverage = u64::try_from(amp.u128() * u128::from(N_COINS))
+                        .map_err(|_| StdError::generic_err("Overflow in leverage"))?;
 
                     let mut pool_amount_0 =
                         adjust_precision(pools[0].amount, token_precision_0, greater_precision)?;
