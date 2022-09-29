@@ -5,7 +5,7 @@ use crate::utils::{
     build_swap_bridge_msg, try_build_swap_msg, validate_bridge, BRIDGES_EXECUTION_MAX_DEPTH,
     BRIDGES_INITIAL_DEPTH,
 };
-use astroport::asset::{addr_validate_to_lower, native_asset_info, Asset, AssetInfo, ULUNA_DENOM, AssetInfoExt};
+use astroport::asset::{native_asset_info, Asset, AssetInfo, ULUNA_DENOM, AssetInfoExt};
 
 use astroport::common::{propose_new_owner, drop_ownership_proposal, claim_ownership};
 use cosmwasm_std::{
@@ -45,12 +45,12 @@ pub fn instantiate(
     msg.stablecoin.check(deps.api)?;
 
     let config = Config {
-        owner: addr_validate_to_lower(deps.api, &msg.owner)?,
-        operator: addr_validate_to_lower(deps.api, &msg.operator)?,
-        factory_contract: addr_validate_to_lower(deps.api, &msg.factory_contract)?,
+        owner: deps.api.addr_validate(&msg.owner)?,
+        operator: deps.api.addr_validate(&msg.operator)?,
+        factory_contract: deps.api.addr_validate(&msg.factory_contract)?,
         stablecoin: msg.stablecoin,
         target_list: msg.target_list.into_iter()
-                                .map(|(addr, weight)| Ok((addr_validate_to_lower(deps.api, addr)?, weight)))
+                                .map(|(addr, weight)| Ok((deps.api.addr_validate(&addr)?, weight)))
                                 .collect::<StdResult<_>>()?,
         max_spread,
     };
@@ -393,11 +393,11 @@ pub fn update_config(
     }
 
     if let Some(operator) = operator {
-        config.operator = addr_validate_to_lower(deps.api, &operator)?;
+        config.operator = deps.api.addr_validate(&operator)?;
     }
 
     if let Some(factory_contract) = factory_contract {
-        config.factory_contract = addr_validate_to_lower(deps.api, &factory_contract)?;
+        config.factory_contract = deps.api.addr_validate(&factory_contract)?;
     }
 
     if let Some(max_spread) = max_spread {
@@ -409,7 +409,7 @@ pub fn update_config(
 
     if let Some(target_list) = target_list {
         config.target_list = target_list.into_iter()
-        .map(|(addr, weight)| Ok((addr_validate_to_lower(deps.api, addr)?, weight)))
+        .map(|(addr, weight)| Ok((deps.api.addr_validate(&addr)?, weight)))
         .collect::<StdResult<_>>()?
     }
 
@@ -456,7 +456,7 @@ fn update_bridges(
         .collect::<StdResult<Vec<(String, AssetInfo)>>>()?;
 
     for (asset_label, bridge) in bridges {
-        let asset = match addr_validate_to_lower(deps.api, &asset_label) {
+        let asset = match deps.api.addr_validate(&asset_label) {
             Ok(contract_addr) => AssetInfo::Token { contract_addr },
             Err(_) => AssetInfo::NativeToken { denom: asset_label },
         };

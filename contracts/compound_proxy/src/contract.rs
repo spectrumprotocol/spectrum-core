@@ -12,7 +12,7 @@ use cosmwasm_std::{
 use cw20::Expiration;
 use spectrum::compound_proxy::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 
-use astroport::asset::{addr_validate_to_lower, Asset, AssetInfo, AssetInfoExt};
+use astroport::asset::{Asset, AssetInfo, AssetInfoExt};
 use spectrum::adapters::asset::AssetEx;
 use spectrum::adapters::pair::Pair;
 
@@ -51,7 +51,7 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     let commission_bps = validate_commission(msg.commission_bps)?;
     let slippage_tolerance = validate_percentage(msg.slippage_tolerance, "slippage_tolerance")?;
-    let pair_contract = addr_validate_to_lower(deps.api, msg.pair_contract.as_str())?;
+    let pair_contract = deps.api.addr_validate(&msg.pair_contract)?;
     let pair_info = Pair(pair_contract).query_pair_info(&deps.querier)?;
 
     let config = Config {
@@ -63,7 +63,7 @@ pub fn instantiate(
 
     for (asset_info, pair_proxy) in msg.pair_proxies {
         asset_info.check(deps.api)?;
-        let pair_proxy_addr = addr_validate_to_lower(deps.api, &pair_proxy)?;
+        let pair_proxy_addr = deps.api.addr_validate(&pair_proxy)?;
         PAIR_PROXY.save(deps.storage, asset_info.to_string(), &Pair(pair_proxy_addr))?;
     }
 
@@ -87,7 +87,7 @@ pub fn execute(
             slippage_tolerance,
         } => {
             let to_addr = if let Some(to_addr) = to {
-                Some(addr_validate_to_lower(deps.api, &to_addr)?)
+                Some(deps.api.addr_validate(&to_addr)?)
             } else {
                 None
             };

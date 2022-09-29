@@ -1,7 +1,7 @@
 use std::cmp;
 use std::collections::HashMap;
 use cosmwasm_std::{Addr, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, QuerierWrapper, Response, StdError, StdResult, Uint128};
-use astroport::asset::{addr_validate_to_lower, Asset, token_asset};
+use astroport::asset::{Asset, token_asset};
 use astroport::querier::query_token_balance;
 use crate::error::ContractError;
 use astroport::generator::{PendingTokenResponse, UserInfoV2};
@@ -56,7 +56,7 @@ pub fn execute_withdraw(
     lp_token: String,
     amount: Uint128,
 ) -> Result<Response, ContractError> {
-    let lp_token = addr_validate_to_lower(deps.api, &lp_token)?;
+    let lp_token = deps.api.addr_validate(&lp_token)?;
     let config = CONFIG.load(deps.storage)?;
     let astro_user_info = config.generator.query_user_info(&deps.querier, &lp_token, &env.contract.address)?
         .ok_or_else(|| StdError::generic_err("UserInfo is not found"))?;
@@ -97,7 +97,7 @@ pub fn execute_claim_rewards(
 
         messages.push(config.generator.withdraw_msg(lp_token.to_string(), Uint128::zero())?);
 
-        let lp_token = addr_validate_to_lower(deps.api, &lp_token)?;
+        let lp_token = deps.api.addr_validate(&lp_token)?;
         let astro_user_info = config.generator.query_user_info(&deps.querier, &lp_token, &env.contract.address)?
             .ok_or_else(|| StdError::generic_err("UserInfo is not found"))?;
         let prev_balances = reconcile_claimed_by_others(
@@ -484,8 +484,8 @@ pub fn query_pending_token(
 ) -> Result<PendingTokenResponse, ContractError> {
 
     // load
-    let lp_token = addr_validate_to_lower(deps.api, &lp_token)?;
-    let user = addr_validate_to_lower(deps.api, &user)?;
+    let lp_token = deps.api.addr_validate(&lp_token)?;
+    let user = deps.api.addr_validate(&user)?;
     let config = CONFIG.load(deps.storage)?;
     let astro_user_info = match config.generator.query_user_info(&deps.querier, &lp_token, &env.contract.address)? {
         Some(astro_user_info) => astro_user_info,
@@ -573,8 +573,8 @@ pub fn query_deposit(
 ) -> Result<Uint128, ContractError> {
 
     // load
-    let lp_token = addr_validate_to_lower(deps.api, &lp_token)?;
-    let user = addr_validate_to_lower(deps.api, &user)?;
+    let lp_token = deps.api.addr_validate(&lp_token)?;
+    let user = deps.api.addr_validate(&user)?;
     let config = CONFIG.load(deps.storage)?;
     let pool_info = POOL_INFO.may_load(deps.storage, &lp_token)?
         .unwrap_or_default();

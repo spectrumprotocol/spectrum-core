@@ -1,4 +1,4 @@
-use astroport::asset::{addr_validate_to_lower, Asset, token_asset};
+use astroport::asset::{Asset, token_asset};
 use astroport::querier::query_token_balance;
 use cosmwasm_std::{
     attr, Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
@@ -108,7 +108,7 @@ pub fn bond(
     sender_addr: String,
     amount: Uint128,
 ) -> Result<Response, ContractError> {
-    let staker_addr = addr_validate_to_lower(deps.api, &sender_addr)?;
+    let staker_addr = deps.api.addr_validate(&sender_addr)?;
 
     let config = CONFIG.load(deps.storage)?;
 
@@ -253,7 +253,7 @@ pub fn query_reward_info(
     env: Env,
     staker_addr: String,
 ) -> StdResult<RewardInfoResponse> {
-    let staker_addr_validated = addr_validate_to_lower(deps.api, &staker_addr)?;
+    let staker_addr_validated = deps.api.addr_validate(&staker_addr)?;
     let reward_info = read_reward_info(deps, env, &staker_addr_validated)?;
 
     Ok(RewardInfoResponse {
