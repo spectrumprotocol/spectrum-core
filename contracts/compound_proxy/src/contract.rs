@@ -19,6 +19,9 @@ use spectrum::adapters::pair::Pair;
 /// Scaling denominator for commission
 const COMMISSION_DENOM: u64 = 10000u64;
 
+/// Maximum spread percentage when swapping
+const MAX_SPREAD: u64 = 50; // 50%
+
 /// ## Description
 /// Validates that commission bps must be less than or equal 10000
 fn validate_commission(commission_bps: u64) -> StdResult<u64> {
@@ -131,7 +134,7 @@ pub fn compound(
         let pair_proxy = PAIR_PROXY.may_load(deps.storage, reward.info.to_string())?;
         if let Some(pair_proxy) = pair_proxy {
             let swap_reward =
-                pair_proxy.swap_msg(&reward, None, Some(Decimal::percent(50u64)), None)?;
+                pair_proxy.swap_msg(&reward, None, Some(Decimal::percent(MAX_SPREAD)), None)?;
             messages.push(swap_reward);
         }
 
@@ -217,8 +220,6 @@ fn optimal_swap(deps: DepsMut, env: Env, _info: MessageInfo) -> Result<Response,
                     &config,
                     asset_a,
                     asset_b,
-                    None,
-                    None,
                     &mut messages,
                 )?;
             }
@@ -238,8 +239,6 @@ pub fn calculate_optimal_swap(
     config: &Config,
     asset_a: Asset,
     asset_b: Asset,
-    belief_price: Option<Decimal>,
-    max_spread: Option<Decimal>,
     messages: &mut Vec<CosmosMsg>,
 ) -> StdResult<(Uint128, Uint128, Uint128, Uint128)> {
     let mut swap_asset_a_amount = Uint128::zero();
@@ -282,8 +281,8 @@ pub fn calculate_optimal_swap(
                 swap_asset_a_amount = swap_asset.amount;
                 messages.push(Pair(pair_contract).swap_msg(
                     &swap_asset,
-                    belief_price,
-                    max_spread,
+                    None,
+                    Some(Decimal::percent(MAX_SPREAD)),
                     None,
                 )?);
             }
@@ -311,8 +310,8 @@ pub fn calculate_optimal_swap(
                 swap_asset_b_amount = swap_asset.amount;
                 messages.push(Pair(pair_contract).swap_msg(
                     &swap_asset,
-                    belief_price,
-                    max_spread,
+                    None,
+                    Some(Decimal::percent(MAX_SPREAD)),
                     None,
                 )?);
             }
