@@ -3,7 +3,6 @@ use cw20::Cw20ExecuteMsg;
 use cw_storage_plus::{Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use astroport::asset::addr_validate_to_lower;
 use astroport_governance::escrow_fee_distributor::{ExecuteMsg as FeeExecuteMsg};
 use astroport_governance::generator_controller::{ExecuteMsg as ControllerExecuteMsg};
 use astroport_governance::voting_escrow::{Cw20HookMsg as VotingCw20HookMsg, ExecuteMsg as VotingExecuteMsg, QueryMsg as VotingQueryMsg, LockInfoResponse, VotingPowerResponse};
@@ -33,10 +32,10 @@ impl From<AstroGov> for AstroGovUnchecked {
 impl AstroGovUnchecked {
     pub fn check(&self, api: &dyn Api) -> StdResult<AstroGov> {
         Ok(AstroGov {
-            fee_distributor: addr_validate_to_lower(api, &self.fee_distributor)?,
-            generator_controller: addr_validate_to_lower(api, &self.generator_controller)?,
-            voting_escrow: addr_validate_to_lower(api, &self.voting_escrow)?,
-            xastro_token: addr_validate_to_lower(api, &self.xastro_token)?,
+            fee_distributor: api.addr_validate(&self.fee_distributor)?,
+            generator_controller: api.addr_validate(&self.generator_controller)?,
+            voting_escrow: api.addr_validate(&self.voting_escrow)?,
+            xastro_token: api.addr_validate(&self.xastro_token)?,
         })
     }
 }

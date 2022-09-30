@@ -1,5 +1,4 @@
 use cosmwasm_std::{Deps, Env, StdResult};
-use astroport::asset::addr_validate_to_lower;
 use crate::bond::reconcile_to_user_info;
 use crate::model::{PoolInfo, RewardInfo, StakerInfo, StakerInfoResponse, StakingState, UserInfo, UserInfoResponse};
 use crate::staking::{reconcile_staker_income, reconcile_to_staker_info};
@@ -10,7 +9,7 @@ pub fn query_pool_info(
     _env: Env,
     lp_token: String,
 ) -> StdResult<PoolInfo> {
-    let lp_token = addr_validate_to_lower(deps.api, &lp_token)?;
+    let lp_token = deps.api.addr_validate(&lp_token)?;
     POOL_INFO.load(deps.storage, &lp_token)
 }
 
@@ -20,8 +19,8 @@ pub fn query_user_info(
     lp_token: String,
     user: String,
 ) -> StdResult<UserInfoResponse> {
-    let lp_token = addr_validate_to_lower(deps.api, &lp_token)?;
-    let user = addr_validate_to_lower(deps.api, &user)?;
+    let lp_token = deps.api.addr_validate(&lp_token)?;
+    let user = deps.api.addr_validate(&user)?;
     let pool_info = POOL_INFO.load(deps.storage, &lp_token)?;
     let mut user_info = USER_INFO.may_load(deps.storage, (&lp_token, &user))?
         .unwrap_or_else(|| UserInfo::create(&pool_info));
@@ -37,7 +36,7 @@ pub fn query_reward_info(
     _env: Env,
     token: String,
 ) -> StdResult<RewardInfo> {
-    let token = addr_validate_to_lower(deps.api, &token)?;
+    let token = deps.api.addr_validate(&token)?;
     REWARD_INFO.load(deps.storage, &token)
 }
 
@@ -53,7 +52,7 @@ pub fn query_staker_info(
     env: Env,
     user: String,
 ) -> StdResult<StakerInfoResponse> {
-    let user = addr_validate_to_lower(deps.api, &user)?;
+    let user = deps.api.addr_validate(&user)?;
     let config = CONFIG.load(deps.storage)?;
     let mut astro_reward = REWARD_INFO.load(deps.storage, &config.astro_token)?;
     let mut state = STAKING_STATE.load(deps.storage)?;

@@ -12,12 +12,15 @@ use cosmwasm_std::{
 use cw20::Expiration;
 use spectrum::compound_proxy::{CallbackMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 
-use astroport::asset::{addr_validate_to_lower, Asset, AssetInfo, AssetInfoExt};
+use astroport::asset::{Asset, AssetInfo, AssetInfoExt};
 use spectrum::adapters::asset::AssetEx;
 use spectrum::adapters::pair::Pair;
 
 /// Scaling denominator for commission
 const COMMISSION_DENOM: u64 = 10000u64;
+
+/// Maximum spread percentage when swapping
+const MAX_SPREAD: u64 = 50; // 50%
 
 /// ## Description
 /// Validates that commission bps must be less than or equal 10000
@@ -51,7 +54,7 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     let commission_bps = validate_commission(msg.commission_bps)?;
     let slippage_tolerance = validate_percentage(msg.slippage_tolerance, "slippage_tolerance")?;
-    let pair_contract = addr_validate_to_lower(deps.api, msg.pair_contract.as_str())?;
+    let pair_contract = deps.api.addr_validate(&msg.pair_contract)?;
     let pair_info = Pair(pair_contract).query_pair_info(&deps.querier)?;
 
     let config = Config {
@@ -63,7 +66,7 @@ pub fn instantiate(
 
     for (asset_info, pair_proxy) in msg.pair_proxies {
         asset_info.check(deps.api)?;
-        let pair_proxy_addr = addr_validate_to_lower(deps.api, &pair_proxy)?;
+        let pair_proxy_addr = deps.api.addr_validate(&pair_proxy)?;
         PAIR_PROXY.save(deps.storage, asset_info.to_string(), &Pair(pair_proxy_addr))?;
     }
 
@@ -87,7 +90,7 @@ pub fn execute(
             slippage_tolerance,
         } => {
             let to_addr = if let Some(to_addr) = to {
-                Some(addr_validate_to_lower(deps.api, &to_addr)?)
+                Some(deps.api.addr_validate(&to_addr)?)
             } else {
                 None
             };
@@ -131,7 +134,7 @@ pub fn compound(
         let pair_proxy = PAIR_PROXY.may_load(deps.storage, reward.info.to_string())?;
         if let Some(pair_proxy) = pair_proxy {
             let swap_reward =
-                pair_proxy.swap_msg(&reward, None, Some(Decimal::percent(50u64)), None)?;
+                pair_proxy.swap_msg(&reward, None, Some(Decimal::percent(MAX_SPREAD)), None)?;
             messages.push(swap_reward);
         }
 
@@ -217,8 +220,6 @@ fn optimal_swap(deps: DepsMut, env: Env, _info: MessageInfo) -> Result<Response,
                     &config,
                     asset_a,
                     asset_b,
-                    None,
-                    None,
                     &mut messages,
                 )?;
             }
@@ -238,8 +239,6 @@ pub fn calculate_optimal_swap(
     config: &Config,
     asset_a: Asset,
     asset_b: Asset,
-    belief_price: Option<Decimal>,
-    max_spread: Option<Decimal>,
     messages: &mut Vec<CosmosMsg>,
 ) -> StdResult<(Uint128, Uint128, Uint128, Uint128)> {
     let mut swap_asset_a_amount = Uint128::zero();
@@ -282,8 +281,8 @@ pub fn calculate_optimal_swap(
                 swap_asset_a_amount = swap_asset.amount;
                 messages.push(Pair(pair_contract).swap_msg(
                     &swap_asset,
-                    belief_price,
-                    max_spread,
+                    None,
+                    Some(Decimal::percent(MAX_SPREAD)),
                     None,
                 )?);
             }
@@ -311,8 +310,8 @@ pub fn calculate_optimal_swap(
                 swap_asset_b_amount = swap_asset.amount;
                 messages.push(Pair(pair_contract).swap_msg(
                     &swap_asset,
-                    belief_price,
-                    max_spread,
+                    None,
+                    Some(Decimal::percent(MAX_SPREAD)),
                     None,
                 )?);
             }

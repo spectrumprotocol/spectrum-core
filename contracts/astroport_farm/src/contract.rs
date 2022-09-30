@@ -1,5 +1,3 @@
-use astroport::asset::addr_validate_to_lower;
-
 use cosmwasm_std::{
     attr, entry_point, from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo,
     Response, StdError, StdResult, Uint128,
@@ -48,14 +46,14 @@ pub fn instantiate(
     CONFIG.save(
         deps.storage,
         &Config {
-            owner: addr_validate_to_lower(deps.api, &msg.owner)?,
-            staking_contract: Generator(addr_validate_to_lower(deps.api, &msg.staking_contract)?),
-            compound_proxy: Compounder(addr_validate_to_lower(deps.api, &msg.compound_proxy)?),
-            controller: addr_validate_to_lower(deps.api, &msg.controller)?,
+            owner: deps.api.addr_validate(&msg.owner)?,
+            staking_contract: Generator(deps.api.addr_validate(&msg.staking_contract)?),
+            compound_proxy: Compounder(deps.api.addr_validate(&msg.compound_proxy)?),
+            controller: deps.api.addr_validate(&msg.controller)?,
             fee: msg.fee,
-            fee_collector: addr_validate_to_lower(deps.api, &msg.fee_collector)?,
-            liquidity_token: addr_validate_to_lower(deps.api, &msg.liquidity_token)?,
-            base_reward_token: addr_validate_to_lower(deps.api, &msg.base_reward_token)?,
+            fee_collector: deps.api.addr_validate(&msg.fee_collector)?,
+            liquidity_token: deps.api.addr_validate(&msg.liquidity_token)?,
+            base_reward_token: deps.api.addr_validate(&msg.base_reward_token)?,
         },
     )?;
 
@@ -180,11 +178,11 @@ pub fn update_config(
     }
 
     if let Some(compound_proxy) = compound_proxy {
-        config.compound_proxy = Compounder(addr_validate_to_lower(deps.api, &compound_proxy)?);
+        config.compound_proxy = Compounder(deps.api.addr_validate(&compound_proxy)?);
     }
 
     if let Some(controller) = controller {
-        config.controller = addr_validate_to_lower(deps.api, &controller)?;
+        config.controller = deps.api.addr_validate(&controller)?;
     }
 
     if let Some(fee) = fee {
@@ -193,7 +191,7 @@ pub fn update_config(
     }
 
     if let Some(fee_collector) = fee_collector {
-        config.fee_collector = addr_validate_to_lower(deps.api, &fee_collector)?;
+        config.fee_collector = deps.api.addr_validate(&fee_collector)?;
     }
 
     CONFIG.save(deps.storage, &config)?;
