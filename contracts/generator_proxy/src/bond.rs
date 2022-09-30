@@ -144,7 +144,7 @@ fn fetch_balance(
         let token_amount = query_token_balance(querier, token, contract_addr)?;
         balances.push((token.clone(), token_amount));
     }
-    return Ok(balances)
+    Ok(balances)
 }
 
 fn reconcile_claimed_by_others(
@@ -160,11 +160,11 @@ fn reconcile_claimed_by_others(
         .filter(|pool_info| !pool_info.total_bond_share.is_zero());
     let mut pool_info = match pool_info_op {
         None => {
-            let balances = fetch_balance(&deps.querier, &config, &env.contract.address, &astro_user_info)?;
+            let balances = fetch_balance(&deps.querier, config, &env.contract.address, astro_user_info)?;
             return Ok((true, balances))
         },
         Some(pool_info) if pool_info.last_reconcile == env.block.height => {
-            let balances = fetch_balance(&deps.querier, &config, &env.contract.address, &astro_user_info)?;
+            let balances = fetch_balance(&deps.querier, config, &env.contract.address, astro_user_info)?;
             return Ok((false, balances))
         },
         Some(pool_info) => pool_info,
