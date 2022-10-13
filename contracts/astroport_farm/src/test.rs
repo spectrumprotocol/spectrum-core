@@ -1103,13 +1103,13 @@ fn compound(
 
     // set pending tokens
     deps.querier.set_balance(
+        GENERATOR_PROXY.to_string(),
         ASTRO_TOKEN.to_string(),
-        MOCK_CONTRACT_ADDR.to_string(),
         Uint128::from(10000u128),
     );
     deps.querier.set_balance(
+        GENERATOR_PROXY.to_string(),
         REWARD_TOKEN.to_string(),
-        MOCK_CONTRACT_ADDR.to_string(),
         Uint128::from(50000u128),
     );
 

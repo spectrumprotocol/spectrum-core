@@ -346,6 +346,7 @@ fn deposit(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Resul
         prev_reward_debt_proxy: RestrictedVector::from(vec![
             (Addr::unchecked(REWARD_TOKEN), Uint128::from(20u128)),
         ]),
+        last_reconcile: 12345,
     });
 
     let msg = QueryMsg::RewardInfo {
@@ -439,6 +440,7 @@ fn deposit(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Resul
         ]),
         prev_reward_user_index: Decimal::permille(125),
         prev_reward_debt_proxy: RestrictedVector::default(),
+        last_reconcile: 12345,
     });
 
     Ok(())
@@ -447,6 +449,7 @@ fn deposit(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Resul
 fn claim_rewards(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(), ContractError> {
     let mut env = mock_env();
     env.block.time = Timestamp::from_seconds(EPOCH_START);
+    env.block.height = 12346;
 
     deps.querier.set_balance(GENERATOR.to_string(), ASTRO_TOKEN.to_string(), Uint128::from(32u128));
     deps.querier.set_balance(GENERATOR.to_string(), REWARD_TOKEN.to_string(), Uint128::from(16u128));
@@ -548,6 +551,7 @@ fn claim_rewards(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) ->
         prev_reward_debt_proxy: RestrictedVector::from(vec![
             (Addr::unchecked(REWARD_TOKEN), Uint128::from(16u128)),
         ]),
+        last_reconcile: 12346,
     });
 
     let msg = QueryMsg::RewardInfo {
@@ -640,6 +644,7 @@ fn claim_rewards(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) ->
 fn withdraw(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(), ContractError> {
     let mut env = mock_env();
     env.block.time = Timestamp::from_seconds(EPOCH_START);
+    env.block.height = 12347;
     let info = mock_info(USER1, &vec![]);
 
     let msg = ExecuteMsg::Withdraw {
@@ -766,6 +771,7 @@ fn withdraw(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Resu
         ]),
         prev_reward_user_index: Decimal::permille(325),
         prev_reward_debt_proxy: RestrictedVector::default(),
+        last_reconcile: 12347,
     });
 
     let msg = QueryMsg::UserInfo {
