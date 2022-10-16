@@ -4,6 +4,7 @@ version = "1.2.0"
 authors = ["Astroport"]
 edition = "2021"
 description = "Common astroport types"
+license = "Apache-2.0"
 repository = "https://github.com/astroport-fi/astroport"
 homepage = "https://astroport.fi"
 
