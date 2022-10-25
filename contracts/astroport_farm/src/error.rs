@@ -19,6 +19,18 @@ pub enum ContractError {
 
     #[error("Assertion failed; minimum receive amount: {minimum_receive}, actual amount: {amount}")]
     AssertionMinimumReceive { minimum_receive: Uint128, amount: Uint128 },
+
+    #[error("Invalid zero amount")]
+    InvalidZeroAmount {},
+
+    #[error("Allowance is expired")]
+    Expired {},
+
+    #[error("No allowance for this account")]
+    NoAllowance {},
+
+    #[error("Cannot set to own account")]
+    CannotSetOwnAccount {},
 }
 
 impl From<OverflowError> for ContractError {

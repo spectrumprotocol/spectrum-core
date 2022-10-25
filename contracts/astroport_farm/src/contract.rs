@@ -11,7 +11,7 @@ use crate::{
     state::{Config, State, CONFIG, OWNERSHIP_PROPOSAL},
 };
 
-use cw20::Cw20ReceiveMsg;
+use cw20::{Cw20ReceiveMsg, MarketingInfoResponse, MinterResponse};
 use spectrum::adapters::generator::Generator;
 
 use crate::bond::{query_reward_info, unbond};
@@ -20,6 +20,7 @@ use spectrum::astroport_farm::{
     CallbackMsg, Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg,
 };
 use spectrum::compound_proxy::Compounder;
+use crate::cw20::{execute_burn, execute_burn_from, execute_decrease_allowance, execute_increase_allowance, execute_send, execute_send_from, execute_transfer, execute_transfer_from, query_all_accounts, query_all_allowances, query_allowance, query_balance, query_token_info};
 
 /// ## Description
 /// Validates that decimal value is in the range 0 to 1
@@ -41,6 +42,7 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
+    msg.validate()?;
     validate_percentage(msg.fee, "fee")?;
 
     CONFIG.save(
@@ -54,6 +56,8 @@ pub fn instantiate(
             fee_collector: deps.api.addr_validate(&msg.fee_collector)?,
             liquidity_token: deps.api.addr_validate(&msg.liquidity_token)?,
             base_reward_token: deps.api.addr_validate(&msg.base_reward_token)?,
+            name: msg.name,
+            symbol: msg.symbol,
         },
     )?;
 
@@ -135,6 +139,19 @@ pub fn execute(
             .map_err(|e| e.into())
         }
         ExecuteMsg::Callback(msg) => handle_callback(deps, env, info, msg),
+
+        // cw20
+        ExecuteMsg::Transfer { recipient, amount } => execute_transfer(deps, env, info, recipient, amount),
+        ExecuteMsg::Burn { amount } => execute_burn(deps, env, info, amount),
+        ExecuteMsg::Send { contract, amount, msg } => execute_send(deps, env, info, contract, amount, msg),
+        ExecuteMsg::IncreaseAllowance { spender, amount, expires } => execute_increase_allowance(deps, env, info, spender, amount, expires),
+        ExecuteMsg::DecreaseAllowance { spender, amount, expires } => execute_decrease_allowance(deps, env, info, spender, amount, expires),
+        ExecuteMsg::TransferFrom { owner, recipient, amount } => execute_transfer_from(deps, env, info, owner, recipient, amount),
+        ExecuteMsg::SendFrom { owner, contract, amount, msg } => execute_send_from(deps, env, info, owner, contract, amount, msg),
+        ExecuteMsg::BurnFrom { owner, amount } => execute_burn_from(deps, env, info, owner, amount),
+        ExecuteMsg::Mint { .. } => Err(ContractError::Unauthorized {}),
+        ExecuteMsg::UpdateMarketing { .. } => Err(ContractError::Unauthorized {}),
+        ExecuteMsg::UploadLogo(_) => Err(ContractError::Unauthorized {}),
     }
 }
 
@@ -234,6 +251,16 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
             to_binary(&query_reward_info(deps, env, staker_addr)?)
         }
         QueryMsg::State {} => to_binary(&query_state(deps)?),
+
+        // cw20
+        QueryMsg::Balance { address } => to_binary(&query_balance(deps, address)?),
+        QueryMsg::TokenInfo { } => to_binary(&query_token_info(deps)?),
+        QueryMsg::Minter { } => to_binary::<Option<MinterResponse>>(&None),
+        QueryMsg::Allowance { owner, spender } => to_binary(&query_allowance(deps, owner, spender)?),
+        QueryMsg::AllAllowances { owner, start_after, limit } => to_binary(&query_all_allowances(deps, owner, start_after, limit)?),
+        QueryMsg::AllAccounts { start_after, limit } => to_binary(&query_all_accounts(deps, start_after, limit)?),
+        QueryMsg::MarketingInfo { } => to_binary(&MarketingInfoResponse::default()),
+        QueryMsg::DownloadLogo { } => Err(StdError::not_found("logo")),
     }
 }
 
@@ -254,6 +281,13 @@ fn query_state(deps: Deps) -> StdResult<State> {
 /// ## Description
 /// Used for contract migration. Returns a default object of type [`Response`].
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
+pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response> {
+    msg.validate()?;
+
+    let mut config = CONFIG.load(deps.storage)?;
+    config.name = msg.name;
+    config.symbol = msg.symbol;
+    CONFIG.save(deps.storage, &config)?;
+
     Ok(Response::default())
 }

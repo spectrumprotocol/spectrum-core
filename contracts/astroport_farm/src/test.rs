@@ -75,6 +75,8 @@ fn create(
         fee_collector: FEE_COLLECTOR.to_string(),
         liquidity_token: LP_TOKEN.to_string(),
         base_reward_token: ASTRO_TOKEN.to_string(),
+        name: "name".to_string(),
+        symbol: "SYMBOL".to_string()
     };
     let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg);
     assert_error(res, "fee must be 0 to 1");
@@ -89,6 +91,8 @@ fn create(
         fee_collector: FEE_COLLECTOR.to_string(),
         liquidity_token: LP_TOKEN.to_string(),
         base_reward_token: ASTRO_TOKEN.to_string(),
+        name: "name".to_string(),
+        symbol: "SYMBOL".to_string()
     };
 
     let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg);
@@ -108,6 +112,8 @@ fn create(
             fee: Decimal::percent(5),
             liquidity_token: Addr::unchecked(LP_TOKEN.to_string()),
             base_reward_token: Addr::unchecked(ASTRO_TOKEN.to_string()),
+            name: "name".to_string(),
+            symbol: "SYMBOL".to_string()
         }
     );
 
@@ -182,6 +188,8 @@ fn config(
             fee: Decimal::percent(3),
             liquidity_token: Addr::unchecked(LP_TOKEN.to_string()),
             base_reward_token: Addr::unchecked(ASTRO_TOKEN.to_string()),
+            name: "name".to_string(),
+            symbol: "SYMBOL".to_string()
         }
     );
 
@@ -207,6 +215,8 @@ fn config(
             fee: Decimal::percent(5),
             liquidity_token: Addr::unchecked(LP_TOKEN.to_string()),
             base_reward_token: Addr::unchecked(ASTRO_TOKEN.to_string()),
+            name: "name".to_string(),
+            symbol: "SYMBOL".to_string()
         }
     );
 

@@ -1,18 +1,15 @@
 use astroport::asset::{Asset, token_asset};
 use astroport::querier::query_token_balance;
-use cosmwasm_std::{
-    attr, Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
-    Uint128, Coin, Decimal,
-};
+use cosmwasm_std::{attr, Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128, Coin, Decimal, StdError};
 
 use crate::error::ContractError;
-use crate::state::{RewardInfo, ScalingOperation, State, CONFIG, REWARD, STATE, Config};
+use crate::state::{ScalingOperation, CONFIG, REWARD, STATE, Config};
 
 use cw20::{Expiration};
 
 use spectrum::adapters::asset::AssetEx;
 use spectrum::astroport_farm::{RewardInfoResponse, RewardInfoResponseItem, CallbackMsg};
-use spectrum::helper::{compute_deposit_time, ScalingUint128};
+use spectrum::helper::{ScalingUint128};
 
 /// ## Description
 /// Send assets to compound proxy to create LP token and bond received LP token on behalf of sender.
@@ -126,6 +123,19 @@ pub fn bond(
     )
 }
 
+fn compute_deposit_time(
+    last_deposit_amount: Uint128,
+    new_deposit_amount: Uint128,
+    last_deposit_time: u64,
+    new_deposit_time: u64,
+) -> StdResult<u64> {
+    let last_weight = last_deposit_amount.u128() * (last_deposit_time as u128);
+    let new_weight = new_deposit_amount.u128() * (new_deposit_time as u128);
+    let weight_avg =
+        (last_weight + new_weight) / (last_deposit_amount.u128() + new_deposit_amount.u128());
+    u64::try_from(weight_avg).map_err(|_| StdError::generic_err("Overflow in compute_deposit_time"))
+}
+
 /// Internal bond function used by bond and bond_to
 fn bond_internal(
     deps: DepsMut,
@@ -148,12 +158,21 @@ fn bond_internal(
     // withdraw reward to pending reward; before changing share
     let mut reward_info = REWARD
         .may_load(deps.storage, &staker_addr)?
-        .unwrap_or_else(RewardInfo::create);
+        .unwrap_or_default();
 
-    let deposit_amount = increase_bond_amount(&mut state, &mut reward_info, amount, lp_balance);
+    // convert amount to share & update
+    let bond_share = state.calc_bond_share(amount, lp_balance, ScalingOperation::Truncate);
+    state.total_bond_share += bond_share;
+
+    let deposit_amount = state.calc_bond_amount(
+        lp_balance + amount,
+        bond_share,
+    );
+
+    reward_info.bond_share += bond_share;
 
     let last_deposit_amount = reward_info.deposit_amount;
-    reward_info.deposit_amount = last_deposit_amount + deposit_amount;
+    reward_info.deposit_amount += deposit_amount;
     reward_info.deposit_time = compute_deposit_time(
         last_deposit_amount,
         deposit_amount,
@@ -170,24 +189,6 @@ fn bond_internal(
         attr("amount", amount),
         attr("bond_amount", amount),
     ]))
-}
-
-/// Increase share amount in pool and reward info
-fn increase_bond_amount(
-    state: &mut State,
-    reward_info: &mut RewardInfo,
-    bond_amount: Uint128,
-    lp_balance: Uint128,
-) -> Uint128 {
-    // convert amount to share & update
-    let bond_share = state.calc_bond_share(bond_amount, lp_balance, ScalingOperation::Truncate);
-    state.total_bond_share += bond_share;
-    reward_info.bond_share += bond_share;
-
-    state.calc_bond_amount(
-        lp_balance + bond_amount,
-        bond_share,
-    )
 }
 
 /// ## Description
@@ -224,11 +225,7 @@ pub fn unbond(
 
     let bond_share = reward_info.bond_share.multiply_ratio_and_ceil(amount, user_balance);
     state.total_bond_share = state.total_bond_share.checked_sub(bond_share)?;
-    reward_info.bond_share = reward_info.bond_share.checked_sub(bond_share)?;
-
-    reward_info.deposit_amount = reward_info
-        .deposit_amount
-        .multiply_ratio(user_balance.checked_sub(amount)?, user_balance);
+    reward_info.unbond(bond_share)?;
 
     // update state
     STATE.save(deps.storage, &state)?;
@@ -265,13 +262,8 @@ pub fn query_reward_info(
 /// Loads reward info from the storage
 fn read_reward_info(deps: Deps, env: Env, staker_addr: &Addr) -> StdResult<RewardInfoResponseItem> {
     let reward_info = REWARD
-        .load(deps.storage, staker_addr)
-        .unwrap_or(RewardInfo {
-            bond_share: Uint128::zero(),
-            deposit_amount: Uint128::zero(),
-            deposit_cost: Uint128::zero(),
-            deposit_time: 0,
-        });
+        .may_load(deps.storage, staker_addr)?
+        .unwrap_or_default();
     let state = STATE.load(deps.storage)?;
     let config = CONFIG.load(deps.storage)?;
     let staking_token = config.liquidity_token;
@@ -287,11 +279,17 @@ fn read_reward_info(deps: Deps, env: Env, staker_addr: &Addr) -> StdResult<Rewar
         lp_balance,
         env.block.time.seconds(),
     );
+    let total_share = reward_info.bond_share + reward_info.transfer_share;
     Ok(RewardInfoResponseItem {
         staking_token: staking_token.to_string(),
         bond_share: reward_info.bond_share,
         bond_amount,
-        deposit_amount: reward_info.deposit_amount,
+        deposit_amount: if total_share.is_zero() {
+            Uint128::zero()
+        } else {
+            reward_info.deposit_amount
+                .multiply_ratio(reward_info.bond_share, total_share)
+        },
         deposit_time: reward_info.deposit_time,
     })
 }

@@ -1,18 +1,4 @@
-use cosmwasm_std::{StdError, StdResult, Uint128, Uint256};
-use std::convert::TryFrom;
-
-pub fn compute_deposit_time(
-    last_deposit_amount: Uint128,
-    new_deposit_amount: Uint128,
-    last_deposit_time: u64,
-    new_deposit_time: u64,
-) -> StdResult<u64> {
-    let last_weight = last_deposit_amount.u128() * (last_deposit_time as u128);
-    let new_weight = new_deposit_amount.u128() * (new_deposit_time as u128);
-    let weight_avg =
-        (last_weight + new_weight) / (last_deposit_amount.u128() + new_deposit_amount.u128());
-    u64::try_from(weight_avg).map_err(|_| StdError::generic_err("Overflow in compute_deposit_time"))
-}
+use cosmwasm_std::{Uint128, Uint256};
 
 pub trait ScalingUint128 {
     fn multiply_ratio_and_ceil(
