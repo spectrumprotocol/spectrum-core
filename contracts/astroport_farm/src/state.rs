@@ -2,13 +2,19 @@ use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Addr, Decimal, StdResult, Uint128};
+use cosmwasm_std::{Addr, Decimal, StdError, StdResult, Storage, Uint128};
 use cw20::AllowanceResponse;
+use astroport::pair::PoolResponse;
 use spectrum::adapters::generator::Generator;
+use spectrum::adapters::pair::Pair;
 use spectrum::compound_proxy::Compounder;
 use spectrum::helper::{ScalingUint128};
 
 use crate::ownership::OwnershipProposal;
+
+pub fn default_pair() -> Pair {
+    Pair(Addr::unchecked(""))
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
@@ -24,6 +30,7 @@ pub struct Config {
     /// token info
     #[serde(default)] pub name: String,
     #[serde(default)] pub symbol: String,
+    #[serde(default = "default_pair")] pub pair: Pair,
 }
 
 pub const CONFIG: Item<Config> = Item::new("config");
@@ -74,14 +81,62 @@ pub struct RewardInfo {
     pub deposit_time: u64,
 
     #[serde(default)] pub transfer_share: Uint128,
+    #[serde(default)] pub deposit_costs: Vec<Uint128>,
+}
+
+fn compute_deposit_time(
+    last_deposit_amount: Uint128,
+    new_deposit_amount: Uint128,
+    last_deposit_time: u64,
+    new_deposit_time: u64,
+) -> StdResult<u64> {
+    let last_weight = last_deposit_amount.u128() * (last_deposit_time as u128);
+    let new_weight = new_deposit_amount.u128() * (new_deposit_time as u128);
+    let weight_avg =
+        (last_weight + new_weight) / (last_deposit_amount.u128() + new_deposit_amount.u128());
+    u64::try_from(weight_avg).map_err(|_| StdError::generic_err("Overflow in compute_deposit_time"))
 }
 
 impl RewardInfo {
+    pub fn ensure_deposit_costs(&mut self, storage: &dyn Storage) -> StdResult<()> {
+        if !self.deposit_amount.is_zero() && self.deposit_costs.is_empty() {
+            let pool_info = POOL_INFO.load(storage)?;
+            self.deposit_costs = pool_info.assets.into_iter()
+                .map(|it| it.amount.multiply_ratio(self.deposit_amount, pool_info.total_share))
+                .collect();
+        }
+        Ok(())
+    }
+
+    pub fn bond(&mut self, bond_share: Uint128, deposit_amount: Uint128, time: u64, pool_info: &PoolResponse) -> StdResult<()> {
+        self.bond_share += bond_share;
+        let last_deposit_amount = self.deposit_amount;
+        self.deposit_amount += deposit_amount;
+        self.deposit_time = compute_deposit_time(
+            last_deposit_amount,
+            deposit_amount,
+            self.deposit_time,
+            time,
+        )?;
+        for (i, asset) in pool_info.assets.iter().enumerate() {
+            if self.deposit_costs.len() == i {
+                self.deposit_costs.push(Uint128::zero());
+            }
+            self.deposit_costs[i] += asset.amount.multiply_ratio(deposit_amount, pool_info.total_share);
+        }
+
+        Ok(())
+    }
+
     pub fn unbond(&mut self, bond_share: Uint128) -> StdResult<()> {
-        let old_bond_share = self.bond_share;
+        let old_total_share = self.bond_share + self.transfer_share;
         self.bond_share = self.bond_share.checked_sub(bond_share)?;
+        let total_share = self.bond_share + self.transfer_share;
         self.deposit_amount = self.deposit_amount
-            .multiply_ratio(self.bond_share + self.transfer_share, old_bond_share + self.transfer_share);
+            .multiply_ratio(total_share, old_total_share);
+        self.deposit_costs = self.deposit_costs.iter()
+            .map(|it| it.multiply_ratio(total_share, old_total_share))
+            .collect();
 
         Ok(())
     }
@@ -112,3 +167,4 @@ pub enum ScalingOperation {
 }
 
 pub const ALLOWANCES: Map<(&Addr, &Addr), AllowanceResponse> = Map::new("allowance");
+pub const POOL_INFO: Item<PoolResponse> = Item::new("pool_info");

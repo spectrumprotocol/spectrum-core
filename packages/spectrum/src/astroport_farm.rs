@@ -23,6 +23,8 @@ pub struct InstantiateMsg {
     pub liquidity_token: String,
     /// the base reward token contract address
     pub base_reward_token: String,
+    /// The pair contract address
+    pub pair: String,
 
     /// token info
     pub name: String,
@@ -257,10 +259,12 @@ pub struct RewardInfoResponseItem {
     pub bond_amount: Uint128,
     /// The share of total LP token bonded
     pub bond_share: Uint128,
-    /// The weighted average deposit amount
+    /// The deposit amount
     pub deposit_amount: Uint128,
     /// The weighted average deposit time
     pub deposit_time: u64,
+    /// The deposit cost
+    pub deposit_costs: Vec<Uint128>,
 }
 
 /// This structure describes a migration message.
@@ -269,6 +273,7 @@ pub struct RewardInfoResponseItem {
 pub struct MigrateMsg {
     pub name: String,
     pub symbol: String,
+    pub pair: String,
 }
 
 fn is_valid_name(name: &str) -> bool {

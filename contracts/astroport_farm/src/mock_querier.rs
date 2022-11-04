@@ -4,8 +4,9 @@ use cosmwasm_std::testing::{MockApi, MockStorage};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use astroport::asset::token_asset;
+use astroport::asset::{native_asset, token_asset};
 use astroport::generator::{PendingTokenResponse};
+use astroport::pair::PoolResponse;
 
 pub fn mock_dependencies() -> OwnedDeps<MockStorage, MockApi, WasmMockQuerier> {
     let custom_querier: WasmMockQuerier = WasmMockQuerier::new();
@@ -102,6 +103,15 @@ impl WasmMockQuerier {
                         token_asset(Addr::unchecked(REWARD_TOKEN), reward),
                     ]),
                 })
+            },
+            MockQueryMsg::Pool {} => {
+                to_binary(&PoolResponse {
+                    total_share: Uint128::from(1_000_000u128),
+                    assets: vec![
+                        native_asset("denom1".to_string(), Uint128::from(1_000_000u128)),
+                        native_asset("denom2".to_string(), Uint128::from(1_000_000u128)),
+                    ]
+                })
             }
         }
     }
@@ -121,6 +131,7 @@ enum MockQueryMsg {
         lp_token: String,
         user: String
     },
+    Pool {},
 }
 
 impl Querier for WasmMockQuerier {

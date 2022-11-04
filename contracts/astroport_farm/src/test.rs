@@ -15,6 +15,7 @@ use cosmwasm_std::{
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg, Expiration};
 use spectrum::adapters::generator::Generator;
+use spectrum::adapters::pair::Pair;
 use spectrum::astroport_farm::{
     CallbackMsg, Cw20HookMsg, ExecuteMsg, InstantiateMsg, QueryMsg, RewardInfoResponse,
     RewardInfoResponseItem,
@@ -76,7 +77,8 @@ fn create(
         liquidity_token: LP_TOKEN.to_string(),
         base_reward_token: ASTRO_TOKEN.to_string(),
         name: "name".to_string(),
-        symbol: "SYMBOL".to_string()
+        symbol: "SYMBOL".to_string(),
+        pair: "pair".to_string(),
     };
     let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg);
     assert_error(res, "fee must be 0 to 1");
@@ -92,7 +94,8 @@ fn create(
         liquidity_token: LP_TOKEN.to_string(),
         base_reward_token: ASTRO_TOKEN.to_string(),
         name: "name".to_string(),
-        symbol: "SYMBOL".to_string()
+        symbol: "SYMBOL".to_string(),
+        pair: "pair".to_string(),
     };
 
     let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg);
@@ -113,7 +116,8 @@ fn create(
             liquidity_token: Addr::unchecked(LP_TOKEN.to_string()),
             base_reward_token: Addr::unchecked(ASTRO_TOKEN.to_string()),
             name: "name".to_string(),
-            symbol: "SYMBOL".to_string()
+            symbol: "SYMBOL".to_string(),
+            pair: Pair(Addr::unchecked("pair")),
         }
     );
 
@@ -189,7 +193,8 @@ fn config(
             liquidity_token: Addr::unchecked(LP_TOKEN.to_string()),
             base_reward_token: Addr::unchecked(ASTRO_TOKEN.to_string()),
             name: "name".to_string(),
-            symbol: "SYMBOL".to_string()
+            symbol: "SYMBOL".to_string(),
+            pair: Pair(Addr::unchecked("pair")),
         }
     );
 
@@ -216,7 +221,8 @@ fn config(
             liquidity_token: Addr::unchecked(LP_TOKEN.to_string()),
             base_reward_token: Addr::unchecked(ASTRO_TOKEN.to_string()),
             name: "name".to_string(),
-            symbol: "SYMBOL".to_string()
+            symbol: "SYMBOL".to_string(),
+            pair: Pair(Addr::unchecked("pair")),
         }
     );
 
@@ -381,6 +387,10 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                     deposit_time: 101,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(100000u128),
+                    deposit_costs: vec![
+                        Uint128::from(100000u128),
+                        Uint128::from(100000u128),
+                    ],
                 }
             }
         }
@@ -439,6 +449,10 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                     deposit_time: 102,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(50000u128),
+                    deposit_costs: vec![
+                        Uint128::from(50000u128),
+                        Uint128::from(50000u128),
+                    ],
                 }
             }
         }
@@ -477,6 +491,10 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                     deposit_time: 101,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(120000u128),
+                    deposit_costs: vec![
+                        Uint128::from(100000u128),
+                        Uint128::from(100000u128),
+                    ],
                 }
             }
         }
@@ -498,6 +516,10 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                     deposit_time: 102,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(60000u128),
+                    deposit_costs: vec![
+                        Uint128::from(50000u128),
+                        Uint128::from(50000u128),
+                    ],
                 }
             }
         }
@@ -571,6 +593,10 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                     deposit_time: 101,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(60000u128),
+                    deposit_costs: vec![
+                        Uint128::from(50000u128),
+                        Uint128::from(50000u128),
+                    ],
                 }
             }
         }
@@ -592,6 +618,10 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                     deposit_time: 102,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(60000u128),
+                    deposit_costs: vec![
+                        Uint128::from(50000u128),
+                        Uint128::from(50000u128),
+                    ],
                 }
             }
         }
@@ -651,6 +681,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                     deposit_time: 102,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(0u128),
+                    deposit_costs: vec![],
                 }
             }
         }
@@ -672,6 +703,10 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                     deposit_time: 101,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(60000u128),
+                    deposit_costs: vec![
+                        Uint128::from(50000u128),
+                        Uint128::from(50000u128),
+                    ],
                 }
             }
         }
@@ -904,6 +939,10 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                     deposit_time: 33448,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(70000u128),
+                    deposit_costs: vec![
+                        Uint128::from(59999u128),
+                        Uint128::from(59999u128),
+                    ],
                 }
             }
         }
@@ -961,6 +1000,10 @@ fn deposit_time(
                     deposit_time: 300000,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(9999u128),
+                    deposit_costs: vec![
+                        Uint128::from(9999u128),
+                        Uint128::from(9999u128),
+                    ],
                 }
             }
         }
@@ -984,6 +1027,10 @@ fn deposit_time(
                     deposit_time: 300000,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(10311u128),
+                    deposit_costs: vec![
+                        Uint128::from(9999u128),
+                        Uint128::from(9999u128),
+                    ],
                 }
             }
         }
@@ -1005,6 +1052,10 @@ fn deposit_time(
                     deposit_time: 33448,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(74375u128),
+                    deposit_costs: vec![
+                        Uint128::from(59999u128),
+                        Uint128::from(59999u128),
+                    ],
                 }
             }
         }
@@ -1029,6 +1080,10 @@ fn deposit_time(
                     deposit_time: 300000,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(10624u128),
+                    deposit_costs: vec![
+                        Uint128::from(9999u128),
+                        Uint128::from(9999u128),
+                    ],
                 }
             }
         }
@@ -1091,6 +1146,10 @@ fn deposit_time(
                     deposit_time: 33448,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(74689u128),
+                    deposit_costs: vec![
+                        Uint128::from(59999u128),
+                        Uint128::from(59999u128),
+                    ],
                 }
             }
         }

@@ -3,7 +3,7 @@ use cw20::Cw20ExecuteMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use astroport::asset::{Asset, AssetInfo, PairInfo};
-use astroport::pair::{Cw20HookMsg, ExecuteMsg, QueryMsg, SimulationResponse, ConfigResponse};
+use astroport::pair::{Cw20HookMsg, ExecuteMsg, QueryMsg, SimulationResponse, ConfigResponse, PoolResponse};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Pair(pub Addr);
@@ -11,6 +11,10 @@ pub struct Pair(pub Addr);
 impl Pair {
     pub fn query_pair_info(&self, querier: &QuerierWrapper) -> StdResult<PairInfo> {
         querier.query_wasm_smart(self.0.to_string(), &QueryMsg::Pair {})
+    }
+
+    pub fn query_pool_info(&self, querier: &QuerierWrapper) -> StdResult<PoolResponse> {
+        querier.query_wasm_smart(self.0.to_string(), &QueryMsg::Pool {})
     }
 
     pub fn query_config(&self, querier: &QuerierWrapper) -> StdResult<ConfigResponse> {

@@ -13,9 +13,10 @@ use crate::{
 
 use cw20::{Cw20ReceiveMsg, MarketingInfoResponse, MinterResponse};
 use spectrum::adapters::generator::Generator;
+use spectrum::adapters::pair::Pair;
 
 use crate::bond::{query_reward_info, unbond};
-use crate::state::STATE;
+use crate::state::{POOL_INFO, STATE};
 use spectrum::astroport_farm::{
     CallbackMsg, Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg,
 };
@@ -56,6 +57,7 @@ pub fn instantiate(
             fee_collector: deps.api.addr_validate(&msg.fee_collector)?,
             liquidity_token: deps.api.addr_validate(&msg.liquidity_token)?,
             base_reward_token: deps.api.addr_validate(&msg.base_reward_token)?,
+            pair: Pair(deps.api.addr_validate(&msg.pair)?),
             name: msg.name,
             symbol: msg.symbol,
         },
@@ -287,7 +289,11 @@ pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response>
     let mut config = CONFIG.load(deps.storage)?;
     config.name = msg.name;
     config.symbol = msg.symbol;
+    config.pair = Pair(deps.api.addr_validate(&msg.pair)?);
     CONFIG.save(deps.storage, &config)?;
+
+    let pool_info = config.pair.query_pool_info(&deps.querier)?;
+    POOL_INFO.save(deps.storage, &pool_info)?;
 
     Ok(Response::default())
 }
