@@ -1,6 +1,8 @@
 use cosmwasm_std::{Addr, attr, Binary, BlockInfo, Deps, DepsMut, Env, MessageInfo, Order, Response, StdError, StdResult, Storage, Uint128};
 use cw20::{AllAccountsResponse, AllAllowancesResponse, AllowanceInfo, AllowanceResponse, BalanceResponse, Cw20ReceiveMsg, Expiration, TokenInfoResponse};
 use cw_storage_plus::Bound;
+use astroport::asset::{Asset, AssetInfo};
+use astroport::pair::PoolResponse;
 use crate::error::ContractError;
 use crate::state::{ALLOWANCES, CONFIG, REWARD, STATE};
 
@@ -9,22 +11,42 @@ fn transfer_internal(
     _env: Env,
     sender_addr: &Addr,
     recipient: &str,
-    amount: Uint128,
+    share: Uint128,
 ) -> Result<(), ContractError> {
 
-    if amount == Uint128::zero() {
+    if share == Uint128::zero() {
         return Err(ContractError::InvalidZeroAmount {});
     }
 
     let mut sender = REWARD.load(deps.storage, sender_addr)?;
-    sender.bond_share = sender.bond_share.checked_sub(amount)?;
-    sender.transfer_share += amount;
+    sender.bond_share = sender.bond_share.checked_sub(share)?;
+    sender.transfer_share += share;
 
     let rcpt_addr = deps.api.addr_validate(recipient)?;
     let mut receiver = REWARD.may_load(deps.storage, &rcpt_addr)?
         .unwrap_or_default();
-    receiver.bond_share += amount;
-    receiver.transfer_share = receiver.transfer_share.saturating_sub(amount);
+    if receiver.transfer_share < share {
+        let new_share = share - receiver.transfer_share;
+        receiver.bond_share += receiver.transfer_share;
+        receiver.transfer_share = Uint128::zero();
+
+        let total_share = sender.bond_share + sender.transfer_share;
+        let deposit_amount = sender.deposit_amount.multiply_ratio(new_share, total_share);
+        sender.ensure_deposit_costs(deps.storage)?;
+        let pool_info = PoolResponse {
+            total_share: sender.deposit_amount,
+            assets: sender.deposit_costs.iter()
+                .map(|it| Asset {
+                    amount: *it,
+                    info: AssetInfo::NativeToken { denom: Default::default() }
+                })
+                .collect(),
+        };
+        receiver.bond(new_share, deposit_amount, sender.deposit_time, &pool_info)?;
+    } else {
+        receiver.bond_share += share;
+        receiver.transfer_share -= share;
+    }
 
     REWARD.save(deps.storage, sender_addr, &sender)?;
     REWARD.save(deps.storage, &rcpt_addr, &receiver)?;
@@ -53,16 +75,16 @@ pub fn execute_transfer(
 fn burn_internal(
     deps: DepsMut,
     sender: &Addr,
-    amount: Uint128,
+    share: Uint128,
 ) -> Result<(), ContractError> {
-    if amount == Uint128::zero() {
+    if share == Uint128::zero() {
         return Err(ContractError::InvalidZeroAmount {});
     }
 
     let mut state = STATE.load(deps.storage)?;
     let mut reward_info = REWARD.load(deps.storage, sender)?;
-    state.total_bond_share = state.total_bond_share.checked_sub(amount)?;
-    reward_info.unbond(amount)?;
+    state.total_bond_share = state.total_bond_share.checked_sub(share)?;
+    reward_info.unbond(share)?;
 
     STATE.save(deps.storage, &state)?;
     REWARD.save(deps.storage, sender, &reward_info)?;
