@@ -9,7 +9,7 @@ use astroport::asset::{native_asset_info, Asset, AssetInfo, ULUNA_DENOM, AssetIn
 
 use astroport::common::{propose_new_owner, drop_ownership_proposal, claim_ownership};
 use cosmwasm_std::{
-    entry_point, to_binary, Binary, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo,
+    entry_point, to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
     Order, Response, StdError, StdResult, Uint128, WasmMsg, attr,
 };
 use spectrum::fees_collector::{
@@ -18,9 +18,6 @@ use spectrum::fees_collector::{
 };
 use std::collections::{HashMap, HashSet};
 use spectrum::adapters::asset::AssetEx;
-
-/// Sets the default maximum spread (as a percentage) used when swapping fee tokens to stablecoin.
-const DEFAULT_MAX_SPREAD: u64 = 5; // 5%
 
 /// ## Description
 /// Creates a new contract with the specified parameters in the [`InstantiateMsg`].
@@ -33,15 +30,6 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
 
-    let max_spread = if let Some(max_spread) = msg.max_spread {
-        if max_spread.gt(&Decimal::one()) {
-            return Err(ContractError::IncorrectMaxSpread {});
-        };
-        max_spread
-    } else {
-        Decimal::percent(DEFAULT_MAX_SPREAD)
-    };
-
     msg.stablecoin.check(deps.api)?;
 
     let config = Config {
@@ -52,7 +40,6 @@ pub fn instantiate(
         target_list: msg.target_list.into_iter()
                                 .map(|(addr, weight)| Ok((deps.api.addr_validate(&addr)?, weight)))
                                 .collect::<StdResult<_>>()?,
-        max_spread,
     };
 
     CONFIG.save(deps.storage, &config)?;
@@ -76,14 +63,12 @@ pub fn execute(
             operator,
             factory_contract,
             target_list,
-            max_spread,
         } => update_config(
             deps,
             info,
             operator,
             factory_contract,
             target_list,
-            max_spread,
         ),
         ExecuteMsg::SwapBridgeAssets { assets, depth } => {
             swap_bridge_assets(deps, env, info, assets, depth)
@@ -384,7 +369,6 @@ pub fn update_config(
     operator: Option<String>,
     factory_contract: Option<String>,
     target_list: Option<Vec<(String, u64)>>,
-    max_spread: Option<Decimal>,
 ) -> Result<Response, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
@@ -398,13 +382,6 @@ pub fn update_config(
 
     if let Some(factory_contract) = factory_contract {
         config.factory_contract = deps.api.addr_validate(&factory_contract)?;
-    }
-
-    if let Some(max_spread) = max_spread {
-        if max_spread.gt(&Decimal::one()) {
-            return Err(ContractError::IncorrectMaxSpread {});
-        };
-        config.max_spread = max_spread;
     }
 
     if let Some(target_list) = target_list {

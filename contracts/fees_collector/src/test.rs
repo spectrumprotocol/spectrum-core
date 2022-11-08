@@ -58,7 +58,6 @@ fn create(
     let instantiate_msg = InstantiateMsg {
         owner: USER_1.to_string(),
         factory_contract: FACTORY_1.to_string(),
-        max_spread: Some(Decimal::percent(1)),
         operator: OPERATOR_1.to_string(),
         stablecoin: AssetInfo::NativeToken {
             denom: IBC_TOKEN.to_string(),
@@ -79,7 +78,6 @@ fn create(
             stablecoin: AssetInfo::NativeToken {
                 denom: IBC_TOKEN.to_string(),
             },
-            max_spread: Decimal::percent(1)
         }
     );
 
@@ -96,7 +94,6 @@ fn config(
         operator: Some(OPERATOR_2.to_string()),
         factory_contract: None,
         target_list: None,
-        max_spread: None,
     };
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
     assert_error(res, "Unauthorized");
@@ -109,7 +106,6 @@ fn config(
         operator: None,
         factory_contract: Some(FACTORY_2.to_string()),
         target_list: None,
-        max_spread: None,
     };
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
     assert!(res.is_ok());
@@ -118,16 +114,6 @@ fn config(
         operator: None,
         factory_contract: None,
         target_list: Some(vec![(USER_1.to_string(), 1)]),
-        max_spread: None,
-    };
-    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
-    assert!(res.is_ok());
-
-    let msg = ExecuteMsg::UpdateConfig {
-        operator: None,
-        factory_contract: None,
-        target_list: None,
-        max_spread: Some(Decimal::percent(5)),
     };
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
     assert!(res.is_ok());
@@ -144,7 +130,6 @@ fn config(
             stablecoin: AssetInfo::NativeToken {
                 denom: IBC_TOKEN.to_string(),
             },
-            max_spread: Decimal::percent(5)
         }
     );
 
@@ -152,7 +137,6 @@ fn config(
         operator: Some(OPERATOR_1.to_string()),
         factory_contract: Some(FACTORY_1.to_string()),
         target_list: Some(vec![(USER_2.to_string(), 2), (USER_3.to_string(), 3)]),
-        max_spread: Some(Decimal::percent(1)),
     };
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
     assert!(res.is_ok());
@@ -169,7 +153,6 @@ fn config(
             stablecoin: AssetInfo::NativeToken {
                 denom: IBC_TOKEN.to_string(),
             },
-            max_spread: Decimal::percent(1)
         }
     );
 
@@ -448,8 +431,8 @@ fn collect(
                     amount: Uint128::new(1000000u128),
                     msg: to_binary(&AstroportPairCw20HookMsg::Swap {
                         ask_asset_info: None,
-                        belief_price: None,
-                        max_spread: Some(Decimal::percent(1)),
+                        belief_price: Some(Decimal::MAX),
+                        max_spread: Some(Decimal::percent(50)),
                         to: None,
                     })?
                 })?,
@@ -499,8 +482,8 @@ fn collect(
                     amount: Uint128::new(1500000u128),
                     msg: to_binary(&AstroportPairCw20HookMsg::Swap {
                         ask_asset_info: None,
-                        belief_price: None,
-                        max_spread: Some(Decimal::percent(1)),
+                        belief_price: Some(Decimal::MAX),
+                        max_spread: Some(Decimal::percent(50)),
                         to: None,
                     })?
                 })?,

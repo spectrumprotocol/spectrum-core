@@ -1,5 +1,5 @@
 use astroport::{asset::AssetInfo, common::OwnershipProposal};
-use cosmwasm_std::{Addr, Decimal};
+use cosmwasm_std::{Addr};
 use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -17,8 +17,6 @@ pub struct Config {
     pub target_list: Vec<(Addr, u64)>,
     /// The stablecoin token address
     pub stablecoin: AssetInfo,
-    /// The max spread allowed when swapping fee tokens to stablecoin
-    pub max_spread: Decimal,
 }
 
 /// Stores the contract configuration at the given key

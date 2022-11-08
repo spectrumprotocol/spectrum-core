@@ -2,7 +2,7 @@ use crate::error::ContractError;
 use crate::state::{Config, BRIDGES};
 use astroport::asset::{Asset, AssetInfo, PairInfo};
 use astroport::querier::query_pair_info;
-use cosmwasm_std::{to_binary, Deps, Env, StdResult, Uint128, WasmMsg, CosmosMsg, Addr, QuerierWrapper};
+use cosmwasm_std::{to_binary, Deps, Env, StdResult, Uint128, WasmMsg, CosmosMsg, Addr, QuerierWrapper, Decimal};
 use spectrum::adapters::pair::Pair;
 use spectrum::fees_collector::ExecuteMsg;
 
@@ -12,6 +12,9 @@ pub const BRIDGES_INITIAL_DEPTH: u64 = 0;
 pub const BRIDGES_MAX_DEPTH: u64 = 2;
 /// Swap execution depth limit
 pub const BRIDGES_EXECUTION_MAX_DEPTH: u64 = 3;
+
+/// Maximum spread percentage when swapping
+const MAX_SPREAD: u64 = 50; // 50%
 
 /// Creates swap message
 pub fn try_build_swap_msg(
@@ -24,8 +27,8 @@ pub fn try_build_swap_msg(
     let pool = query_pair_info(querier, config.factory_contract.clone(), &[from.clone(), to])?;
     let msg = Pair(pool.contract_addr).swap_msg(
         &Asset { info: from, amount },
-        None,
-        Some(config.max_spread),
+        Some(Decimal::MAX),
+        Some(Decimal::percent(MAX_SPREAD)),
         None,
     )?;
     Ok(msg)

@@ -134,7 +134,7 @@ pub fn compound(
         let pair_proxy = PAIR_PROXY.may_load(deps.storage, reward.info.to_string())?;
         if let Some(pair_proxy) = pair_proxy {
             let swap_reward =
-                pair_proxy.swap_msg(&reward, None, Some(Decimal::percent(MAX_SPREAD)), None)?;
+                pair_proxy.swap_msg(&reward, Some(Decimal::MAX), Some(Decimal::percent(MAX_SPREAD)), None)?;
             messages.push(swap_reward);
         }
 
@@ -281,7 +281,7 @@ pub fn calculate_optimal_swap(
                 swap_asset_a_amount = swap_asset.amount;
                 messages.push(Pair(pair_contract).swap_msg(
                     &swap_asset,
-                    None,
+                    Some(Decimal::MAX),
                     Some(Decimal::percent(MAX_SPREAD)),
                     None,
                 )?);
@@ -310,7 +310,7 @@ pub fn calculate_optimal_swap(
                 swap_asset_b_amount = swap_asset.amount;
                 messages.push(Pair(pair_contract).swap_msg(
                     &swap_asset,
-                    None,
+                    Some(Decimal::MAX),
                     Some(Decimal::percent(MAX_SPREAD)),
                     None,
                 )?);

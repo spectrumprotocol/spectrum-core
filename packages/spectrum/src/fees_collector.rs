@@ -1,5 +1,5 @@
 use astroport::asset::{Asset, AssetInfo};
-use cosmwasm_std::{Decimal, Uint128};
+use cosmwasm_std::{Uint128};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -16,8 +16,6 @@ pub struct InstantiateMsg {
     pub stablecoin: AssetInfo,
     /// The beneficiary addresses to received fees in stablecoin
     pub target_list: Vec<(String, u64)>,
-    /// The maximum spread used when swapping fee tokens
-    pub max_spread: Option<Decimal>,
 }
 
 /// This structure describes the functions that can be executed in this contract.
@@ -37,8 +35,6 @@ pub enum ExecuteMsg {
         factory_contract: Option<String>,
         /// The list of target address to receive fees in stablecoin
         target_list: Option<Vec<(String, u64)>>,
-        /// The maximum spread used when swapping fee tokens
-        max_spread: Option<Decimal>,
     },
     /// Add bridge tokens used to swap specific fee tokens to stablecoin (effectively declaring a swap route)
     UpdateBridges {
