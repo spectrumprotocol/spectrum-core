@@ -13,7 +13,7 @@ use cosmwasm_std::{
     from_binary, to_binary, Addr, Coin, CosmosMsg, Decimal, OwnedDeps, Response, StdError,
     Timestamp, Uint128, WasmMsg,
 };
-use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg, Expiration};
+use cw20::{AllAccountsResponse, AllAllowancesResponse, AllowanceInfo, AllowanceResponse, BalanceResponse, Cw20ExecuteMsg, Cw20ReceiveMsg, Expiration, Logo, MarketingInfoResponse, MinterResponse, TokenInfoResponse};
 use spectrum::adapters::generator::Generator;
 use spectrum::adapters::pair::Pair;
 use spectrum::astroport_farm::{
@@ -48,6 +48,7 @@ fn test() -> Result<(), ContractError> {
     deposit_time(&mut deps)?;
     compound(&mut deps)?;
     callback(&mut deps)?;
+    cw20(&mut deps)?;
 
     Ok(())
 }
@@ -1348,6 +1349,591 @@ fn callback(
     // only contract itself can execute callback
     let res = execute(deps.as_mut(), env.clone(), info, msg.clone());
     assert_error(res, "Unauthorized");
+
+    Ok(())
+}
+
+fn cw20(
+    deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>,
+) -> Result<(), ContractError> {
+    let mut env = mock_env();
+
+    // no amount cannot transfer
+    let info = mock_info(USER_3, &[]);
+    let msg = ExecuteMsg::Transfer {
+        recipient: USER_1.to_string(),
+        amount: Uint128::from(50000u128),
+    };
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
+    assert_error(res, "Overflow: Cannot Sub with 0 and 50000");
+
+    // deposit
+    let info = mock_info(LP_TOKEN, &[]);
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: USER_3.to_string(),
+        amount: Uint128::from(200000u128),
+        msg: to_binary(&Cw20HookMsg::Bond { staker_addr: None })?,
+    });
+    execute(deps.as_mut(), env.clone(), info.clone(), msg)?;
+
+    deps.querier.set_balance(
+        GENERATOR_PROXY.to_string(),
+        LP_TOKEN.to_string(),
+        Uint128::from(274689u128),
+    );
+
+    let msg = QueryMsg::RewardInfo {
+        staker_addr: USER_3.to_string(),
+    };
+    let res: RewardInfoResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        RewardInfoResponse {
+            staker_addr: USER_3.to_string(),
+            reward_info: {
+                RewardInfoResponseItem {
+                    bond_share: Uint128::from(156202u128),
+                    deposit_amount: Uint128::from(199999u128),
+                    deposit_time: 1571797419,
+                    staking_token: LP_TOKEN.to_string(),
+                    bond_amount: Uint128::from(199999u128),
+                    deposit_costs: vec![
+                        Uint128::from(199999u128),
+                        Uint128::from(199999u128),
+                    ],
+                }
+            }
+        }
+    );
+
+    // transfer to user 1
+    let info = mock_info(USER_3, &[]);
+    let msg = ExecuteMsg::Transfer {
+        recipient: USER_1.to_string(),
+        amount: Uint128::from(50000u128),
+    };
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg)?;
+    assert_eq!(
+        res.messages
+            .into_iter()
+            .map(|it| it.msg)
+            .collect::<Vec<CosmosMsg>>(),
+        []);
+
+    // send to user2
+    let msg = ExecuteMsg::Send {
+        amount: Uint128::from(50000u128),
+        contract: FEE_COLLECTOR_2.to_string(),
+        msg: to_binary(&Cw20HookMsg::Bond {
+            staker_addr: None,
+        })?,
+    };
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg)?;
+    assert_eq!(
+        res.messages
+            .into_iter()
+            .map(|it| it.msg)
+            .collect::<Vec<CosmosMsg>>(),
+        [
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: FEE_COLLECTOR_2.to_string(),
+                msg: to_binary(&ExecuteMsg::Receive(Cw20ReceiveMsg {
+                    sender: USER_3.to_string(),
+                    amount: Uint128::from(50000u128),
+                    msg: to_binary(&Cw20HookMsg::Bond {
+                        staker_addr: None,
+                    })?,
+                }))?,
+                funds: vec![],
+            })
+        ]);
+
+    // deposit time is mixed between old & new
+    let msg = QueryMsg::RewardInfo {
+        staker_addr: USER_1.to_string(),
+    };
+    let res: RewardInfoResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        RewardInfoResponse {
+            staker_addr: USER_1.to_string(),
+            reward_info: {
+                RewardInfoResponseItem {
+                    bond_share: Uint128::from(108333u128),
+                    deposit_amount: Uint128::from(124018u128),
+                    deposit_time: 811389522,
+                    staking_token: LP_TOKEN.to_string(),
+                    bond_amount: Uint128::from(138708u128),
+                    deposit_costs: vec![
+                        Uint128::from(124018u128),
+                        Uint128::from(124018u128),
+                    ],
+                }
+            }
+        }
+    );
+
+    // deposit time and cost is from new (since there is no old position)
+    let msg = QueryMsg::RewardInfo {
+        staker_addr: FEE_COLLECTOR_2.to_string(),
+    };
+    let res: RewardInfoResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        RewardInfoResponse {
+            staker_addr: FEE_COLLECTOR_2.to_string(),
+            reward_info: {
+                RewardInfoResponseItem {
+                    bond_share: Uint128::from(50000u128),
+                    deposit_amount: Uint128::from(64019u128),
+                    deposit_time: 1571797419,
+                    staking_token: LP_TOKEN.to_string(),
+                    bond_amount: Uint128::from(64019u128),
+                    deposit_costs: vec![
+                        Uint128::from(64019u128),
+                        Uint128::from(64019u128),
+                    ],
+                }
+            }
+        }
+    );
+
+    let msg = QueryMsg::RewardInfo {
+        staker_addr: USER_3.to_string(),
+    };
+    let res: RewardInfoResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        RewardInfoResponse {
+            staker_addr: USER_3.to_string(),
+            reward_info: {
+                RewardInfoResponseItem {
+                    bond_share: Uint128::from(56202u128),
+                    deposit_amount: Uint128::from(71960u128),
+                    deposit_time: 1571797419,
+                    staking_token: LP_TOKEN.to_string(),
+                    bond_amount: Uint128::from(71960u128),
+                    deposit_costs: vec![
+                        Uint128::from(71960u128),
+                        Uint128::from(71960u128),
+                    ],
+                }
+            }
+        }
+    );
+
+    let msg = QueryMsg::Balance {
+        address: FEE_COLLECTOR_2.to_string()
+    };
+    let res: BalanceResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        BalanceResponse {
+            balance: Uint128::from(50000u128),
+        }
+    );
+
+    let msg = QueryMsg::AllAccounts {
+        start_after: None,
+        limit: None,
+    };
+    let res: AllAccountsResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        AllAccountsResponse {
+            accounts: vec![
+                FEE_COLLECTOR_2.to_string(),
+                USER_1.to_string(),
+                USER_2.to_string(),
+                USER_3.to_string(),
+            ]
+        }
+    );
+
+    // info
+    let msg = QueryMsg::TokenInfo {};
+    let res: TokenInfoResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        TokenInfoResponse {
+            name: "name".to_string(),
+            symbol: "SYMBOL".to_string(),
+            decimals: 6u8,
+            total_supply: Uint128::from(214535u128),
+        }
+    );
+
+    // mint
+    let msg = QueryMsg::Minter {};
+    let res: Option<MinterResponse> = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        None,
+    );
+
+    let msg = ExecuteMsg::Mint {
+        recipient: USER_1.to_string(),
+        amount: Uint128::from(100000u128),
+    };
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
+    assert_error(res, "Unauthorized");
+
+    // marketing & logo
+    let msg = QueryMsg::MarketingInfo {};
+    let res: MarketingInfoResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        MarketingInfoResponse {
+            project: None,
+            description: None,
+            logo: None,
+            marketing: None,
+        },
+    );
+
+    let msg = QueryMsg::DownloadLogo {};
+    let res = query(deps.as_ref(), env.clone(), msg).expect_err("should error");
+    assert_eq!(
+        res,
+        StdError::not_found("logo"),
+    );
+
+    let msg = ExecuteMsg::UpdateMarketing {
+        project: None,
+        description: Some("blah".to_string()),
+        marketing: None
+    };
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
+    assert_error(res, "Unauthorized");
+
+    let msg = ExecuteMsg::UploadLogo(Logo::Url("https://foo.com/bar.jpg".to_string()));
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
+    assert_error(res, "Unauthorized");
+
+    // transfer back same cost
+    let info = mock_info(USER_1, &[]);
+    let msg = ExecuteMsg::Transfer {
+        recipient: USER_3.to_string(),
+        amount: Uint128::from(50000u128),
+    };
+    execute(deps.as_mut(), env.clone(), info.clone(), msg)?;
+
+    let msg = QueryMsg::RewardInfo {
+        staker_addr: USER_3.to_string(),
+    };
+    let res: RewardInfoResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        RewardInfoResponse {
+            staker_addr: USER_3.to_string(),
+            reward_info: {
+                RewardInfoResponseItem {
+                    bond_share: Uint128::from(106202u128),
+                    deposit_amount: Uint128::from(135979u128),
+                    deposit_time: 1571797419,
+                    staking_token: LP_TOKEN.to_string(),
+                    bond_amount: Uint128::from(135980u128),
+                    deposit_costs: vec![
+                        Uint128::from(135979u128),
+                        Uint128::from(135979u128),
+                    ],
+                }
+            }
+        }
+    );
+
+    // over burn
+    let info = mock_info(FEE_COLLECTOR_2, &[]);
+    let msg = ExecuteMsg::Burn {
+        amount: Uint128::from(50001u128),
+    };
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
+    assert_error(res, "Overflow: Cannot Sub with 50000 and 50001");
+
+    // burn
+    let msg = ExecuteMsg::Burn {
+        amount: Uint128::from(25000u128),
+    };
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg)?;
+    assert_eq!(
+        res.messages
+            .into_iter()
+            .map(|it| it.msg)
+            .collect::<Vec<CosmosMsg>>(),
+        []);
+
+    deps.querier.set_balance(
+        GENERATOR_PROXY.to_string(),
+        LP_TOKEN.to_string(),
+        Uint128::from(242680u128),
+    );
+
+    let msg = QueryMsg::RewardInfo {
+        staker_addr: FEE_COLLECTOR_2.to_string(),
+    };
+    let res: RewardInfoResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        RewardInfoResponse {
+            staker_addr: FEE_COLLECTOR_2.to_string(),
+            reward_info: {
+                RewardInfoResponseItem {
+                    bond_share: Uint128::from(25000u128),
+                    deposit_amount: Uint128::from(32009u128),
+                    deposit_time: 1571797419,
+                    staking_token: LP_TOKEN.to_string(),
+                    bond_amount: Uint128::from(32009u128),
+                    deposit_costs: vec![
+                        Uint128::from(32009u128),
+                        Uint128::from(32009u128),
+                    ],
+                }
+            }
+        }
+    );
+
+    // allowance
+    let info = mock_info(USER_3, &[]);
+    let msg = ExecuteMsg::IncreaseAllowance {
+        spender: USER_3.to_string(),
+        amount: Uint128::from(100000u128),
+        expires: Some(Expiration::AtHeight(env.block.height + 1))
+    };
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
+    assert_error(res, "Cannot set to own account");
+
+    let msg = ExecuteMsg::IncreaseAllowance {
+        spender: FEE_COLLECTOR_2.to_string(),
+        amount: Uint128::from(100000u128),
+        expires: Some(Expiration::AtHeight(env.block.height + 1))
+    };
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg)?;
+    assert_eq!(
+        res.messages
+            .into_iter()
+            .map(|it| it.msg)
+            .collect::<Vec<CosmosMsg>>(),
+        []);
+
+    let msg = QueryMsg::Allowance {
+        owner: USER_3.to_string(),
+        spender: FEE_COLLECTOR_2.to_string()
+    };
+    let res: AllowanceResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        AllowanceResponse {
+            allowance: Uint128::from(100000u128),
+            expires: Expiration::AtHeight(env.block.height + 1),
+        }
+    );
+
+    let msg = QueryMsg::AllAllowances {
+        owner: USER_3.to_string(),
+        start_after: None,
+        limit: None
+    };
+    let res: AllAllowancesResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        AllAllowancesResponse {
+            allowances: vec![
+                AllowanceInfo {
+                    spender: FEE_COLLECTOR_2.to_string(),
+                    allowance: Uint128::from(100000u128),
+                    expires: Expiration::AtHeight(env.block.height + 1),
+                }
+            ]
+        }
+    );
+
+    // Unauthorized
+    let msg = ExecuteMsg::TransferFrom {
+        owner: USER_3.to_string(),
+        recipient: FEE_COLLECTOR_2.to_string(),
+        amount: Uint128::from(20000u128),
+    };
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
+    assert_error(res, "No allowance for this account");
+
+    // over allowance
+    let info = mock_info(FEE_COLLECTOR_2, &[]);
+    let msg = ExecuteMsg::TransferFrom {
+        owner: USER_3.to_string(),
+        recipient: FEE_COLLECTOR_2.to_string(),
+        amount: Uint128::from(120000u128),
+    };
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
+    assert_error(res, "Overflow: Cannot Sub with 100000 and 120000");
+
+    // expired
+    env.block.height += 1;
+    let msg = ExecuteMsg::TransferFrom {
+        owner: USER_3.to_string(),
+        recipient: FEE_COLLECTOR_2.to_string(),
+        amount: Uint128::from(20000u128),
+    };
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
+    assert_error(res, "Allowance is expired");
+
+    env.block.height -= 1;
+    let msg = ExecuteMsg::TransferFrom {
+        owner: USER_3.to_string(),
+        recipient: FEE_COLLECTOR_2.to_string(),
+        amount: Uint128::from(20000u128),
+    };
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg)?;
+    assert_eq!(
+        res.messages
+            .into_iter()
+            .map(|it| it.msg)
+            .collect::<Vec<CosmosMsg>>(),
+        []);
+
+    let msg = ExecuteMsg::SendFrom {
+        owner: USER_3.to_string(),
+        contract: FEE_COLLECTOR_2.to_string(),
+        amount: Uint128::from(20000u128),
+        msg: to_binary(&Cw20HookMsg::Bond {
+            staker_addr: None,
+        })?,
+    };
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg)?;
+    assert_eq!(
+        res.messages
+            .into_iter()
+            .map(|it| it.msg)
+            .collect::<Vec<CosmosMsg>>(),
+        [
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: FEE_COLLECTOR_2.to_string(),
+                msg: to_binary(&ExecuteMsg::Receive(Cw20ReceiveMsg {
+                    sender: FEE_COLLECTOR_2.to_string(),
+                    amount: Uint128::from(20000u128),
+                    msg: to_binary(&Cw20HookMsg::Bond {
+                        staker_addr: None,
+                    })?,
+                }))?,
+                funds: vec![],
+            })
+        ]);
+
+    let msg = QueryMsg::RewardInfo {
+        staker_addr: USER_3.to_string(),
+    };
+    let res: RewardInfoResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        RewardInfoResponse {
+            staker_addr: USER_3.to_string(),
+            reward_info: {
+                RewardInfoResponseItem {
+                    bond_share: Uint128::from(66202u128),
+                    deposit_amount: Uint128::from(84764u128),
+                    deposit_time: 1571797419,
+                    staking_token: LP_TOKEN.to_string(),
+                    bond_amount: Uint128::from(84764u128),
+                    deposit_costs: vec![
+                        Uint128::from(84764u128),
+                        Uint128::from(84764u128),
+                    ],
+                }
+            }
+        }
+    );
+
+    let msg = ExecuteMsg::BurnFrom {
+        owner: USER_3.to_string(),
+        amount: Uint128::from(20000u128),
+    };
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg)?;
+    assert_eq!(
+        res.messages
+            .into_iter()
+            .map(|it| it.msg)
+            .collect::<Vec<CosmosMsg>>(),
+        []);
+
+    deps.querier.set_balance(
+        GENERATOR_PROXY.to_string(),
+        LP_TOKEN.to_string(),
+        Uint128::from(217073u128),
+    );
+
+    let msg = QueryMsg::RewardInfo {
+        staker_addr: FEE_COLLECTOR_2.to_string(),
+    };
+    let res: RewardInfoResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        RewardInfoResponse {
+            staker_addr: FEE_COLLECTOR_2.to_string(),
+            reward_info: {
+                RewardInfoResponseItem {
+                    bond_share: Uint128::from(65000u128),
+                    deposit_amount: Uint128::from(83223u128),
+                    deposit_time: 1571797419,
+                    staking_token: LP_TOKEN.to_string(),
+                    bond_amount: Uint128::from(83223u128),
+                    deposit_costs: vec![
+                        Uint128::from(83223u128),
+                        Uint128::from(83223u128),
+                    ],
+                }
+            }
+        }
+    );
+
+    let msg = QueryMsg::RewardInfo {
+        staker_addr: USER_3.to_string(),
+    };
+    let res: RewardInfoResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        RewardInfoResponse {
+            staker_addr: USER_3.to_string(),
+            reward_info: {
+                RewardInfoResponseItem {
+                    bond_share: Uint128::from(46202u128),
+                    deposit_amount: Uint128::from(59156u128),
+                    deposit_time: 1571797419,
+                    staking_token: LP_TOKEN.to_string(),
+                    bond_amount: Uint128::from(59157u128),
+                    deposit_costs: vec![
+                        Uint128::from(59156u128),
+                        Uint128::from(59156u128),
+                    ],
+                }
+            }
+        }
+    );
+
+    let info = mock_info(USER_3, &[]);
+    let msg = ExecuteMsg::DecreaseAllowance {
+        spender: FEE_COLLECTOR_2.to_string(),
+        amount: Uint128::from(100000u128),
+        expires: None,
+    };
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg)?;
+    assert_eq!(
+        res.messages
+            .into_iter()
+            .map(|it| it.msg)
+            .collect::<Vec<CosmosMsg>>(),
+        []);
+
+    let msg = QueryMsg::AllAllowances {
+        owner: USER_3.to_string(),
+        start_after: None,
+        limit: None
+    };
+    let res: AllAllowancesResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        AllAllowancesResponse {
+            allowances: vec![]
+        }
+    );
 
     Ok(())
 }
