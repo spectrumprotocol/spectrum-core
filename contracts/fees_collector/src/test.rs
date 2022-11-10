@@ -9,7 +9,7 @@ use cosmwasm_std::{
     Uint128, WasmMsg, to_binary,
 };
 use cw20::Cw20ExecuteMsg;
-use spectrum::fees_collector::{AssetWithLimit, ExecuteMsg, InstantiateMsg, QueryMsg};
+use spectrum::fees_collector::{AssetWithLimit, CollectSimulationResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
 
 use crate::contract::{execute, instantiate, query};
 use crate::error::ContractError;
@@ -383,6 +383,7 @@ fn collect(
             },
             limit: None,
         }],
+        minimum_receive: None
     };
 
     let info = mock_info(USER_1, &[]);
@@ -403,7 +404,7 @@ fn collect(
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: env.contract.address.to_string(),
                 funds: vec![],
-                msg: to_binary(&ExecuteMsg::DistributeFees {})?,
+                msg: to_binary(&ExecuteMsg::DistributeFees { minimum_receive: None })?,
             }),
         ]
     );
@@ -445,9 +446,28 @@ fn collect(
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: env.contract.address.to_string(),
                 funds: vec![],
-                msg: to_binary(&ExecuteMsg::DistributeFees {})?,
+                msg: to_binary(&ExecuteMsg::DistributeFees { minimum_receive: None })?,
             }),
         ]
+    );
+
+    deps.querier.set_price("token1token2".to_string(), Decimal::percent(200u64));
+    deps.querier.set_price("token2ibc".to_string(), Decimal::percent(25u64));
+
+    let msg = QueryMsg::CollectSimulation {
+        assets: vec![AssetWithLimit {
+            info: AssetInfo::Token {
+                contract_addr: Addr::unchecked(TOKEN_1),
+            },
+            limit: None,
+        }],
+    };
+    let res: CollectSimulationResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        CollectSimulationResponse {
+            return_amount: Uint128::from(500000u128),
+        }
     );
 
     // set balance
@@ -464,6 +484,7 @@ fn collect(
             },
             limit: Some(Uint128::from(1500000u128)),
         }],
+        minimum_receive: None
     };
 
     // collect success
@@ -491,7 +512,7 @@ fn collect(
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: env.contract.address.to_string(),
                 funds: vec![],
-                msg: to_binary(&ExecuteMsg::DistributeFees {})?,
+                msg: to_binary(&ExecuteMsg::DistributeFees { minimum_receive: None })?,
             }),
         ]
     );
@@ -512,7 +533,7 @@ fn distribute_fees(
         Uint128::from(1000000u128),
     );
 
-    let msg = ExecuteMsg::DistributeFees {};
+    let msg = ExecuteMsg::DistributeFees { minimum_receive: Some(Uint128::from(2000000u128)) };
 
     let info = mock_info(USER_1, &[]);
 
@@ -520,7 +541,12 @@ fn distribute_fees(
     let res = execute(deps.as_mut(), env.clone(), info, msg.clone());
     assert_error(res, "Unauthorized");
 
+    // min receive
     let info = mock_info(MOCK_CONTRACT_ADDR, &[]);
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg.clone());
+    assert_error(res, "Assertion failed; minimum receive amount: 2000000, actual amount: 1000000");
+
+    let msg = ExecuteMsg::DistributeFees { minimum_receive: None };
     let res = execute(deps.as_mut(), env.clone(), info, msg.clone())?;
     assert_eq!(
         res.messages

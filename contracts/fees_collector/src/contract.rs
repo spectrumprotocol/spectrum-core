@@ -1,21 +1,12 @@
 use crate::error::ContractError;
 use crate::state::{Config, BRIDGES, CONFIG, OWNERSHIP_PROPOSAL};
 
-use crate::utils::{
-    build_swap_bridge_msg, try_build_swap_msg, validate_bridge, BRIDGES_EXECUTION_MAX_DEPTH,
-    BRIDGES_INITIAL_DEPTH,
-};
+use crate::utils::{build_swap_bridge_msg, try_build_swap_msg, validate_bridge, BRIDGES_EXECUTION_MAX_DEPTH, BRIDGES_INITIAL_DEPTH, try_swap_simulation};
 use astroport::asset::{native_asset_info, Asset, AssetInfo, ULUNA_DENOM, AssetInfoExt};
 
 use astroport::common::{propose_new_owner, drop_ownership_proposal, claim_ownership};
-use cosmwasm_std::{
-    entry_point, to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
-    Order, Response, StdError, StdResult, Uint128, WasmMsg, attr,
-};
-use spectrum::fees_collector::{
-    AssetWithLimit, BalancesResponse, ExecuteMsg, InstantiateMsg, MigrateMsg,
-    QueryMsg,
-};
+use cosmwasm_std::{entry_point, to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Order, Response, StdError, StdResult, Uint128, WasmMsg, attr, Addr};
+use spectrum::fees_collector::{AssetWithLimit, BalancesResponse, CollectSimulationResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 use std::collections::{HashMap, HashSet};
 use spectrum::adapters::asset::AssetEx;
 
@@ -57,7 +48,7 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::Collect { assets } => collect(deps, env, info, assets),
+        ExecuteMsg::Collect { assets, minimum_receive } => collect(deps, env, info, assets, minimum_receive),
         ExecuteMsg::UpdateBridges { add, remove } => update_bridges(deps, info, add, remove),
         ExecuteMsg::UpdateConfig {
             operator,
@@ -73,7 +64,7 @@ pub fn execute(
         ExecuteMsg::SwapBridgeAssets { assets, depth } => {
             swap_bridge_assets(deps, env, info, assets, depth)
         }
-        ExecuteMsg::DistributeFees {} => distribute_fees(deps, env, info),
+        ExecuteMsg::DistributeFees { minimum_receive } => distribute_fees(deps, env, info, minimum_receive),
         ExecuteMsg::ProposeNewOwner { owner, expires_in } => {
             let config: Config = CONFIG.load(deps.storage)?;
 
@@ -117,9 +108,10 @@ fn collect(
     env: Env,
     info: MessageInfo,
     assets: Vec<AssetWithLimit>,
+    minimum_receive: Option<Uint128>,
 ) -> Result<Response, ContractError> {
+
     let config = CONFIG.load(deps.storage)?;
-    let stablecoin = config.stablecoin.clone();
 
     if info.sender != config.operator {
         return Err(ContractError::Unauthorized {});
@@ -128,8 +120,7 @@ fn collect(
     // Check for duplicate assets
     let mut uniq = HashSet::new();
     if !assets
-        .clone()
-        .into_iter()
+        .iter()
         .all(|a| uniq.insert(a.info.to_string()))
     {
         return Err(ContractError::DuplicatedAsset {});
@@ -138,18 +129,18 @@ fn collect(
     // Swap all non stablecoin tokens
     let (mut messages, bridge_assets) = swap_assets(
         deps.as_ref(),
-        env.clone(),
+        &env.contract.address,
         &config,
         assets
             .into_iter()
-            .filter(|a| a.info.ne(&stablecoin))
+            .filter(|a| a.info.ne(&config.stablecoin))
             .collect(),
     )?;
 
     // If no swap messages - send stablecoin directly to beneficiary
     if !messages.is_empty() && !bridge_assets.is_empty() {
         messages.push(build_swap_bridge_msg(
-            env.clone(),
+            &env.contract.address,
             bridge_assets,
             BRIDGES_INITIAL_DEPTH,
         )?);
@@ -157,7 +148,9 @@ fn collect(
 
     let distribute_fee = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: env.contract.address.to_string(),
-        msg: to_binary(&ExecuteMsg::DistributeFees {})?,
+        msg: to_binary(&ExecuteMsg::DistributeFees {
+            minimum_receive,
+        })?,
         funds: vec![],
     });
     messages.push(distribute_fee);
@@ -179,7 +172,7 @@ enum SwapTarget {
 /// a [`Response`] object if the operation was successful.
 fn swap_assets(
     deps: Deps,
-    env: Env,
+    contract_addr: &Addr,
     config: &Config,
     assets: Vec<AssetWithLimit>,
 ) -> Result<(Vec<CosmosMsg>, Vec<AssetInfo>), ContractError> {
@@ -188,11 +181,9 @@ fn swap_assets(
 
     for a in assets {
         // Get balance
-        let mut balance = a
-            .info
-            .query_pool(&deps.querier, env.contract.address.clone())?;
+        let mut balance = a.info.query_pool(&deps.querier, contract_addr)?;
         if let Some(limit) = a.limit {
-            if limit < balance && limit > Uint128::zero() {
+            if limit < balance {
                 balance = limit;
             }
         }
@@ -285,7 +276,11 @@ fn swap_bridge_assets(
         })
         .collect();
 
-    let (mut messages, bridge_assets) = swap_assets(deps.as_ref(), env.clone(), &config, bridges)?;
+    let (mut messages, bridge_assets) = swap_assets(
+        deps.as_ref(),
+        &env.contract.address,
+        &config,
+        bridges)?;
 
     // There should always be some messages, if there are none - something went wrong
     if messages.is_empty() {
@@ -295,7 +290,7 @@ fn swap_bridge_assets(
     }
 
     if !bridge_assets.is_empty() {
-        messages.push(build_swap_bridge_msg(env, bridge_assets, depth + 1)?)
+        messages.push(build_swap_bridge_msg(&env.contract.address, bridge_assets, depth + 1)?)
     }
 
     Ok(Response::new()
@@ -305,7 +300,12 @@ fn swap_bridge_assets(
 
 /// ## Description
 /// Distributes stablecoin rewards to the target list. Returns a [`ContractError`] on failure.
-fn distribute_fees(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
+fn distribute_fees(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    minimum_receive: Option<Uint128>,
+) -> Result<Response, ContractError> {
 
     // Only the contract itself can call this function
     if info.sender != env.contract.address {
@@ -313,7 +313,7 @@ fn distribute_fees(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Respons
     }
 
     let config = CONFIG.load(deps.storage)?;
-    let (distribute_msg, attributes) = distribute(deps, env, &config)?;
+    let (distribute_msg, attributes) = distribute(deps, env, &config, minimum_receive)?;
 
     Ok(Response::new()
         .add_messages(distribute_msg)
@@ -329,26 +329,33 @@ fn distribute(
     deps: DepsMut,
     env: Env,
     config: &Config,
+    minimum_receive: Option<Uint128>,
 ) -> Result<DistributeMsgParts, ContractError> {
     let mut messages = vec![];
     let mut attributes = vec![];
 
-    let stablecoin = config.stablecoin.clone();
-
-    let total_weight = config.target_list.iter()
-        .map(|(_, weight)| *weight)
-        .sum::<u64>();
-
-    let total_amount = stablecoin.query_pool(&deps.querier, env.contract.address)?;
+    let total_amount = config.stablecoin.query_pool(&deps.querier, &env.contract.address)?;
+    if let Some(minimum_receive) = minimum_receive {
+        if total_amount < minimum_receive {
+            return Err(ContractError::AssertionMinimumReceive {
+                minimum_receive,
+                amount: total_amount,
+            });
+        }
+    }
 
     if total_amount.is_zero() {
         return Ok((messages, attributes));
     }
 
+    let total_weight = config.target_list.iter()
+        .map(|(_, weight)| *weight)
+        .sum::<u64>();
+
     for (to, weight) in &config.target_list {
         let amount = total_amount.multiply_ratio(*weight, total_weight);
         if !amount.is_zero() {
-            let send_msg = stablecoin.with_balance(amount).transfer_msg(to)?;
+            let send_msg = config.stablecoin.with_balance(amount).transfer_msg(to)?;
             messages.push(send_msg);
             attributes.push(("to".to_string(), to.to_string()));
             attributes.push(("amount".to_string(), amount.to_string()));
@@ -418,7 +425,6 @@ fn update_bridges(
     }
 
     // Add new bridges
-    let stablecoin = config.stablecoin.clone();
     if let Some(add_bridges) = add {
         for (asset, bridge) in add_bridges {
             if asset.equal(&bridge) {
@@ -440,10 +446,10 @@ fn update_bridges(
         // Check that bridge tokens can be swapped to stablecoin
         validate_bridge(
             deps.as_ref(),
-            config.factory_contract.clone(),
-            asset,
-            bridge.clone(),
-            stablecoin.clone(),
+            &config.factory_contract,
+            &asset,
+            &bridge,
+            &config.stablecoin,
             BRIDGES_INITIAL_DEPTH,
         )?;
     }
@@ -459,6 +465,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::Config {} => to_binary(&CONFIG.load(deps.storage)?),
         QueryMsg::Balances { assets } => to_binary(&query_get_balances(deps, env, assets)?),
         QueryMsg::Bridges {} => to_binary(&query_bridges(deps, env)?),
+        QueryMsg::CollectSimulation { assets } => to_binary(&query_collect_simulation(deps, env, assets)?),
     }
 }
 
@@ -469,7 +476,7 @@ fn query_get_balances(deps: Deps, env: Env, assets: Vec<AssetInfo>) -> StdResult
 
     for a in assets {
         // Get balance
-        let balance = a.query_pool(&deps.querier, env.contract.address.clone())?;
+        let balance = a.query_pool(&deps.querier, &env.contract.address)?;
         if !balance.is_zero() {
             resp.balances.push(Asset {
                 info: a,
@@ -491,6 +498,111 @@ fn query_bridges(deps: Deps, _env: Env) -> StdResult<Vec<(String, String)>> {
             Ok((bridge, asset.to_string()))
         })
         .collect()
+}
+
+fn query_collect_simulation(
+    deps: Deps,
+    env: Env,
+    assets: Vec<AssetWithLimit>
+) -> Result<CollectSimulationResponse, ContractError> {
+
+    // Check for duplicate assets
+    let mut uniq = HashMap::new();
+    for a in assets {
+
+        // query balance
+        let mut balance = a.info.query_pool(&deps.querier, &env.contract.address)?;
+        if let Some(limit) = a.limit {
+            if limit < balance {
+                balance = limit;
+            }
+        }
+
+        // swap
+        if uniq.insert(a.info, balance).is_some() {
+            return Err(ContractError::DuplicatedAsset {});
+        }
+    }
+
+    let config = CONFIG.load(deps.storage)?;
+    if !uniq.contains_key(&config.stablecoin) {
+        let stable_amount = config.stablecoin.query_pool(&deps.querier, &env.contract.address)?;
+        uniq.insert(config.stablecoin.clone(), stable_amount);
+    }
+
+    bulk_swap_simulation(deps, uniq, config, BRIDGES_INITIAL_DEPTH)
+}
+
+fn bulk_swap_simulation(
+    deps: Deps,
+    assets: HashMap<AssetInfo, Uint128>,
+    config: Config,
+    depth: u64,
+) -> Result<CollectSimulationResponse, ContractError> {
+
+    let mut next_assets: HashMap<AssetInfo, Uint128> = HashMap::new();
+    let uluna = native_asset_info(ULUNA_DENOM.to_string());
+    for (info, amount) in assets {
+
+        if info.eq(&config.stablecoin) {
+            add_amount(&mut next_assets, config.stablecoin.clone(), amount);
+            continue;
+        }
+
+        if amount.is_zero() {
+            continue;
+        }
+
+        // Check if bridge tokens exist
+        let bridge_token = BRIDGES.load(deps.storage, info.to_string());
+        if let Ok(asset) = bridge_token {
+            let return_amount = try_swap_simulation(&deps.querier, &config, info, asset.clone(), amount)?;
+            add_amount(&mut next_assets, asset, return_amount);
+            continue;
+        }
+
+        // Check for a direct pair with stablecoin
+        let return_amount = try_swap_simulation(&deps.querier, &config, info.clone(), config.stablecoin.clone(), amount);
+        if let Ok(return_amount) = return_amount {
+            add_amount(&mut next_assets, config.stablecoin.clone(), return_amount);
+            continue;
+        }
+
+        // Check for a pair with LUNA
+        if info.ne(&uluna) {
+            let return_amount = try_swap_simulation(&deps.querier, &config, info.clone(), uluna.clone(), amount);
+            if let Ok(return_amount) = return_amount {
+                add_amount(&mut next_assets, uluna.clone(), return_amount);
+                continue;
+            }
+        }
+
+        return Err(ContractError::CannotSwap(info));
+    }
+
+    // reduce until 1 item
+    if next_assets.len() < 2 {
+        return Ok(CollectSimulationResponse {
+            return_amount: next_assets.get(&config.stablecoin)
+                .copied()
+                .unwrap_or_default(),
+        });
+    }
+
+    let next_depth = depth + 1;
+    if next_depth >= BRIDGES_EXECUTION_MAX_DEPTH {
+        return Err(ContractError::MaxBridgeDepth(depth));
+    }
+
+
+    bulk_swap_simulation(deps, next_assets, config, depth + 1)
+}
+
+fn add_amount(assets: &mut HashMap<AssetInfo, Uint128>, key: AssetInfo, return_amount: Uint128) {
+    let prev_amount = assets.get(&key)
+        .copied()
+        .unwrap_or_default();
+    assets.insert(key, return_amount + prev_amount);
 }
 
 /// ## Description

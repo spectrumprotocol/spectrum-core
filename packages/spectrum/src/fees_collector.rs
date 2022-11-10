@@ -26,6 +26,8 @@ pub enum ExecuteMsg {
     Collect {
         /// The assets to swap to stablecoin
         assets: Vec<AssetWithLimit>,
+        /// The minimum expected amount of stablecoine
+        minimum_receive: Option<Uint128>,
     },
     /// Updates contract config
     UpdateConfig {
@@ -46,7 +48,10 @@ pub enum ExecuteMsg {
     /// Swap fee tokens via bridge assets
     SwapBridgeAssets { assets: Vec<AssetInfo>, depth: u64 },
     /// Distribute stablecoin to beneficiary
-    DistributeFees {},
+    DistributeFees {
+        /// The minimum expected amount of stablecoine
+        minimum_receive: Option<Uint128>,
+    },
     /// Creates a request to change the contract's ownership
     ProposeNewOwner {
         /// The newly proposed owner
@@ -72,6 +77,11 @@ pub enum QueryMsg {
     },
     /// Returns list of bridge assets
     Bridges {},
+    /// Simulate collects and swaps fee tokens to stablecoin
+    CollectSimulation {
+        /// The assets to swap to stablecoin
+        assets: Vec<AssetWithLimit>,
+    }
 }
 
 /// A custom struct used to return multiple asset balances.
@@ -79,6 +89,13 @@ pub enum QueryMsg {
 pub struct BalancesResponse {
     /// List of asset and balance in the contract
     pub balances: Vec<Asset>,
+}
+
+/// This structure holds the parameters that are returned from a collect simulation response
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct CollectSimulationResponse {
+    /// The amount of stablecoin returned from swap
+    pub return_amount: Uint128,
 }
 
 /// This structure describes a migration message.
