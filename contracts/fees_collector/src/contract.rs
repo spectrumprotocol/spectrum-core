@@ -542,42 +542,42 @@ fn bulk_swap_simulation(
 
     let mut next_assets: HashMap<AssetInfo, Uint128> = HashMap::new();
     let uluna = native_asset_info(ULUNA_DENOM.to_string());
-    for (info, amount) in assets {
+    for (from_asset_info, amount_in) in assets {
 
-        if info.eq(&config.stablecoin) {
-            add_amount(&mut next_assets, config.stablecoin.clone(), amount);
+        if from_asset_info.eq(&config.stablecoin) {
+            add_amount(&mut next_assets, config.stablecoin.clone(), amount_in);
             continue;
         }
 
-        if amount.is_zero() {
+        if amount_in.is_zero() {
             continue;
         }
 
         // Check if bridge tokens exist
-        let bridge_token = BRIDGES.load(deps.storage, info.to_string());
-        if let Ok(asset) = bridge_token {
-            let return_amount = try_swap_simulation(&deps.querier, &config, info, asset.clone(), amount)?;
-            add_amount(&mut next_assets, asset, return_amount);
+        let bridge_token = BRIDGES.load(deps.storage, from_asset_info.to_string());
+        if let Ok(to_asset_info) = bridge_token {
+            let return_amount = try_swap_simulation(&deps.querier, &config, from_asset_info, to_asset_info.clone(), amount_in)?;
+            add_amount(&mut next_assets, to_asset_info, return_amount);
             continue;
         }
 
         // Check for a direct pair with stablecoin
-        let return_amount = try_swap_simulation(&deps.querier, &config, info.clone(), config.stablecoin.clone(), amount);
+        let return_amount = try_swap_simulation(&deps.querier, &config, from_asset_info.clone(), config.stablecoin.clone(), amount_in);
         if let Ok(return_amount) = return_amount {
             add_amount(&mut next_assets, config.stablecoin.clone(), return_amount);
             continue;
         }
 
         // Check for a pair with LUNA
-        if info.ne(&uluna) {
-            let return_amount = try_swap_simulation(&deps.querier, &config, info.clone(), uluna.clone(), amount);
+        if from_asset_info.ne(&uluna) {
+            let return_amount = try_swap_simulation(&deps.querier, &config, from_asset_info.clone(), uluna.clone(), amount_in);
             if let Ok(return_amount) = return_amount {
                 add_amount(&mut next_assets, uluna.clone(), return_amount);
                 continue;
             }
         }
 
-        return Err(ContractError::CannotSwap(info));
+        return Err(ContractError::CannotSwap(from_asset_info));
     }
 
     // reduce until 1 item
@@ -595,7 +595,7 @@ fn bulk_swap_simulation(
     }
 
 
-    bulk_swap_simulation(deps, next_assets, config, depth + 1)
+    bulk_swap_simulation(deps, next_assets, config, next_depth)
 }
 
 fn add_amount(assets: &mut HashMap<AssetInfo, Uint128>, key: AssetInfo, return_amount: Uint128) {
