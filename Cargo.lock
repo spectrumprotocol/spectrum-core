@@ -23,6 +23,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "astroport-generator-proxy-to-spec"
+version = "1.0.0"
+dependencies = [
+ "astroport",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "cw20",
+ "schemars",
+ "serde",
+ "spectrum",
+ "thiserror",
+]
+
+[[package]]
 name = "astroport-governance"
 version = "1.1.0"
 dependencies = [
@@ -890,6 +905,20 @@ version = "1.0.0"
 dependencies = [
  "astroport",
  "astroport-governance",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "cw20",
+ "schemars",
+ "serde",
+ "spectrum",
+ "thiserror",
+]
+
+[[package]]
+name = "spectrum-lp-staking"
+version = "1.0.0"
+dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw-storage-plus",
