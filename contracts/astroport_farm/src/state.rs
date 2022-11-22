@@ -2,7 +2,7 @@ use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Addr, Decimal, StdError, StdResult, Storage, Uint128};
+use cosmwasm_std::{Addr, Decimal, StdResult, Storage, Uint128};
 use cw20::AllowanceResponse;
 use astroport::pair::PoolResponse;
 use spectrum::adapters::generator::Generator;
