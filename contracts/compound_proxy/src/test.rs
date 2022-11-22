@@ -266,7 +266,7 @@ fn optimal_swap() -> Result<(), ContractError> {
                 amount: Uint128::new(500626),
                 msg: to_binary(&AstroportPairCw20HookMsg::Swap {
                     ask_asset_info: None,
-                    belief_price: None,
+                    belief_price: Some(Decimal::MAX),
                     max_spread: Some(Decimal::percent(50)),
                     to: None,
                 })?

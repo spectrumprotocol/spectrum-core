@@ -1,11 +1,12 @@
 use std::collections::HashMap;
-use cosmwasm_std::{Addr, BalanceResponse, BankQuery, Binary, Coin, ContractResult, Empty, from_binary, from_slice, OwnedDeps, Querier, QuerierResult, QueryRequest, StdResult, SystemError, SystemResult, to_binary, Uint128, WasmQuery};
+use cosmwasm_std::{Addr, BalanceResponse, BankQuery, Binary, Coin, ContractResult, Decimal, Empty, from_binary, from_slice, OwnedDeps, Querier, QuerierResult, QueryRequest, StdError, StdResult, SystemError, SystemResult, to_binary, Uint128, WasmQuery};
 use cosmwasm_std::testing::{MockApi, MockStorage};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use astroport::asset::{token_asset, AssetInfo, PairInfo};
+use astroport::asset::{token_asset, AssetInfo, PairInfo, Asset};
 use astroport::generator::{PendingTokenResponse};
+use astroport::pair::SimulationResponse;
 
 pub fn mock_dependencies() -> OwnedDeps<MockStorage, MockApi, WasmMockQuerier> {
     let custom_querier: WasmMockQuerier = WasmMockQuerier::new();
@@ -24,7 +25,8 @@ const REWARD_TOKEN: &str = "reward";
 pub struct WasmMockQuerier {
     balances: HashMap<(String, String), Uint128>,
     raw: HashMap<(String, Binary), Binary>,
-    pairs: HashMap<Vec<u8>, PairInfo>
+    pairs: HashMap<Vec<u8>, PairInfo>,
+    prices: HashMap<String, Decimal>,
 }
 
 impl WasmMockQuerier {
@@ -33,6 +35,7 @@ impl WasmMockQuerier {
             balances: HashMap::new(),
             raw: HashMap::new(),
             pairs: HashMap::new(),
+            prices: HashMap::new(),
         }
     }
 
@@ -50,6 +53,15 @@ impl WasmMockQuerier {
 
     fn get_pair(&self, asset_infos: &[AssetInfo; 2]) -> Option<&PairInfo> {
         self.pairs.get(&pair_key(&asset_infos))
+    }
+
+
+    pub fn set_price(&mut self, pair: String, price: Decimal) {
+        self.prices.insert(pair, price);
+    }
+
+    fn get_price(&self, pair: &String) -> Option<&Decimal> {
+        self.prices.get(pair)
     }
 
     fn execute_query(&self, request: &QueryRequest<Empty>) -> QuerierResult {
@@ -116,16 +128,19 @@ impl WasmMockQuerier {
             MockQueryMsg::Pair {
                 asset_infos,
             } => {
-                let pair_info: PairInfo =
-                 match self.get_pair(&asset_infos) {
-                     Some(v) => v.clone(),
-                     None => {
-                        panic!("No pair info")
-                     }
-                 };
-
-             to_binary(&pair_info)
-             }
+                let pair_info = self.get_pair(&asset_infos)
+                    .ok_or_else(|| StdError::generic_err("No pair info"))?;
+                to_binary(pair_info)
+             },
+            MockQueryMsg::Simulation { offer_asset } => {
+                let price = *self.get_price(contract_addr)
+                    .ok_or_else(|| StdError::generic_err("No price"))?;
+                to_binary(&SimulationResponse {
+                    return_amount: offer_asset.amount * price,
+                    spread_amount: Default::default(),
+                    commission_amount: Default::default()
+                })
+            },
         }
     }
 }
@@ -146,7 +161,10 @@ enum MockQueryMsg {
     },
     Pair {
         asset_infos: [AssetInfo; 2],
-    }
+    },
+    Simulation {
+        offer_asset: Asset,
+    },
 }
 
 impl Querier for WasmMockQuerier {

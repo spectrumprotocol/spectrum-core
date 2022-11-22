@@ -179,6 +179,11 @@ pub fn unbond(
     info: MessageInfo,
     amount: Uint128,
 ) -> Result<Response, ContractError> {
+
+    if amount.is_zero() {
+        return Err(ContractError::InvalidZeroAmount {});
+    }
+
     let staker_addr = info.sender;
 
     let config = CONFIG.load(deps.storage)?;

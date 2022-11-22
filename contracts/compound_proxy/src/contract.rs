@@ -97,8 +97,7 @@ pub fn execute(
             compound(
                 deps,
                 env,
-                info.clone(),
-                info.sender,
+                info,
                 rewards,
                 to_addr,
                 no_swap,
@@ -116,13 +115,11 @@ pub fn compound(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    sender: Addr,
     rewards: Vec<Asset>,
     to: Option<Addr>,
     no_swap: Option<bool>,
     slippage_tolerance: Option<Decimal>,
 ) -> Result<Response, ContractError> {
-    let receiver = to.unwrap_or(sender);
     let no_swap = no_swap.unwrap_or(false);
 
     let mut messages: Vec<CosmosMsg> = vec![];
@@ -134,7 +131,7 @@ pub fn compound(
         let pair_proxy = PAIR_PROXY.may_load(deps.storage, reward.info.to_string())?;
         if let Some(pair_proxy) = pair_proxy {
             let swap_reward =
-                pair_proxy.swap_msg(&reward, None, Some(Decimal::percent(MAX_SPREAD)), None)?;
+                pair_proxy.swap_msg(&reward, Some(Decimal::MAX), Some(Decimal::percent(MAX_SPREAD)), None)?;
             messages.push(swap_reward);
         }
 
@@ -150,7 +147,7 @@ pub fn compound(
     let config = CONFIG.load(deps.storage)?;
     let assets = config
         .pair_info
-        .query_pools(&deps.querier, env.contract.address.clone())?;
+        .query_pools(&deps.querier, &env.contract.address)?;
     let prev_balances = assets
         .iter()
         .map(|a| {
@@ -161,6 +158,7 @@ pub fn compound(
         })
         .collect::<StdResult<_>>()?;
 
+    let receiver = to.unwrap_or(info.sender);
     messages.push(
         CallbackMsg::ProvideLiquidity {
             prev_balances,
@@ -249,7 +247,7 @@ pub fn calculate_optimal_swap(
     let pair_contract = config.pair_info.contract_addr.clone();
     let pools = config
         .pair_info
-        .query_pools(querier, pair_contract.clone())?;
+        .query_pools(querier, &pair_contract)?;
     let provide_a_amount: Uint256 = asset_a.amount.into();
     let provide_b_amount: Uint256 = asset_b.amount.into();
     let pool_a_amount: Uint256 = pools[0].amount.into();
@@ -281,7 +279,7 @@ pub fn calculate_optimal_swap(
                 swap_asset_a_amount = swap_asset.amount;
                 messages.push(Pair(pair_contract).swap_msg(
                     &swap_asset,
-                    None,
+                    Some(Decimal::MAX),
                     Some(Decimal::percent(MAX_SPREAD)),
                     None,
                 )?);
@@ -310,7 +308,7 @@ pub fn calculate_optimal_swap(
                 swap_asset_b_amount = swap_asset.amount;
                 messages.push(Pair(pair_contract).swap_msg(
                     &swap_asset,
-                    None,
+                    Some(Decimal::MAX),
                     Some(Decimal::percent(MAX_SPREAD)),
                     None,
                 )?);
@@ -358,7 +356,6 @@ pub fn provide_liquidity(
             .unwrap_or(&Uint128::zero());
         let amount = asset.amount.checked_sub(prev_balance)?;
         let provide_asset = asset.info.with_balance(amount);
-        provide_assets.push(provide_asset.clone());
 
         if !provide_asset.amount.is_zero() {
             if asset.is_native_token() {
@@ -373,6 +370,7 @@ pub fn provide_liquidity(
                 )?);
             }
         }
+        provide_assets.push(provide_asset);
     }
 
     let provide_liquidity = Pair(pair_contract).provide_liquidity_msg(

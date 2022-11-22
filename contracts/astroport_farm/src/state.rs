@@ -8,7 +8,7 @@ use astroport::pair::PoolResponse;
 use spectrum::adapters::generator::Generator;
 use spectrum::adapters::pair::Pair;
 use spectrum::compound_proxy::Compounder;
-use spectrum::helper::{ScalingUint128};
+use spectrum::helper::{compute_deposit_time, ScalingUint128};
 
 use crate::ownership::OwnershipProposal;
 
@@ -82,19 +82,6 @@ pub struct RewardInfo {
 
     #[serde(default)] pub transfer_share: Uint128,
     #[serde(default)] pub deposit_costs: Vec<Uint128>,
-}
-
-fn compute_deposit_time(
-    last_deposit_amount: Uint128,
-    new_deposit_amount: Uint128,
-    last_deposit_time: u64,
-    new_deposit_time: u64,
-) -> StdResult<u64> {
-    let last_weight = last_deposit_amount.u128() * (last_deposit_time as u128);
-    let new_weight = new_deposit_amount.u128() * (new_deposit_time as u128);
-    let weight_avg =
-        (last_weight + new_weight) / (last_deposit_amount.u128() + new_deposit_amount.u128());
-    u64::try_from(weight_avg).map_err(|_| StdError::generic_err("Overflow in compute_deposit_time"))
 }
 
 impl RewardInfo {

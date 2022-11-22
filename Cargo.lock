@@ -23,6 +23,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "astroport-generator-proxy-to-spec"
+version = "1.0.0"
+dependencies = [
+ "astroport",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "cw20",
+ "schemars",
+ "serde",
+ "spectrum",
+ "thiserror",
+]
+
+[[package]]
 name = "astroport-governance"
 version = "1.1.0"
 dependencies = [
@@ -461,15 +476,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "integer-sqrt"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "276ec31bcb4a9ee45f58bec6f9ec700ae4cf4f4f8f2fa7e06cb406bd5ffdd770"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
 name = "itertools"
 version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -870,7 +876,6 @@ dependencies = [
  "cw-multi-test",
  "cw-storage-plus",
  "cw20",
- "integer-sqrt",
  "proptest",
  "schemars",
  "serde",
@@ -911,6 +916,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "spectrum-lp-staking"
+version = "1.0.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "cw20",
+ "schemars",
+ "serde",
+ "spectrum",
+ "thiserror",
+]
+
+[[package]]
 name = "spectrum-pair-proxy"
 version = "1.0.0"
 dependencies = [
@@ -920,7 +939,6 @@ dependencies = [
  "cw-multi-test",
  "cw-storage-plus",
  "cw20",
- "integer-sqrt",
  "proptest",
  "schemars",
  "serde",
