@@ -10,8 +10,11 @@
     "fee",
     "fee_collector",
     "liquidity_token",
+    "name",
     "owner",
-    "staking_contract"
+    "pair",
+    "staking_contract",
+    "symbol"
   ],
   "properties": {
     "base_reward_token": {
@@ -42,12 +45,23 @@
       "description": "The LP token contract address",
       "type": "string"
     },
+    "name": {
+      "description": "token info",
+      "type": "string"
+    },
     "owner": {
       "description": "The owner address",
       "type": "string"
     },
+    "pair": {
+      "description": "The pair contract address",
+      "type": "string"
+    },
     "staking_contract": {
       "description": "The LP staking generator contract address",
+      "type": "string"
+    },
+    "symbol": {
       "type": "string"
     }
   },

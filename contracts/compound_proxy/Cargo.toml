@@ -22,7 +22,6 @@ crate-type = ["cdylib", "rlib"]
 backtraces = ["cosmwasm-std/backtraces"]
 
 [dependencies]
-integer-sqrt = "0.1.5"
 astroport = { path = "../../packages/astroport", default-features = false }
 spectrum = { version = "1.0.0", path = "../../packages/spectrum" }
 cw20 = { version = "0.13.2" }

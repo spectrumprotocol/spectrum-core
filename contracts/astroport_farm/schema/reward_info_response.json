@@ -29,6 +29,7 @@
         "bond_amount",
         "bond_share",
         "deposit_amount",
+        "deposit_costs",
         "deposit_time",
         "staking_token"
       ],
@@ -50,12 +51,19 @@
           ]
         },
         "deposit_amount": {
-          "description": "The weighted average deposit amount",
+          "description": "The deposit amount",
           "allOf": [
             {
               "$ref": "#/definitions/Uint128"
             }
           ]
+        },
+        "deposit_costs": {
+          "description": "The deposit cost",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Uint128"
+          }
         },
         "deposit_time": {
           "description": "The weighted average deposit time",

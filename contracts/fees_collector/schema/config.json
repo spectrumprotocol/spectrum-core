@@ -5,7 +5,6 @@
   "type": "object",
   "required": [
     "factory_contract",
-    "max_spread",
     "operator",
     "owner",
     "stablecoin",
@@ -17,14 +16,6 @@
       "allOf": [
         {
           "$ref": "#/definitions/Addr"
-        }
-      ]
-    },
-    "max_spread": {
-      "description": "The max spread allowed when swapping fee tokens to stablecoin",
-      "allOf": [
-        {
-          "$ref": "#/definitions/Decimal"
         }
       ]
     },
@@ -123,10 +114,6 @@
           "additionalProperties": false
         }
       ]
-    },
-    "Decimal": {
-      "description": "A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0\n\nThe greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)",
-      "type": "string"
     }
   }
 }
