@@ -21,7 +21,8 @@ fn transfer_internal(
     let mut sender = REWARD.load(deps.storage, sender_addr)?;
     sender.bond_share = sender.bond_share.checked_sub(share)?;
     sender.transfer_share += share;
-
+    REWARD.save(deps.storage, sender_addr, &sender)?;
+    
     let rcpt_addr = deps.api.addr_validate(recipient)?;
     let mut receiver = REWARD.may_load(deps.storage, &rcpt_addr)?
         .unwrap_or_default();
