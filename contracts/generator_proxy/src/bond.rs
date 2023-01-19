@@ -32,11 +32,14 @@ pub fn execute_deposit(
             &astro_user_info
         )?;
         if claim {
-            messages.push(config.generator.withdraw_msg(info.sender.to_string(), Uint128::zero())?);
+            messages.push(config.generator.withdraw_msg(info.sender.to_string(), Uint128::from(1u128))?);
             messages.push(CallbackMsg::AfterBondClaimed {
                 lp_token: info.sender.clone(),
                 prev_balances,
             }.to_cosmos_msg(&env.contract.address)?);
+            messages.push(
+                config.generator.deposit_msg(info.sender.to_string(), Uint128::from(1u128))?
+            )
         }
     }
 
@@ -72,11 +75,14 @@ pub fn execute_withdraw(
 
     let mut messages: Vec<CosmosMsg> = vec![];
     if claim {
-        messages.push(config.generator.withdraw_msg(lp_token.to_string(), Uint128::zero())?);
+        messages.push(config.generator.withdraw_msg(lp_token.to_string(), Uint128::from(1u128))?);
         messages.push(CallbackMsg::AfterBondClaimed {
             lp_token: lp_token.clone(),
             prev_balances,
         }.to_cosmos_msg(&env.contract.address)?);
+        messages.push(
+            config.generator.deposit_msg(lp_token.to_string(), Uint128::from(1u128))?
+        )
     }
 
     Ok(Response::new()
@@ -112,11 +118,14 @@ pub fn execute_claim_rewards(
             &astro_user_info
         )?;
         if claim {
-            messages.push(config.generator.withdraw_msg(lp_token.to_string(), Uint128::zero())?);
+            messages.push(config.generator.withdraw_msg(lp_token.to_string(), Uint128::from(1u128))?);
             messages.push(CallbackMsg::AfterBondClaimed {
                 lp_token: lp_token.clone(),
                 prev_balances,
             }.to_cosmos_msg(&env.contract.address)?);
+            messages.push(
+                config.generator.deposit_msg(lp_token.to_string(), Uint128::from(1u128))?
+            )
         }
         messages.push(CallbackMsg::ClaimRewards {
             lp_token,
