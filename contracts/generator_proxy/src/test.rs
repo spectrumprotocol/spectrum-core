@@ -282,9 +282,18 @@ fn deposit(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Resul
                 contract_addr: GENERATOR.to_string(),
                 msg: to_binary(&GeneratorExecuteMsg::Withdraw {
                     lp_token: LP_TOKEN.to_string(),
-                    amount: Uint128::zero()
+                    amount: Uint128::from(1u128)
                 })?,
                 funds: vec![],
+            }),
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: LP_TOKEN.to_string(),
+                funds: vec![],
+                msg: to_binary(&Cw20ExecuteMsg::Send {
+                    contract: GENERATOR.to_string(),
+                    amount: Uint128::from(1u128),
+                    msg: to_binary(&Cw20HookMsg::Deposit {})?,
+                })?,
             }),
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
@@ -491,9 +500,18 @@ fn claim_rewards(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) ->
                 contract_addr: GENERATOR.to_string(),
                 msg: to_binary(&GeneratorExecuteMsg::Withdraw {
                     lp_token: LP_TOKEN.to_string(),
-                    amount: Uint128::zero()
+                    amount: Uint128::from(1u128)
                 })?,
                 funds: vec![],
+            }),
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: LP_TOKEN.to_string(),
+                funds: vec![],
+                msg: to_binary(&Cw20ExecuteMsg::Send {
+                    contract: GENERATOR.to_string(),
+                    amount: Uint128::from(1u128),
+                    msg: to_binary(&Cw20HookMsg::Deposit {})?,
+                })?,
             }),
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
@@ -659,9 +677,18 @@ fn withdraw(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Resu
                 contract_addr: GENERATOR.to_string(),
                 msg: to_binary(&GeneratorExecuteMsg::Withdraw {
                     lp_token: LP_TOKEN.to_string(),
-                    amount: Uint128::zero()
+                    amount: Uint128::from(1u128)
                 })?,
                 funds: vec![],
+            }),
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: LP_TOKEN.to_string(),
+                funds: vec![],
+                msg: to_binary(&Cw20ExecuteMsg::Send {
+                    contract: GENERATOR.to_string(),
+                    amount: Uint128::from(1u128),
+                    msg: to_binary(&Cw20HookMsg::Deposit {})?,
+                })?,
             }),
             CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: MOCK_CONTRACT_ADDR.to_string(),
