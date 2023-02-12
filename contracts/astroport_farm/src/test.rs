@@ -1969,7 +1969,7 @@ fn poc_native_funds(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>)
         },
         Asset {
             info: AssetInfo::NativeToken {
-                denom: IBC_TOKEN.to_string(),
+                denom: ASTRO_TOKEN.to_string(),
             },
             amount: Uint128::from(40_000u128),
         },

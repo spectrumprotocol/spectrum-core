@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use astroport::asset::{Asset, token_asset};
 use astroport::querier::query_token_balance;
 use cosmwasm_std::{attr, Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128, Coin, Decimal};
@@ -27,13 +29,10 @@ pub fn bond_assets(
 
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut funds: Vec<Coin> = vec![];
-    
-    let mut low_asset = &assets[0];
-    for asset in assets[1..].iter() {
-        if asset.eq(low_asset) {
-            return Err(ContractError::DuplicatedAsset {});
-        }
-        low_asset = &asset;
+
+    let mut uniq = HashSet::new();
+    if !assets.clone().into_iter().all(move |x| uniq.insert(x.info.to_string())) {
+        return Err(ContractError::DuplicatedAsset {});
     }
     
     for asset in assets.iter() {
