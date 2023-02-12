@@ -1937,3 +1937,135 @@ fn cw20(
 
     Ok(())
 }
+
+#[test]
+fn test_duplicate_native_assets() -> Result<(), ContractError> {
+    let mut deps = mock_dependencies();
+    create(&mut deps)?;
+    poc_native_funds(&mut deps)?;
+
+    Ok(())
+}
+
+fn poc_native_funds(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(), ContractError> {
+    let mut env = mock_env();
+    env.block.height = 600;
+
+    // user_1 sends 40_000 ibc/stablecoin 
+    let native_send = Coin {
+        denom: IBC_TOKEN.to_string(),
+        amount: Uint128::from(40_000_u128),
+    };
+
+    let info = mock_info(USER_1, &[native_send.clone(), native_send]);
+
+    // user_1 provide duplicate native funds in the `assets` vector
+    let assets = vec![
+        Asset {
+            info: AssetInfo::NativeToken {
+                denom: IBC_TOKEN.to_string(),
+            },
+            amount: Uint128::from(40_000u128),
+        },
+        Asset {
+            info: AssetInfo::NativeToken {
+                denom: IBC_TOKEN.to_string(),
+            },
+            amount: Uint128::from(40_000u128),
+        },
+        Asset {
+            info: AssetInfo::NativeToken {
+                denom: IBC_TOKEN.to_string(),
+            },
+            amount: Uint128::from(40_000u128),
+        }
+    ];
+
+    let msg = ExecuteMsg::BondAssets {
+        assets: assets.clone(),
+        minimum_receive: None,
+        no_swap: None, 
+        slippage_tolerance: None, 
+    };
+
+    let res = execute(deps.as_mut(), env.clone(), info, msg.clone());
+    assert_error(res, "Duplicated asset");
+ 
+    Ok(())
+}
+
+#[test]
+fn test_self_transfer() -> Result<(), ContractError> {
+    let mut deps = mock_dependencies();
+    create(&mut deps)?;
+    poc_self_transfer(&mut deps)?;
+
+    Ok(())
+}
+
+fn poc_self_transfer(
+    deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(), ContractError> {
+
+    let mut env = mock_env();
+    env.block.time = Timestamp::from_seconds(101);
+
+    // user_1 bond 100000 LP
+    let info = mock_info(LP_TOKEN, &[]);
+    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
+        sender: USER_1.to_string(),
+        amount: Uint128::from(100000u128),
+        msg: to_binary(&Cw20HookMsg::Bond { staker_addr: None })?,
+    });
+    execute(deps.as_mut(), env.clone(), info.clone(), msg)?;
+
+    // update generator balance from user deposit
+    deps.querier.set_balance(
+        GENERATOR_PROXY.to_string(),
+        LP_TOKEN.to_string(),
+        Uint128::from(100000u128),
+    );
+
+    // query reward info before transfer
+    let msg = QueryMsg::RewardInfo {
+        staker_addr: USER_1.to_string(),
+    };
+    let res: RewardInfoResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+    assert_eq!(
+        res,
+        RewardInfoResponse {
+            staker_addr: USER_1.to_string(),
+            reward_info: {
+                RewardInfoResponseItem {
+                    bond_share: Uint128::from(100000u128),
+                    deposit_amount: Uint128::from(100000u128),
+                    deposit_time: 101,
+                    staking_token: LP_TOKEN.to_string(),
+                    bond_amount: Uint128::from(100000u128),
+                    deposit_costs: vec![
+                        Uint128::from(100000u128),
+                        Uint128::from(100000u128),
+                    ],
+                }
+            }
+        }
+    );
+
+    // user self-transfer
+    let info = mock_info(USER_1, &[]);
+    let msg = ExecuteMsg::Transfer { 
+        recipient: USER_1.to_string(), 
+        amount: Uint128::from(100000u128),
+    };
+    execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+
+    // query reward info after transfer
+    let msg = QueryMsg::RewardInfo {
+        staker_addr: USER_1.to_string(),
+    };
+    let new_res: RewardInfoResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
+
+    // self transfer should not cause any diff 
+    assert_eq!(new_res, res);
+
+    Ok(())
+}

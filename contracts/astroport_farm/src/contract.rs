@@ -16,7 +16,7 @@ use spectrum::adapters::generator::Generator;
 use spectrum::adapters::pair::Pair;
 
 use crate::bond::{query_reward_info, unbond};
-use crate::state::{POOL_INFO, STATE};
+use crate::state::{STATE};
 use spectrum::astroport_farm::{
     CallbackMsg, Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg,
 };
@@ -283,17 +283,6 @@ fn query_state(deps: Deps) -> StdResult<State> {
 /// ## Description
 /// Used for contract migration. Returns a default object of type [`Response`].
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response> {
-    msg.validate()?;
-
-    let mut config = CONFIG.load(deps.storage)?;
-    config.name = msg.name;
-    config.symbol = msg.symbol;
-    config.pair = Pair(deps.api.addr_validate(&msg.pair)?);
-    CONFIG.save(deps.storage, &config)?;
-
-    let pool_info = config.pair.query_pool_info(&deps.querier)?;
-    POOL_INFO.save(deps.storage, &pool_info)?;
-
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
     Ok(Response::default())
 }

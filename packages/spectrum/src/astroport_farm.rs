@@ -271,9 +271,6 @@ pub struct RewardInfoResponseItem {
 /// We currently take no arguments for migrations
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct MigrateMsg {
-    pub name: String,
-    pub symbol: String,
-    pub pair: String,
 }
 
 fn is_valid_name(name: &str) -> bool {
@@ -298,23 +295,6 @@ fn is_valid_symbol(symbol: &str) -> bool {
 }
 
 impl InstantiateMsg {
-    pub fn validate(&self) -> StdResult<()> {
-        if !is_valid_name(&self.name) {
-            return Err(StdError::generic_err(
-                "Name is not in the expected format (3-50 UTF-8 bytes)",
-            ));
-        }
-        if !is_valid_symbol(&self.symbol) {
-            return Err(StdError::generic_err(
-                "Ticker symbol is not in expected format [a-zA-Z\\-]{3,12}",
-            ));
-        }
-
-        Ok(())
-    }
-}
-
-impl MigrateMsg {
     pub fn validate(&self) -> StdResult<()> {
         if !is_valid_name(&self.name) {
             return Err(StdError::generic_err(

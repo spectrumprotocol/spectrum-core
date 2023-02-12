@@ -27,7 +27,15 @@ pub fn bond_assets(
 
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut funds: Vec<Coin> = vec![];
-
+    
+    let mut low_asset = &assets[0];
+    for asset in assets[1..].iter() {
+        if asset.eq(low_asset) {
+            return Err(ContractError::DuplicatedAsset {});
+        }
+        low_asset = &asset;
+    }
+    
     for asset in assets.iter() {
         asset.deposit_asset(&info, &env.contract.address, &mut messages)?;
         if !asset.amount.is_zero() {

@@ -31,6 +31,9 @@ pub enum ContractError {
 
     #[error("Cannot set to own account")]
     CannotSetOwnAccount {},
+
+    #[error("Duplicated asset")]
+    DuplicatedAsset {},
 }
 
 impl From<OverflowError> for ContractError {
