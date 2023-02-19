@@ -20,4 +20,4 @@ pub struct Config {
 pub const CONFIG: Item<Config> = Item::new("config");
 
 /// Stores pair proxy for the given reward
-pub const PAIR_PROXY: Map<String, Pair> = Map::new("pair_proxy");
+pub const PAIR_PROXY: Map<String, Pair> = Map::new("router");

@@ -3,7 +3,7 @@ use std::fs::create_dir_all;
 
 use cosmwasm_schema::{remove_schemas, schema_for, export_schema};
 
-use spectrum::fees_collector::{ExecuteMsg, InstantiateMsg, QueryMsg, BalancesResponse, AssetWithLimit, CollectSimulationResponse};
+use spectrum::fees_collector::{ExecuteMsg, InstantiateMsg, QueryMsg, BalancesResponse, CoinWithLimit, CollectSimulationResponse};
 use spectrum_fees_collector::state::Config;
 
 fn main() {
@@ -16,7 +16,7 @@ fn main() {
     export_schema(&schema_for!(ExecuteMsg), &out_dir);
     export_schema(&schema_for!(QueryMsg), &out_dir);
     export_schema(&schema_for!(BalancesResponse), &out_dir);
-    export_schema(&schema_for!(AssetWithLimit), &out_dir);
+    export_schema(&schema_for!(CoinWithLimit), &out_dir);
     export_schema(&schema_for!(Config), &out_dir);
     export_schema(&schema_for!(CollectSimulationResponse), &out_dir);
 }

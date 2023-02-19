@@ -1,5 +1,5 @@
-use astroport::asset::{Asset, AssetInfo};
-use cosmwasm_std::{Uint128};
+use cosmwasm_std::{Coin, Uint128};
+use kujira::denom::Denom;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -13,7 +13,7 @@ pub struct InstantiateMsg {
     /// The factory contract address
     pub factory_contract: String,
     /// The stablecoin asset info
-    pub stablecoin: AssetInfo,
+    pub stablecoin: Denom,
     /// The beneficiary addresses to received fees in stablecoin
     pub target_list: Vec<(String, u64)>,
 }
@@ -41,12 +41,12 @@ pub enum ExecuteMsg {
     /// Add bridge tokens used to swap specific fee tokens to stablecoin (effectively declaring a swap route)
     UpdateBridges {
         /// List of bridge assets to be added
-        add: Option<Vec<(AssetInfo, AssetInfo)>>,
+        add: Option<Vec<(Denom, Denom)>>,
         /// List of asset to be removed
-        remove: Option<Vec<AssetInfo>>,
+        remove: Option<Vec<Denom>>,
     },
     /// Swap fee tokens via bridge assets
-    SwapBridgeAssets { assets: Vec<AssetInfo>, depth: u64 },
+    SwapBridgeAssets { assets: Vec<Denom>, depth: u64 },
     /// Distribute stablecoin to beneficiary
     DistributeFees {
         /// The minimum expected amount of stablecoine
@@ -73,7 +73,7 @@ pub enum QueryMsg {
     Config {},
     /// Returns the balance for each asset in the specified input parameters
     Balances {
-        assets: Vec<AssetInfo>,
+        assets: Vec<Denom>,
     },
     /// Returns list of bridge assets
     Bridges {},
@@ -88,7 +88,7 @@ pub enum QueryMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct BalancesResponse {
     /// List of asset and balance in the contract
-    pub balances: Vec<Asset>,
+    pub balances: Vec<Coin>,
 }
 
 /// This structure holds the parameters that are returned from a collect simulation response
@@ -98,16 +98,11 @@ pub struct CollectSimulationResponse {
     pub return_amount: Uint128,
 }
 
-/// This structure describes a migration message.
-/// We currently take no arguments for migrations.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct MigrateMsg {}
-
 /// This struct holds parameters to help with swapping a specific amount of a fee token to ASTRO.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct AssetWithLimit {
     /// Information about the fee token to swap
-    pub info: AssetInfo,
+    pub info: Denom,
     /// The amount of tokens to swap
     pub limit: Option<Uint128>,
 }

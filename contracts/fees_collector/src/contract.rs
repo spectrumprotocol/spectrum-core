@@ -6,7 +6,7 @@ use astroport::asset::{native_asset_info, Asset, AssetInfo, ULUNA_DENOM, AssetIn
 
 use astroport::common::{propose_new_owner, drop_ownership_proposal, claim_ownership};
 use cosmwasm_std::{entry_point, to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Order, Response, StdError, StdResult, Uint128, WasmMsg, attr, Addr};
-use spectrum::fees_collector::{AssetWithLimit, BalancesResponse, CollectSimulationResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
+use spectrum::fees_collector::{CoinWithLimit, BalancesResponse, CollectSimulationResponse, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 use std::collections::{HashMap, HashSet};
 use spectrum::adapters::asset::AssetEx;
 
@@ -107,7 +107,7 @@ fn collect(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    assets: Vec<AssetWithLimit>,
+    assets: Vec<CoinWithLimit>,
     minimum_receive: Option<Uint128>,
 ) -> Result<Response, ContractError> {
 
@@ -174,7 +174,7 @@ fn swap_assets(
     deps: Deps,
     contract_addr: &Addr,
     config: &Config,
-    assets: Vec<AssetWithLimit>,
+    assets: Vec<CoinWithLimit>,
 ) -> Result<(Vec<CosmosMsg>, Vec<AssetInfo>), ContractError> {
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut bridge_assets = HashMap::new();
@@ -270,7 +270,7 @@ fn swap_bridge_assets(
 
     let bridges = assets
         .into_iter()
-        .map(|a| AssetWithLimit {
+        .map(|a| CoinWithLimit {
             info: a,
             limit: None,
         })
@@ -503,7 +503,7 @@ fn query_bridges(deps: Deps, _env: Env) -> StdResult<Vec<(String, String)>> {
 fn query_collect_simulation(
     deps: Deps,
     env: Env,
-    assets: Vec<AssetWithLimit>
+    assets: Vec<CoinWithLimit>
 ) -> Result<CollectSimulationResponse, ContractError> {
 
     // Check for duplicate assets

@@ -9,7 +9,7 @@ use cosmwasm_std::{
     Uint128, WasmMsg, to_binary,
 };
 use cw20::Cw20ExecuteMsg;
-use spectrum::fees_collector::{AssetWithLimit, CollectSimulationResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
+use spectrum::fees_collector::{CoinWithLimit, CollectSimulationResponse, ExecuteMsg, InstantiateMsg, QueryMsg};
 
 use crate::contract::{execute, instantiate, query};
 use crate::error::ContractError;
@@ -377,7 +377,7 @@ fn collect(
     assert!(res.is_ok());
 
     let msg = ExecuteMsg::Collect {
-        assets: vec![AssetWithLimit {
+        assets: vec![CoinWithLimit {
             info: AssetInfo::Token {
                 contract_addr: Addr::unchecked(TOKEN_1),
             },
@@ -455,7 +455,7 @@ fn collect(
     deps.querier.set_price("token2ibc".to_string(), Decimal::percent(25u64));
 
     let msg = QueryMsg::CollectSimulation {
-        assets: vec![AssetWithLimit {
+        assets: vec![CoinWithLimit {
             info: AssetInfo::Token {
                 contract_addr: Addr::unchecked(TOKEN_1),
             },
@@ -478,7 +478,7 @@ fn collect(
     );
 
     let msg = ExecuteMsg::Collect {
-        assets: vec![AssetWithLimit {
+        assets: vec![CoinWithLimit {
             info: AssetInfo::Token {
                 contract_addr: Addr::unchecked(TOKEN_2),
             },
