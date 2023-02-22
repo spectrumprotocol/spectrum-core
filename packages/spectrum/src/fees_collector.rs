@@ -11,7 +11,7 @@ pub struct InstantiateMsg {
     /// Address that's allowed to update bridge assets
     pub operator: String,
     /// The factory contract address
-    pub factory_contract: String,
+    pub router: String,
     /// The stablecoin asset info
     pub stablecoin: Denom,
     /// The beneficiary addresses to received fees in stablecoin

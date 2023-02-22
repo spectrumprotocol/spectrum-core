@@ -1,10 +1,10 @@
 use crate::error::ContractError;
-use crate::state::{Config, BRIDGES};
-use astroport::asset::{Asset, AssetInfo, PairInfo};
-use astroport::querier::{query_pair_info, simulate};
-use cosmwasm_std::{to_binary, Deps, StdResult, Uint128, WasmMsg, CosmosMsg, Addr, QuerierWrapper, Decimal};
-use spectrum::adapters::pair::Pair;
+use crate::state::{BRIDGES};
+use cosmwasm_std::{to_binary, StdResult, Uint128, WasmMsg, CosmosMsg, Addr, QuerierWrapper, Coin, Deps};
+use kujira::asset::{Asset, AssetInfo};
+use kujira::denom::Denom;
 use spectrum::fees_collector::ExecuteMsg;
+use spectrum::router::Router;
 
 /// The default bridge depth for a fee token
 pub const BRIDGES_INITIAL_DEPTH: u64 = 0;
@@ -13,22 +13,20 @@ pub const BRIDGES_MAX_DEPTH: u64 = 2;
 /// Swap execution depth limit
 pub const BRIDGES_EXECUTION_MAX_DEPTH: u64 = 3;
 
-/// Maximum spread percentage when swapping
-const MAX_SPREAD: u64 = 50; // 50%
-
 /// Creates swap message
 pub fn try_build_swap_msg(
     querier: &QuerierWrapper,
-    config: &Config,
-    from: AssetInfo,
-    to: AssetInfo,
+    router: &Router,
+    from: Denom,
+    to: Denom,
     amount: Uint128,
 ) -> Result<CosmosMsg, ContractError> {
-    let pool = query_pair_info(querier, &config.factory_contract, &[from.clone(), to])?;
-    let msg = Pair(pool.contract_addr).swap_msg(
-        &Asset { info: from, amount },
-        Some(Decimal::MAX),
-        Some(Decimal::percent(MAX_SPREAD)),
+    router.query_route(querier, [from.clone(), to.clone()])?;
+    let msg = router.swap_msg(
+        Coin { denom: from.to_string(), amount },
+        to,
+        None,
+        None,
         None,
     )?;
     Ok(msg)
@@ -36,23 +34,23 @@ pub fn try_build_swap_msg(
 
 pub fn try_swap_simulation(
     querier: &QuerierWrapper,
-    config: &Config,
-    from: AssetInfo,
-    to: AssetInfo,
+    router: &Router,
+    from: String,
+    to: Denom,
     amount: Uint128,
 ) -> StdResult<Uint128> {
-    let pool = query_pair_info(querier, &config.factory_contract, &[from.clone(), to])?;
-    let result = simulate(
+    let result = router.simulate(
         querier,
-        pool.contract_addr,
-        &Asset { info: from, amount })?;
-    Ok(result.return_amount)
+        Asset { info: AssetInfo::NativeToken { denom: from.into() }, amount },
+        to,
+    )?;
+    Ok(result.return_amount.try_into()?)
 }
 
 /// Creates swap message via bridge token pair
 pub fn build_swap_bridge_msg(
     contract_addr: &Addr,
-    bridge_assets: Vec<AssetInfo>,
+    bridge_assets: Vec<Denom>,
     depth: u64,
 ) -> StdResult<CosmosMsg> {
     let msg: CosmosMsg =
@@ -72,17 +70,17 @@ pub fn build_swap_bridge_msg(
 /// Validates bridge token
 pub fn validate_bridge(
     deps: Deps,
-    factory_contract: &Addr,
-    from_token: &AssetInfo,
-    bridge_token: &AssetInfo,
-    stablecoin_token: &AssetInfo,
+    router: &Router,
+    from_token: &Denom,
+    bridge_token: &Denom,
+    stablecoin_token: &Denom,
     depth: u64,
-) -> Result<PairInfo, ContractError> {
+) -> Result<(), ContractError> {
     // Check if the bridge pool exists
-    let bridge_pool = query_pair_info(&deps.querier, factory_contract, &[from_token.clone(), bridge_token.clone()])?;
+    router.query_route(&deps.querier, [from_token.clone(), bridge_token.clone()])?;
 
     // Check if the bridge token - stablecoin pool exists
-    let stablecoin_pool = query_pair_info(&deps.querier, factory_contract, &[bridge_token.clone(), stablecoin_token.clone()]);
+    let stablecoin_pool = router.query_route(&deps.querier, [bridge_token.clone(), stablecoin_token.clone()]);
     if stablecoin_pool.is_err() {
         if depth >= BRIDGES_MAX_DEPTH {
             return Err(ContractError::MaxBridgeDepth(depth));
@@ -95,7 +93,7 @@ pub fn validate_bridge(
 
         validate_bridge(
             deps,
-            factory_contract,
+            router,
             bridge_token,
             &next_bridge_token,
             stablecoin_token,
@@ -103,5 +101,5 @@ pub fn validate_bridge(
         )?;
     }
 
-    Ok(bridge_pool)
+    Ok(())
 }

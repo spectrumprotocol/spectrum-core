@@ -1,5 +1,5 @@
-use astroport::asset::AssetInfo;
 use cosmwasm_std::{OverflowError, StdError, Uint128};
+use kujira::denom::Denom;
 use thiserror::Error;
 
 /// ## Description
@@ -13,16 +13,16 @@ pub enum ContractError {
     Unauthorized {},
 
     #[error("Invalid bridge {0} to {1}")]
-    InvalidBridge(AssetInfo, AssetInfo),
+    InvalidBridge(Denom, Denom),
 
     #[error("Invalid bridge destination. {0} cannot be swapped to ASTRO")]
-    InvalidBridgeDestination(AssetInfo),
+    InvalidBridgeDestination(Denom),
 
     #[error("Max bridge length of {0} was reached")]
     MaxBridgeDepth(u64),
 
     #[error("Cannot swap {0}. No swap destinations")]
-    CannotSwap(AssetInfo),
+    CannotSwap(String),
 
     #[error("Incorrect max spread")]
     IncorrectMaxSpread {},

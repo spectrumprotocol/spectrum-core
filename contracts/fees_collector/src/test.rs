@@ -57,7 +57,7 @@ fn create(
 
     let instantiate_msg = InstantiateMsg {
         owner: USER_1.to_string(),
-        factory_contract: FACTORY_1.to_string(),
+        router: FACTORY_1.to_string(),
         operator: OPERATOR_1.to_string(),
         stablecoin: AssetInfo::NativeToken {
             denom: IBC_TOKEN.to_string(),
@@ -73,7 +73,7 @@ fn create(
         Config {
             owner: Addr::unchecked(USER_1),
             operator: Addr::unchecked(OPERATOR_1),
-            factory_contract: Addr::unchecked(FACTORY_1),
+            router: Addr::unchecked(FACTORY_1),
             target_list: vec![(Addr::unchecked(USER_2), 2), (Addr::unchecked(USER_3), 3)],
             stablecoin: AssetInfo::NativeToken {
                 denom: IBC_TOKEN.to_string(),
@@ -125,7 +125,7 @@ fn config(
         Config {
             owner: Addr::unchecked(USER_1),
             operator: Addr::unchecked(OPERATOR_2),
-            factory_contract: Addr::unchecked(FACTORY_2),
+            router: Addr::unchecked(FACTORY_2),
             target_list: vec![(Addr::unchecked(USER_1), 1)],
             stablecoin: AssetInfo::NativeToken {
                 denom: IBC_TOKEN.to_string(),
@@ -148,7 +148,7 @@ fn config(
         Config {
             owner: Addr::unchecked(USER_1),
             operator: Addr::unchecked(OPERATOR_1),
-            factory_contract: Addr::unchecked(FACTORY_1),
+            router: Addr::unchecked(FACTORY_1),
             target_list: vec![(Addr::unchecked(USER_2), 2), (Addr::unchecked(USER_3), 3)],
             stablecoin: AssetInfo::NativeToken {
                 denom: IBC_TOKEN.to_string(),

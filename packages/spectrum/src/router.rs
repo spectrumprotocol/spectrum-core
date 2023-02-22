@@ -1,9 +1,10 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Addr, Api, Coin, CosmosMsg, Decimal256, StdResult, to_binary, Uint128, WasmMsg};
+use cosmwasm_std::{Addr, Api, Coin, CosmosMsg, Decimal256, QuerierWrapper, StdResult, to_binary, Uint128, WasmMsg};
 use kujira::asset::Asset;
 use kujira::denom::Denom;
+use kujira::fin::SimulationResponse;
 use crate::adapters::pair::Pair;
 
 /// Maximum assets in the swap route
@@ -143,6 +144,10 @@ impl CallbackMsg {
 pub enum QueryMsg {
     /// Returns controls settings that specified in [`Config`] structure.
     Config {},
+    /// Returns route
+    Route {
+        denoms: [Denom; 2]
+    },
     /// Returns routes
     Routes {
         start_after: Option<String>,
@@ -161,4 +166,55 @@ pub enum QueryMsg {
         /// The swap operations to perform, each swap involving a specific pool
         operations: Vec<SwapOperationRequest>,
     },
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Route {
+    pub key: String,
+    pub operations: Vec<SwapOperation>,
+    pub decimal_delta: i8,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Router(pub Addr);
+
+impl Router {
+
+    pub fn query_route(&self, querier: &QuerierWrapper, denoms: [Denom; 2]) -> StdResult<Route> {
+        querier.query_wasm_smart(self.0.to_string(), &QueryMsg::Route { denoms })
+    }
+
+    pub fn simulate(
+        &self,
+        querier: &QuerierWrapper,
+        offer_asset: Asset,
+        ask: Denom,
+    ) -> StdResult<SimulationResponse> {
+        querier.query_wasm_smart(self.0.to_string(), &QueryMsg::Simulation {
+            offer_asset,
+            ask,
+        })
+    }
+
+    pub fn swap_msg(
+        &self,
+        asset: Coin,
+        ask: Denom,
+        belief_price: Option<Decimal256>,
+        max_spread: Option<Decimal256>,
+        to: Option<String>,
+    ) -> StdResult<CosmosMsg> {
+        let wasm_msg = WasmMsg::Execute {
+            contract_addr: self.0.to_string(),
+            msg: to_binary(&ExecuteMsg::Swap {
+                ask,
+                belief_price,
+                max_spread,
+                to,
+            })?,
+            funds: vec![asset],
+        };
+
+        Ok(CosmosMsg::Wasm(wasm_msg))
+    }
 }

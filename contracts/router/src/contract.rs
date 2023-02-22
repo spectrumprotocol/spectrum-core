@@ -1,10 +1,10 @@
 use std::cmp::Ordering;
 use crate::error::ContractError;
-use crate::state::{Config, CONFIG, Route, ROUTES};
+use crate::state::{Config, CONFIG, ROUTES};
 
 use cosmwasm_std::{entry_point, to_binary, Addr, Binary, Deps, DepsMut, Env, Fraction, MessageInfo, Response, StdResult, Uint128, Empty, Coin, CosmosMsg, BankMsg, Decimal256, Uint256, StdError, Api, QuerierWrapper, Order};
 use cw_storage_plus::Bound;
-use spectrum::router::{ExecuteMsg, InstantiateMsg, QueryMsg, MAX_ASSETS, CallbackMsg, SwapOperation, SwapOperationRequest};
+use spectrum::router::{ExecuteMsg, InstantiateMsg, QueryMsg, MAX_ASSETS, CallbackMsg, SwapOperation, SwapOperationRequest, Route};
 
 use kujira::asset::{Asset, AssetInfo};
 use kujira::denom::Denom;
@@ -427,7 +427,10 @@ const MAX_LIMIT: u8 = 50;
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::Config {} => to_binary(&CONFIG.load(deps.storage)?),
+        QueryMsg::Config {} =>
+            to_binary(&CONFIG.load(deps.storage)?),
+        QueryMsg::Route { denoms } =>
+            to_binary(&query_route(deps, denoms)?),
         QueryMsg::Routes { limit, start_after } =>
             to_binary(&query_routes(deps, limit, start_after)?),
         QueryMsg::Simulation { offer_asset, ask } =>
@@ -435,6 +438,11 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::SimulateSwapOperations { offer_amount, operations } =>
             to_binary(&simulate_swap_operations(deps, offer_amount, operations)?),
     }
+}
+
+fn query_route(deps: Deps, denoms: [Denom; 2]) -> StdResult<Route> {
+    let (key, _) = get_key(&denoms[0], &denoms[1]);
+    ROUTES.load(deps.storage, key)
 }
 
 fn query_routes(deps: Deps, limit: Option<u8>, start_after: Option<String>) -> StdResult<Vec<Route>> {
