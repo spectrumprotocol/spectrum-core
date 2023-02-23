@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Addr, Coin, CosmosMsg, QuerierWrapper, StdResult, Timestamp, to_binary, Uint128, WasmMsg};
+use cosmwasm_std::{Addr, Coin, CosmosMsg, CustomQuery, QuerierWrapper, StdResult, Timestamp, to_binary, Uint128, WasmMsg};
 use kujira::denom::Denom;
 use kujira::schedule::{Release, Schedule};
 
@@ -167,9 +167,9 @@ impl Staking {
         Ok(CosmosMsg::Wasm(wasm_msg))
     }
 
-    pub fn query_stake(
+    pub fn query_stake<C: CustomQuery>(
         &self,
-        querier: &QuerierWrapper,
+        querier: &QuerierWrapper<C>,
         addr: Addr,
         denom: Denom,
     ) -> StdResult<PoolResponse> {

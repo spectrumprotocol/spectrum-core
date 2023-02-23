@@ -1,7 +1,7 @@
 use crate::error::ContractError;
 use crate::state::{Config, BRIDGES, CONFIG};
 
-use crate::utils::{build_swap_bridge_msg, try_build_swap_msg, validate_bridge, BRIDGES_EXECUTION_MAX_DEPTH, BRIDGES_INITIAL_DEPTH, try_swap_simulation};
+use crate::utils::{build_swap_bridge_msg, validate_bridge, BRIDGES_EXECUTION_MAX_DEPTH, BRIDGES_INITIAL_DEPTH};
 
 use cosmwasm_std::{entry_point, to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Order, Response, StdError, StdResult, Uint128, WasmMsg, attr, Addr, Coin, BankMsg};
 use spectrum::fees_collector::{BalancesResponse, CollectSimulationResponse, ExecuteMsg, InstantiateMsg, QueryMsg, AssetWithLimit};
@@ -214,13 +214,13 @@ fn swap(
     // Check if bridge tokens exist
     let bridge_token = BRIDGES.load(deps.storage, from_token.to_string());
     if let Ok(asset) = bridge_token {
-        let msg = try_build_swap_msg(&deps.querier, &config.router, from_token, asset.clone(), amount_in)?;
+        let msg = config.router.try_build_swap_msg(&deps.querier, from_token, asset.clone(), amount_in)?;
         return Ok(SwapTarget::Bridge { asset, msg });
     }
 
     // Check for a direct pair with stablecoin
     let swap_to_stablecoin =
-        try_build_swap_msg(&deps.querier, &config.router, from_token.clone(), stablecoin, amount_in);
+        config.router.try_build_swap_msg(&deps.querier, from_token.clone(), stablecoin, amount_in);
     if let Ok(msg) = swap_to_stablecoin {
         return Ok(SwapTarget::Stable(msg));
     }
@@ -228,7 +228,7 @@ fn swap(
     // Check for a pair with LUNA
     if from_token.ne(&ukuji) {
         let swap_to_ukuji =
-            try_build_swap_msg(&deps.querier, &config.router, from_token.clone(), ukuji.clone(), amount_in);
+            config.router.try_build_swap_msg(&deps.querier, from_token.clone(), ukuji.clone(), amount_in);
         if let Ok(msg) = swap_to_ukuji {
             return Ok(SwapTarget::Bridge { asset: ukuji, msg });
         }
@@ -540,7 +540,7 @@ fn bulk_swap_simulation(
     let ukuji: Denom = UKUJI_DENOM.to_string().into();
     for (from_asset_info, amount_in) in assets {
 
-        if config.stablecoin.eq(&from_asset_info.clone().into()) {
+        if config.stablecoin.eq(&Denom::from(&from_asset_info)) {
             add_amount(&mut next_assets, config.stablecoin.to_string(), amount_in);
             continue;
         }
@@ -552,21 +552,21 @@ fn bulk_swap_simulation(
         // Check if bridge tokens exist
         let bridge_token = BRIDGES.load(deps.storage, from_asset_info.to_string());
         if let Ok(to_asset_info) = bridge_token {
-            let return_amount = try_swap_simulation(&deps.querier, &config.router, from_asset_info, to_asset_info.clone(), amount_in)?;
+            let return_amount = config.router.try_swap_simulation(&deps.querier, from_asset_info, to_asset_info.clone(), amount_in)?;
             add_amount(&mut next_assets, to_asset_info.to_string(), return_amount);
             continue;
         }
 
         // Check for a direct pair with stablecoin
-        let return_amount = try_swap_simulation(&deps.querier, &config.router, from_asset_info.clone(), config.stablecoin.clone(), amount_in);
+        let return_amount = config.router.try_swap_simulation(&deps.querier, from_asset_info.clone(), config.stablecoin.clone(), amount_in);
         if let Ok(return_amount) = return_amount {
             add_amount(&mut next_assets, config.stablecoin.to_string(), return_amount);
             continue;
         }
 
         // Check for a pair with LUNA
-        if ukuji.ne(&from_asset_info.clone().into()) {
-            let return_amount = try_swap_simulation(&deps.querier, &config.router, from_asset_info.clone(), ukuji.clone(), amount_in);
+        if ukuji.ne(&Denom::from(&from_asset_info)) {
+            let return_amount = config.router.try_swap_simulation(&deps.querier, from_asset_info.clone(), ukuji.clone(), amount_in);
             if let Ok(return_amount) = return_amount {
                 add_amount(&mut next_assets, ukuji.to_string(), return_amount);
                 continue;

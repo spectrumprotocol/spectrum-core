@@ -10,6 +10,9 @@ pub enum ContractError {
 
     #[error("Unauthorized")]
     Unauthorized {},
+
+    #[error("Invalid asset")]
+    InvalidAsset {},
 }
 
 impl From<OverflowError> for ContractError {

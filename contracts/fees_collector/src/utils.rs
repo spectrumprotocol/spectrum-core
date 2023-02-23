@@ -1,7 +1,6 @@
 use crate::error::ContractError;
 use crate::state::{BRIDGES};
-use cosmwasm_std::{to_binary, StdResult, Uint128, WasmMsg, CosmosMsg, Addr, QuerierWrapper, Coin, Deps};
-use kujira::asset::{Asset, AssetInfo};
+use cosmwasm_std::{to_binary, StdResult, WasmMsg, CosmosMsg, Addr, Deps};
 use kujira::denom::Denom;
 use spectrum::fees_collector::ExecuteMsg;
 use spectrum::router::Router;
@@ -12,40 +11,6 @@ pub const BRIDGES_INITIAL_DEPTH: u64 = 0;
 pub const BRIDGES_MAX_DEPTH: u64 = 2;
 /// Swap execution depth limit
 pub const BRIDGES_EXECUTION_MAX_DEPTH: u64 = 3;
-
-/// Creates swap message
-pub fn try_build_swap_msg(
-    querier: &QuerierWrapper,
-    router: &Router,
-    from: Denom,
-    to: Denom,
-    amount: Uint128,
-) -> Result<CosmosMsg, ContractError> {
-    router.query_route(querier, [from.clone(), to.clone()])?;
-    let msg = router.swap_msg(
-        Coin { denom: from.to_string(), amount },
-        to,
-        None,
-        None,
-        None,
-    )?;
-    Ok(msg)
-}
-
-pub fn try_swap_simulation(
-    querier: &QuerierWrapper,
-    router: &Router,
-    from: String,
-    to: Denom,
-    amount: Uint128,
-) -> StdResult<Uint128> {
-    let result = router.simulate(
-        querier,
-        Asset { info: AssetInfo::NativeToken { denom: from.into() }, amount },
-        to,
-    )?;
-    Ok(result.return_amount.try_into()?)
-}
 
 /// Creates swap message via bridge token pair
 pub fn build_swap_bridge_msg(

@@ -875,6 +875,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "spectrum-compound-proxy"
+version = "1.0.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-multi-test",
+ "cw-storage-plus",
+ "kujira",
+ "proptest",
+ "schemars",
+ "serde",
+ "spectrum",
+ "thiserror",
+]
+
+[[package]]
+name = "spectrum-fees-collector"
+version = "1.0.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-multi-test",
+ "cw-storage-plus",
+ "kujira",
+ "schemars",
+ "serde",
+ "spectrum",
+ "thiserror",
+]
+
+[[package]]
 name = "spectrum-router"
 version = "1.0.0"
 dependencies = [

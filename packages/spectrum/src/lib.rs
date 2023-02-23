@@ -1,5 +1,6 @@
 pub mod adapters;
 pub mod compound_farm;
+pub mod compound_proxy;
 pub mod fees_collector;
 pub mod helper;
 pub mod router;

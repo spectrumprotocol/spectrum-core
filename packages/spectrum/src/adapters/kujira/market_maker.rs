@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Addr, Binary, Coin, CosmosMsg, Decimal, QuerierWrapper, StdResult, to_binary, Uint128, WasmMsg};
+use cosmwasm_std::{Addr, Binary, Coin, CosmosMsg, CustomQuery, Decimal, QuerierWrapper, StdResult, to_binary, Uint128, WasmMsg};
 use kujira::denom::Denom;
 use kujira::precision::Precision;
 
@@ -106,9 +106,16 @@ impl MarketMaker {
         Ok(CosmosMsg::Wasm(wasm_msg))
     }
 
-    pub fn query_pool(
+    pub fn query_config<C: CustomQuery>(
         &self,
-        querier: &QuerierWrapper,
+        querier: &QuerierWrapper<C>,
+    ) -> StdResult<ConfigResponse> {
+        querier.query_wasm_smart(self.0.to_string(), &QueryMsg::Config {})
+    }
+
+    pub fn query_pool<C: CustomQuery>(
+        &self,
+        querier: &QuerierWrapper<C>,
     ) -> StdResult<PoolResponse> {
         querier.query_wasm_smart(self.0.to_string(), &QueryMsg::Pool {})
     }

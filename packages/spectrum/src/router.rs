@@ -1,8 +1,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Addr, Api, Coin, CosmosMsg, Decimal256, QuerierWrapper, StdResult, to_binary, Uint128, WasmMsg};
-use kujira::asset::Asset;
+use cosmwasm_std::{Addr, Api, Coin, CosmosMsg, CustomQuery, Decimal256, QuerierWrapper, StdResult, to_binary, Uint128, WasmMsg};
+use kujira::asset::{Asset, AssetInfo};
 use kujira::denom::Denom;
 use kujira::fin::SimulationResponse;
 use crate::adapters::pair::Pair;
@@ -180,13 +180,13 @@ pub struct Router(pub Addr);
 
 impl Router {
 
-    pub fn query_route(&self, querier: &QuerierWrapper, denoms: [Denom; 2]) -> StdResult<Route> {
+    pub fn query_route<C: CustomQuery>(&self, querier: &QuerierWrapper<C>, denoms: [Denom; 2]) -> StdResult<Route> {
         querier.query_wasm_smart(self.0.to_string(), &QueryMsg::Route { denoms })
     }
 
-    pub fn simulate(
+    pub fn simulate<C: CustomQuery>(
         &self,
-        querier: &QuerierWrapper,
+        querier: &QuerierWrapper<C>,
         offer_asset: Asset,
         ask: Denom,
     ) -> StdResult<SimulationResponse> {
@@ -216,5 +216,38 @@ impl Router {
         };
 
         Ok(CosmosMsg::Wasm(wasm_msg))
+    }
+
+    pub fn try_build_swap_msg<C: CustomQuery>(
+        &self,
+        querier: &QuerierWrapper<C>,
+        from: Denom,
+        to: Denom,
+        amount: Uint128,
+    ) -> StdResult<CosmosMsg> {
+        self.query_route(querier, [from.clone(), to.clone()])?;
+        let msg = self.swap_msg(
+            Coin { denom: from.to_string(), amount },
+            to,
+            None,
+            None,
+            None,
+        )?;
+        Ok(msg)
+    }
+
+    pub fn try_swap_simulation<C: CustomQuery>(
+        &self,
+        querier: &QuerierWrapper<C>,
+        from: String,
+        to: Denom,
+        amount: Uint128,
+    ) -> StdResult<Uint128> {
+        let result = self.simulate(
+            querier,
+            Asset { info: AssetInfo::NativeToken { denom: from.into() }, amount },
+            to,
+        )?;
+        Ok(result.return_amount.try_into()?)
     }
 }

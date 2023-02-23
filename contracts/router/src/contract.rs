@@ -249,7 +249,7 @@ fn swap(
         _ => return Err(ContractError::InvalidFunds {}),
     };
 
-    let (key, _) = get_key(&fund.denom.clone().into(), &ask);
+    let (key, _) = get_key(&Denom::from(&fund.denom), &ask);
     let route = ROUTES.load(deps.storage, key)?;
 
     let (operations, decimal_delta) =
@@ -332,7 +332,7 @@ fn execute_swap_operations(
         _ => return Err(ContractError::InvalidFunds {}),
     };
     let (operations, _) = validate_route(&deps.querier, deps.api, operations)?;
-    if operations[0].offer.ne(&fund.denom.clone().into()) {
+    if operations[0].offer.ne(&Denom::from(&fund.denom)) {
         return Err(ContractError::InvalidAsset {});
     }
 
@@ -492,7 +492,7 @@ fn query_simulation(deps: Deps, offer_asset: Asset, ask: Denom) -> StdResult<Sim
     let fund = match &offer_asset.info {
         AssetInfo::NativeToken { denom } => Coin { denom: denom.to_string(), amount: offer_asset.amount },
     };
-    let (key, _) = get_key(&fund.denom.clone().into(), &ask);
+    let (key, _) = get_key(&Denom::from(&fund.denom), &ask);
     let route = ROUTES.load(deps.storage, key)?;
 
     let operations =

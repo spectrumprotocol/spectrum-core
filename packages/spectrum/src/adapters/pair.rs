@@ -1,4 +1,4 @@
-use cosmwasm_std::{Addr, Coin, CosmosMsg, Decimal256, QuerierWrapper, StdResult, to_binary, WasmMsg};
+use cosmwasm_std::{Addr, Coin, CosmosMsg, CustomQuery, Decimal256, QuerierWrapper, StdResult, to_binary, WasmMsg};
 use kujira::asset::Asset;
 use kujira::fin::{ConfigResponse, ExecuteMsg, QueryMsg, SimulationResponse};
 use schemars::JsonSchema;
@@ -8,13 +8,13 @@ use serde::{Deserialize, Serialize};
 pub struct Pair(pub Addr);
 
 impl Pair {
-    pub fn query_config(&self, querier: &QuerierWrapper) -> StdResult<ConfigResponse> {
+    pub fn query_config<C: CustomQuery>(&self, querier: &QuerierWrapper<C>) -> StdResult<ConfigResponse> {
         querier.query_wasm_smart(self.0.to_string(), &QueryMsg::Config {})
     }
 
-    pub fn simulate(
+    pub fn simulate<C: CustomQuery>(
         &self,
-        querier: &QuerierWrapper,
+        querier: &QuerierWrapper<C>,
         offer_asset: &Asset,
     ) -> StdResult<SimulationResponse> {
         querier.query_wasm_smart(self.0.to_string(), &QueryMsg::Simulation {
