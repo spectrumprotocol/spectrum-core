@@ -2,6 +2,8 @@ use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Addr, Binary, Coin, CosmosMsg, CustomQuery, Decimal, QuerierWrapper, StdResult, to_binary, Uint128, WasmMsg};
 use kujira::denom::Denom;
 use kujira::precision::Precision;
+use kujira::querier::KujiraQuerier;
+use kujira::query::{KujiraQuery, SupplyResponse};
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -120,4 +122,27 @@ impl MarketMaker {
         querier.query_wasm_smart(self.0.to_string(), &QueryMsg::Pool {})
     }
 
+    pub fn get_lp_name(&self) -> String {
+        format!("factory/{0}/ulp", self.0)
+    }
+
+    pub fn query_lp_supply(
+        &self,
+        querier: &QuerierWrapper<KujiraQuery>,
+    ) -> StdResult<SupplyResponse> {
+        KujiraQuerier::new(querier).query_supply_of(
+            format!("factory/{0}/ulp", self.0).into()
+        )
+    }
+
+    pub fn query_lp_balance<C: CustomQuery>(
+        &self,
+        querier: &QuerierWrapper<C>,
+        address: impl Into<String>,
+    ) -> StdResult<Coin> {
+        querier.query_balance(
+            address,
+            format!("factory/{0}/ulp", self.0)
+        )
+    }
 }

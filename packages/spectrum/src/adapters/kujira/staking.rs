@@ -121,11 +121,11 @@ pub struct StakesResponse {
 pub struct Staking(pub Addr);
 
 impl Staking {
-    pub fn stake(
+    pub fn stake_msg<T>(
         &self,
         lp: Coin,
         addr: Option<Addr>,
-    ) -> StdResult<CosmosMsg> {
+    ) -> StdResult<CosmosMsg<T>> {
         let wasm_msg = WasmMsg::Execute {
             contract_addr: self.0.to_string(),
             msg: to_binary(&ExecuteMsg::Stake {
@@ -134,13 +134,13 @@ impl Staking {
             funds: vec![lp],
         };
 
-        Ok(CosmosMsg::Wasm(wasm_msg))
+        Ok(CosmosMsg::<T>::Wasm(wasm_msg))
     }
 
-    pub fn claim(
+    pub fn claim_msg<T>(
         &self,
         denom: Denom,
-    ) -> StdResult<CosmosMsg> {
+    ) -> StdResult<CosmosMsg<T>> {
         let wasm_msg = WasmMsg::Execute {
             contract_addr: self.0.to_string(),
             msg: to_binary(&ExecuteMsg::Claim {
@@ -149,13 +149,13 @@ impl Staking {
             funds: vec![],
         };
 
-        Ok(CosmosMsg::Wasm(wasm_msg))
+        Ok(CosmosMsg::<T>::Wasm(wasm_msg))
     }
 
-    pub fn withdraw(
+    pub fn withdraw_msg<T>(
         &self,
         amount: Coin,
-    ) -> StdResult<CosmosMsg> {
+    ) -> StdResult<CosmosMsg<T>> {
         let wasm_msg = WasmMsg::Execute {
             contract_addr: self.0.to_string(),
             msg: to_binary(&ExecuteMsg::Withdraw {
@@ -164,7 +164,7 @@ impl Staking {
             funds: vec![],
         };
 
-        Ok(CosmosMsg::Wasm(wasm_msg))
+        Ok(CosmosMsg::<T>::Wasm(wasm_msg))
     }
 
     pub fn query_stake<C: CustomQuery>(
@@ -172,7 +172,7 @@ impl Staking {
         querier: &QuerierWrapper<C>,
         addr: Addr,
         denom: Denom,
-    ) -> StdResult<PoolResponse> {
+    ) -> StdResult<StakeResponse> {
         querier.query_wasm_smart(self.0.to_string(), &QueryMsg::Stake {
             denom,
             addr

@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use crate::error::ContractError;
 use crate::state::{Config, CONFIG, ROUTES};
 
-use cosmwasm_std::{entry_point, to_binary, Addr, Binary, Deps, DepsMut, Env, Fraction, MessageInfo, Response, StdResult, Uint128, Empty, Coin, CosmosMsg, BankMsg, Decimal256, Uint256, StdError, Api, QuerierWrapper, Order};
+use cosmwasm_std::{entry_point, to_binary, Addr, Binary, Deps, DepsMut, Env, Fraction, MessageInfo, Response, StdResult, Uint128, Empty, Coin, BankMsg, Decimal256, Uint256, StdError, Api, QuerierWrapper, Order};
 use cw_storage_plus::Bound;
 use spectrum::router::{ExecuteMsg, InstantiateMsg, QueryMsg, MAX_ASSETS, CallbackMsg, SwapOperation, SwapOperationRequest, Route};
 
@@ -172,9 +172,9 @@ fn get_key(
     let offer = offer.to_string();
     let ask = ask.to_string();
     if offer > ask {
-        (format!("{ask}{offer}"), true)
+        (format!("{0}{1}", ask, offer), true)
     } else {
-        (format!("{offer}{ask}"), false)
+        (format!("{0}{1}", offer, ask), false)
     }
 }
 
@@ -387,12 +387,11 @@ fn callback_swap(
                     });
                 }
             }
-            let transfer_msg = CosmosMsg::Bank(BankMsg::Send {
-                to_address: to.to_string(),
-                amount: vec![ Coin { denom: previous_balance.denom, amount } ],
-            });
-            Response::new()
-                .add_message(transfer_msg)
+            Response::default()
+                .add_message(BankMsg::Send {
+                    to_address: to.to_string(),
+                    amount: vec![ Coin { denom: previous_balance.denom, amount } ],
+                })
         },
         Some((head, tails)) => {
             let previous_balance = deps.querier.query_balance(
@@ -511,7 +510,7 @@ fn simulate_swap_operations(
     operations: Vec<SwapOperationRequest>,
 ) -> StdResult<SimulationResponse> {
     let (operations, _) = validate_route(&deps.querier, deps.api, operations)
-        .map_err(|err| StdError::generic_err(format!("{err}")))?;
+        .map_err(|err| StdError::generic_err(format!("{0}", err)))?;
 
     simulation_internal(&deps.querier, offer_amount, operations)
 }

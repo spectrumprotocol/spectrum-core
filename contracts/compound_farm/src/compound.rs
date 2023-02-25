@@ -1,30 +1,39 @@
-use astroport::{
-    asset::{Asset},
-};
-use cosmwasm_std::{attr, Attribute, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, Uint128, Decimal};
+use cosmwasm_std::{attr, Attribute, Coin, CosmosMsg, DepsMut, Env, MessageInfo, Response, Uint128, Decimal, QuerierWrapper, BankMsg};
+use kujira::denom::Denom;
+use kujira::msg::KujiraMsg;
+use kujira::query::KujiraQuery;
+use spectrum::adapters::kujira::market_maker::{ConfigResponse};
 
 use crate::{
     error::ContractError,
     state::CONFIG,
 };
 
-use cw20::{Expiration};
-use astroport::asset::{AssetInfo, AssetInfoExt, token_asset};
-
-use astroport::querier::query_token_balance;
-use spectrum::adapters::asset::AssetEx;
-
 use spectrum::compound_farm::CallbackMsg;
+use crate::state::Config;
+
+
+fn is_support(
+    querier: &QuerierWrapper<KujiraQuery>,
+    config: &Config,
+    mm_config: &ConfigResponse,
+    denom: String,
+) -> bool {
+    denom == mm_config.denoms[0].to_string()
+        || denom == mm_config.denoms[1].to_string()
+        || config.router.query_route(querier, [Denom::from(&denom), mm_config.denoms[0].clone()]).is_ok()
+        || config.router.query_route(querier, [Denom::from(&denom), mm_config.denoms[1].clone()]).is_ok()
+}
 
 /// ## Description
 /// Performs compound by sending LP rewards to compound proxy and reinvest received LP token
 pub fn compound(
-    deps: DepsMut,
+    deps: DepsMut<KujiraQuery>,
     env: Env,
     info: MessageInfo,
     minimum_receive: Option<Uint128>,
     slippage_tolerance: Option<Decimal>,
-) -> Result<Response, ContractError> {
+) -> Result<Response<KujiraMsg>, ContractError> {
 
     let config = CONFIG.load(deps.storage)?;
 
@@ -33,87 +42,77 @@ pub fn compound(
         return Err(ContractError::Unauthorized {});
     }
 
-    let staking_token = config.liquidity_token;
-
-    let pending_token = config.staking_contract.query_pending_token(
+    let staked = config.staking.query_stake(
         &deps.querier,
-        &staking_token,
-        &env.contract.address,
-    )?;
-
-    let lp_balance = config.staking_contract.query_deposit(
-        &deps.querier,
-        &staking_token,
-        &env.contract.address,
+        env.contract.address.clone(),
+        config.market_maker.get_lp_name().into(),
     )?;
 
     let total_fee = config.fee;
 
-    let mut messages: Vec<CosmosMsg> = vec![];
+    let mut messages: Vec<CosmosMsg<KujiraMsg>> = vec![];
     let mut attributes: Vec<Attribute> = vec![];
 
-    let mut rewards: Vec<Asset> = vec![];
-    let mut compound_rewards: Vec<Asset> = vec![];
+    let rewards = staked.fills;
 
-    let claim_rewards = config.staking_contract.claim_rewards_msg(
-        vec![staking_token.to_string()],
+    let claim_rewards = config.staking.claim_msg(
+        config.market_maker.get_lp_name().into(),
     )?;
     messages.push(claim_rewards);
 
-    rewards.push(
-        token_asset(config.base_reward_token, pending_token.pending),
-    );
-    if let Some(pending_on_proxy) = pending_token.pending_on_proxy {
-        rewards.extend(pending_on_proxy);
-    }
-
     let mut compound_funds: Vec<Coin> = vec![];
+    let mut commission_funds: Vec<Coin> = vec![];
+    let mm_config = config.market_maker.query_config(&deps.querier)?;
     for asset in rewards {
         let reward_amount = asset.amount;
-        if !reward_amount.is_zero() && !lp_balance.is_zero() {
-            let commission_amount = reward_amount * total_fee;
-            let compound_amount = reward_amount.checked_sub(commission_amount)?;
-            if !compound_amount.is_zero() {
-                let compound_asset = asset.info.with_balance(compound_amount);
-                if let AssetInfo::NativeToken { denom } = &asset.info {
-                    compound_funds.push(Coin { denom: denom.clone(), amount: asset.amount });
-                } else {
-                    let increase_allowance = compound_asset.increase_allowance_msg(
-                        config.compound_proxy.0.to_string(),
-                        Some(Expiration::AtHeight(env.block.height + 1)),
-                    )?;
-                    messages.push(increase_allowance);
-                }
-                compound_rewards.push(compound_asset);
-            }
-
-            if !commission_amount.is_zero() {
-                let commission_asset = asset.info.with_balance(commission_amount);
-                let transfer_fee = commission_asset.transfer_msg(&config.fee_collector)?;
-                messages.push(transfer_fee);
-            }
-
-            attributes.push(attr("token", asset.info.to_string()));
-            attributes.push(attr("compound_amount", compound_amount));
-            attributes.push(attr("commission_amount", commission_amount));
+        if reward_amount.is_zero() || staked.amount.is_zero() {
+            continue;
         }
+        if !is_support(&deps.querier, &config, &mm_config, asset.denom.clone()) {
+            // TODO: save uncompound rewards
+            continue;
+        }
+        let commission_amount = reward_amount * total_fee;
+        let compound_amount = reward_amount.checked_sub(commission_amount)?;
+        if !compound_amount.is_zero() {
+            compound_funds.push(Coin { denom: asset.denom.clone(), amount: compound_amount });
+        }
+
+        if !commission_amount.is_zero() {
+            commission_funds.push(Coin { denom: asset.denom.clone(), amount: commission_amount });
+        }
+
+        attributes.push(attr("token", asset.denom.to_string()));
+        attributes.push(attr("compound_amount", compound_amount));
+        attributes.push(attr("commission_amount", commission_amount));
     }
 
-    if !compound_rewards.is_empty() {
-        let compound = config.compound_proxy.compound_msg(compound_rewards, compound_funds, None, slippage_tolerance)?;
+    if !commission_funds.is_empty() {
+        messages.push(BankMsg::Send {
+            to_address: config.fee_collector.to_string(),
+            amount: commission_funds,
+        }.into());
+    }
+
+    if !compound_funds.is_empty() {
+        let compound = config.compound_proxy.compound_msg(
+            config.market_maker.0.to_string(),
+            compound_funds,
+            None,
+            slippage_tolerance)?;
         messages.push(compound);
 
-        let prev_balance = query_token_balance(&deps.querier, staking_token, &env.contract.address)?;
+        let prev_balance = deps.querier.query_balance(&env.contract.address, config.market_maker.get_lp_name())?.amount;
         messages.push(
             CallbackMsg::Stake {
                 prev_balance,
                 minimum_receive,
             }
-            .into_cosmos_msg(&env.contract.address)?,
+            .to_cosmos_msg(&env.contract.address)?,
         );
     }
 
-    Ok(Response::new()
+    Ok(Response::default()
         .add_messages(messages)
         .add_attribute("action", "compound")
         .add_attributes(attributes))
@@ -122,17 +121,16 @@ pub fn compound(
 /// ## Description
 /// Stakes received LP token to the staking contract.
 pub fn stake(
-    deps: DepsMut,
+    deps: DepsMut<KujiraQuery>,
     env: Env,
     _info: MessageInfo,
     prev_balance: Uint128,
     minimum_receive: Option<Uint128>,
-) -> Result<Response, ContractError> {
+) -> Result<Response<KujiraMsg>, ContractError> {
     let config = CONFIG.load(deps.storage)?;
 
-    let staking_token = config.liquidity_token;
-
-    let balance = query_token_balance(&deps.querier, &staking_token, &env.contract.address)?;
+    let staking_token = config.market_maker.get_lp_name();
+    let balance = deps.querier.query_balance(&env.contract.address, &staking_token)?.amount;
     let amount = balance - prev_balance;
 
     if let Some(minimum_receive) = minimum_receive {
@@ -144,9 +142,12 @@ pub fn stake(
         }
     }
 
-    Ok(Response::new()
+    Ok(Response::default()
         .add_message(
-            config.staking_contract.deposit_msg(staking_token.to_string(), amount)?
+            config.staking.stake_msg(Coin {
+                denom: staking_token.clone(),
+                amount,
+            }, None)?
         )
         .add_attributes(vec![
             attr("action", "stake"),

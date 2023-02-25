@@ -91,9 +91,9 @@ pub struct CompoundSimulationResponse {
 pub struct Compounder(pub Addr);
 
 impl Compounder {
-    pub fn compound_msg(&self, market_maker: String, mut funds: Vec<Coin>, no_swap: Option<bool>, slippage_tolerance: Option<Decimal>) -> StdResult<CosmosMsg> {
+    pub fn compound_msg<T>(&self, market_maker: String, mut funds: Vec<Coin>, no_swap: Option<bool>, slippage_tolerance: Option<Decimal>) -> StdResult<CosmosMsg<T>> {
         funds.sort_by(|a, b| a.denom.cmp(&b.denom));
-        Ok(CosmosMsg::Wasm(WasmMsg::Execute {
+        Ok(CosmosMsg::<T>::Wasm(WasmMsg::Execute {
             contract_addr: self.0.to_string(),
             msg: to_binary(&ExecuteMsg::Compound {
                 market_maker,

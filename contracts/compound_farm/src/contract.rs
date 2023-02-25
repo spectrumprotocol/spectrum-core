@@ -1,27 +1,23 @@
-use cosmwasm_std::{
-    attr, entry_point, from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo,
-    Response, StdError, StdResult, Uint128,
-};
+use cosmwasm_std::{attr, entry_point, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult, Empty};
+use kujira::msg::{DenomMsg, KujiraMsg};
+use kujira::query::KujiraQuery;
+use spectrum::adapters::kujira::market_maker::MarketMaker;
+use spectrum::adapters::kujira::staking::Staking;
 
 use crate::{
     bond::{bond, bond_assets, bond_to},
     compound::{compound, stake},
     error::ContractError,
-    ownership::{claim_ownership, drop_ownership_proposal, propose_new_owner},
-    state::{Config, State, CONFIG, OWNERSHIP_PROPOSAL},
+    state::{Config, CONFIG},
 };
-
-use cw20::{Cw20ReceiveMsg, MarketingInfoResponse, MinterResponse};
-use spectrum::adapters::generator::Generator;
-use spectrum::adapters::pair::Pair;
 
 use crate::bond::{query_reward_info, unbond};
-use crate::state::{STATE};
 use spectrum::compound_farm::{
-    CallbackMsg, Cw20HookMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg,
+    CallbackMsg, ExecuteMsg, InstantiateMsg, QueryMsg,
 };
 use spectrum::compound_proxy::Compounder;
-use crate::cw20::{execute_burn, execute_burn_from, execute_decrease_allowance, execute_increase_allowance, execute_send, execute_send_from, execute_transfer, execute_transfer_from, query_all_accounts, query_all_allowances, query_allowance, query_balance, query_token_info};
+use spectrum::ownership::{claim_ownership, drop_ownership_proposal, propose_new_owner};
+use spectrum::router::Router;
 
 /// ## Description
 /// Validates that decimal value is in the range 0 to 1
@@ -42,57 +38,48 @@ pub fn instantiate(
     _env: Env,
     _info: MessageInfo,
     msg: InstantiateMsg,
-) -> Result<Response, ContractError> {
-    msg.validate()?;
+) -> Result<Response<KujiraMsg>, ContractError> {
     validate_percentage(msg.fee, "fee")?;
 
     CONFIG.save(
         deps.storage,
         &Config {
             owner: deps.api.addr_validate(&msg.owner)?,
-            staking_contract: Generator(deps.api.addr_validate(&msg.staking_contract)?),
+            staking: Staking(deps.api.addr_validate(&msg.staking)?),
             compound_proxy: Compounder(deps.api.addr_validate(&msg.compound_proxy)?),
             controller: deps.api.addr_validate(&msg.controller)?,
             fee: msg.fee,
             fee_collector: deps.api.addr_validate(&msg.fee_collector)?,
-            liquidity_token: deps.api.addr_validate(&msg.liquidity_token)?,
-            base_reward_token: deps.api.addr_validate(&msg.base_reward_token)?,
-            pair: Pair(deps.api.addr_validate(&msg.pair)?),
-            name: msg.name,
-            symbol: msg.symbol,
+            market_maker: MarketMaker(deps.api.addr_validate(&msg.market_maker)?),
+            router: Router(deps.api.addr_validate(&msg.router)?),
         },
     )?;
 
-    STATE.save(
-        deps.storage,
-        &State {
-            total_bond_share: Uint128::zero(),
-        },
-    )?;
-
-    Ok(Response::default())
+    Ok(Response::default()
+        .add_message(DenomMsg::Create {
+            subdenom: "clp".into(),
+        }))
 }
 
 /// ## Description
 /// Exposes execute functions available in the contract.
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
-    deps: DepsMut,
+    deps: DepsMut<KujiraQuery>,
     env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
-) -> Result<Response, ContractError> {
+) -> Result<Response<KujiraMsg>, ContractError> {
     match msg {
-        ExecuteMsg::Receive(msg) => receive_cw20(deps, env, info, msg),
         ExecuteMsg::UpdateConfig {
             compound_proxy,
             controller,
             fee,
             fee_collector,
         } => update_config(deps, info, compound_proxy, controller, fee, fee_collector),
-        ExecuteMsg::Unbond { amount } => unbond(deps, env, info, amount),
+        ExecuteMsg::Unbond { } => unbond(deps, env, info),
+        ExecuteMsg::Bond { staker_addr } => bond(deps, env, info, staker_addr),
         ExecuteMsg::BondAssets {
-            assets,
             minimum_receive,
             no_swap,
             slippage_tolerance,
@@ -100,7 +87,6 @@ pub fn execute(
             deps,
             env,
             info,
-            assets,
             minimum_receive,
             no_swap,
             slippage_tolerance,
@@ -110,72 +96,32 @@ pub fn execute(
             slippage_tolerance,
         } => compound(deps, env, info, minimum_receive, slippage_tolerance),
         ExecuteMsg::ProposeNewOwner { owner, expires_in } => {
-            let config: Config = CONFIG.load(deps.storage)?;
+            let config = CONFIG.load(deps.storage)?;
 
-            propose_new_owner(
+            Ok(propose_new_owner(
                 deps,
                 info,
                 env,
                 owner,
                 expires_in,
                 config.owner,
-                OWNERSHIP_PROPOSAL,
-            )
-            .map_err(|e| e.into())
+            )?)
         }
         ExecuteMsg::DropOwnershipProposal {} => {
-            let config: Config = CONFIG.load(deps.storage)?;
+            let config = CONFIG.load(deps.storage)?;
 
-            drop_ownership_proposal(deps, info, config.owner, OWNERSHIP_PROPOSAL)
-                .map_err(|e| e.into())
+            Ok(drop_ownership_proposal(deps, info, config.owner)?)
         }
         ExecuteMsg::ClaimOwnership {} => {
-            claim_ownership(deps, info, env, OWNERSHIP_PROPOSAL, |deps, new_owner| {
-                CONFIG.update::<_, StdError>(deps.storage, |mut v| {
-                    v.owner = new_owner;
-                    Ok(v)
-                })?;
+            let sender = info.sender.clone();
+            let res = claim_ownership(deps.storage, info, env)?;
 
-                Ok(())
-            })
-            .map_err(|e| e.into())
+            let mut config = CONFIG.load(deps.storage)?;
+            config.owner = sender;
+            CONFIG.save(deps.storage, &config)?;
+            Ok(res)
         }
         ExecuteMsg::Callback(msg) => handle_callback(deps, env, info, msg),
-
-        // cw20
-        ExecuteMsg::Transfer { recipient, amount } => execute_transfer(deps, env, info, recipient, amount),
-        ExecuteMsg::Burn { amount } => execute_burn(deps, env, info, amount),
-        ExecuteMsg::Send { contract, amount, msg } => execute_send(deps, env, info, contract, amount, msg),
-        ExecuteMsg::IncreaseAllowance { spender, amount, expires } => execute_increase_allowance(deps, env, info, spender, amount, expires),
-        ExecuteMsg::DecreaseAllowance { spender, amount, expires } => execute_decrease_allowance(deps, env, info, spender, amount, expires),
-        ExecuteMsg::TransferFrom { owner, recipient, amount } => execute_transfer_from(deps, env, info, owner, recipient, amount),
-        ExecuteMsg::SendFrom { owner, contract, amount, msg } => execute_send_from(deps, env, info, owner, contract, amount, msg),
-        ExecuteMsg::BurnFrom { owner, amount } => execute_burn_from(deps, env, info, owner, amount),
-        ExecuteMsg::Mint { .. } => Err(ContractError::Unauthorized {}),
-        ExecuteMsg::UpdateMarketing { .. } => Err(ContractError::Unauthorized {}),
-        ExecuteMsg::UploadLogo(_) => Err(ContractError::Unauthorized {}),
-    }
-}
-
-/// ## Description
-/// Receives a message of type [`Cw20ReceiveMsg`] and processes it depending on the received template.
-/// If the template is not found in the received message, then a [`ContractError`] is returned,
-/// otherwise returns a [`Response`] with the specified attributes if the operation was successful
-fn receive_cw20(
-    deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
-    cw20_msg: Cw20ReceiveMsg,
-) -> Result<Response, ContractError> {
-    match from_binary(&cw20_msg.msg) {
-        Ok(Cw20HookMsg::Bond { staker_addr }) => bond(
-            deps,
-            env,
-            info,
-            staker_addr.unwrap_or(cw20_msg.sender),
-            cw20_msg.amount,
-        ),
-        Err(_) => Err(ContractError::InvalidMessage {}),
     }
 }
 
@@ -183,13 +129,13 @@ fn receive_cw20(
 /// Updates contract config. Returns a [`ContractError`] on failure or the [`CONFIG`] data will be updated.
 #[allow(clippy::too_many_arguments)]
 pub fn update_config(
-    deps: DepsMut,
+    deps: DepsMut<KujiraQuery>,
     info: MessageInfo,
     compound_proxy: Option<String>,
     controller: Option<String>,
     fee: Option<Decimal>,
     fee_collector: Option<String>,
-) -> Result<Response, ContractError> {
+) -> Result<Response<KujiraMsg>, ContractError> {
     let mut config: Config = CONFIG.load(deps.storage)?;
 
     if info.sender != config.owner {
@@ -221,11 +167,11 @@ pub fn update_config(
 /// # Description
 /// Handle the callbacks describes in the [`CallbackMsg`]. Returns an [`ContractError`] on failure, otherwise returns the [`Response`]
 pub fn handle_callback(
-    deps: DepsMut,
+    deps: DepsMut<KujiraQuery>,
     env: Env,
     info: MessageInfo,
     msg: CallbackMsg,
-) -> Result<Response, ContractError> {
+) -> Result<Response<KujiraMsg>, ContractError> {
     // Callback functions can only be called by this contract itself
     if info.sender != env.contract.address {
         return Err(ContractError::Unauthorized {});
@@ -246,43 +192,18 @@ pub fn handle_callback(
 /// ## Description
 /// Exposes all the queries available in the contract.
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
+pub fn query(deps: Deps<KujiraQuery>, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::Config {} => to_binary(&query_config(deps)?),
+        QueryMsg::Config {} => to_binary(&CONFIG.load(deps.storage)?),
         QueryMsg::RewardInfo { staker_addr } => {
             to_binary(&query_reward_info(deps, env, staker_addr)?)
         }
-        QueryMsg::State {} => to_binary(&query_state(deps)?),
-
-        // cw20
-        QueryMsg::Balance { address } => to_binary(&query_balance(deps, address)?),
-        QueryMsg::TokenInfo { } => to_binary(&query_token_info(deps)?),
-        QueryMsg::Minter { } => to_binary::<Option<MinterResponse>>(&None),
-        QueryMsg::Allowance { owner, spender } => to_binary(&query_allowance(deps, owner, spender)?),
-        QueryMsg::AllAllowances { owner, start_after, limit } => to_binary(&query_all_allowances(deps, owner, start_after, limit)?),
-        QueryMsg::AllAccounts { start_after, limit } => to_binary(&query_all_accounts(deps, start_after, limit)?),
-        QueryMsg::MarketingInfo { } => to_binary(&MarketingInfoResponse::default()),
-        QueryMsg::DownloadLogo { } => Err(StdError::not_found("logo")),
     }
-}
-
-/// ## Description
-/// Returns contract config
-fn query_config(deps: Deps) -> StdResult<Config> {
-    let config = CONFIG.load(deps.storage)?;
-    Ok(config)
-}
-
-/// ## Description
-/// Returns contract state
-fn query_state(deps: Deps) -> StdResult<State> {
-    let state = STATE.load(deps.storage)?;
-    Ok(state)
 }
 
 /// ## Description
 /// Used for contract migration. Returns a default object of type [`Response`].
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: Empty) -> StdResult<Response> {
     Ok(Response::default())
 }

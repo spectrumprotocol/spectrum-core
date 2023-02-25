@@ -1,72 +1,46 @@
-use astroport::asset::{Asset, token_asset};
-use astroport::querier::query_token_balance;
-use cosmwasm_std::{attr, Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128, Coin, Decimal};
+use cosmwasm_std::{attr, Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128, Coin, Decimal, BankMsg};
+use kujira::msg::{DenomMsg, KujiraMsg};
+use kujira::querier::KujiraQuerier;
+use kujira::query::KujiraQuery;
 
 use crate::error::ContractError;
-use crate::state::{ScalingOperation, CONFIG, REWARD, STATE, Config};
+use crate::state::{ScalingOperation, CONFIG, REWARD, Config, SupplyResponseEx};
 
-use cw20::{Expiration};
-
-use spectrum::adapters::asset::AssetEx;
 use spectrum::compound_farm::{RewardInfoResponse, RewardInfoResponseItem, CallbackMsg};
-use spectrum::helper::{ScalingUint128};
 
 /// ## Description
 /// Send assets to compound proxy to create LP token and bond received LP token on behalf of sender.
 pub fn bond_assets(
-    deps: DepsMut,
+    deps: DepsMut<KujiraQuery>,
     env: Env,
     info: MessageInfo,
-    assets: Vec<Asset>,
     minimum_receive: Option<Uint128>,
     no_swap: Option<bool>,
     slippage_tolerance: Option<Decimal>,
-) -> Result<Response, ContractError> {
+) -> Result<Response<KujiraMsg>, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    let staking_token = config.liquidity_token;
 
-    let mut messages: Vec<CosmosMsg> = vec![];
-    let mut funds: Vec<Coin> = vec![];
+    let mut messages: Vec<CosmosMsg<KujiraMsg>> = vec![];
 
-    let mut low_asset = &assets[0];
-    for asset in assets[1..].iter() {
-        if asset.eq(low_asset) {
-            return Err(ContractError::DuplicatedAsset {});
-        }
-        low_asset = &asset;
-    }
-
-    for asset in assets.iter() {
-        asset.deposit_asset(&info, &env.contract.address, &mut messages)?;
-        if !asset.amount.is_zero() {
-            if asset.is_native_token() {
-                funds.push(Coin {
-                    denom: asset.info.to_string(),
-                    amount: asset.amount,
-                });
-            } else {
-                messages.push(asset.increase_allowance_msg(
-                    config.compound_proxy.0.to_string(),
-                    Some(Expiration::AtHeight(env.block.height + 1)),
-                )?);
-            }
-        }
-    }
-
-    let compound = config.compound_proxy.compound_msg(assets, funds, no_swap, slippage_tolerance)?;
+    let compound = config.compound_proxy.compound_msg(
+        config.market_maker.0.to_string(),
+        info.funds.clone(),
+        no_swap,
+        slippage_tolerance
+    )?;
     messages.push(compound);
 
-    let prev_balance = query_token_balance(&deps.querier, staking_token, &env.contract.address)?;
+    let prev_balance = config.market_maker.query_lp_balance(&deps.querier, &env.contract.address)?.amount;
     messages.push(
         CallbackMsg::BondTo {
             to: info.sender,
             prev_balance,
             minimum_receive,
         }
-        .into_cosmos_msg(&env.contract.address)?,
+        .to_cosmos_msg(&env.contract.address)?,
     );
 
-    Ok(Response::new()
+    Ok(Response::default()
         .add_messages(messages)
         .add_attribute("action", "bond_assets"))
 }
@@ -74,16 +48,16 @@ pub fn bond_assets(
 /// ## Description
 /// Bond available LP token on the contract on behalf of the user.
 pub fn bond_to(
-    deps: DepsMut,
+    deps: DepsMut<KujiraQuery>,
     env: Env,
     _info: MessageInfo,
     to: Addr,
     prev_balance: Uint128,
     minimum_receive: Option<Uint128>
-) -> Result<Response, ContractError> {
+) -> Result<Response<KujiraMsg>, ContractError> {
     let config = CONFIG.load(deps.storage)?;
 
-    let balance = query_token_balance(&deps.querier, &config.liquidity_token, &env.contract.address)?;
+    let balance = config.market_maker.query_lp_balance(&deps.querier, &env.contract.address)?.amount;
     let amount = balance - prev_balance;
 
     if let Some(minimum_receive) = minimum_receive {
@@ -104,51 +78,54 @@ pub fn bond_to(
     )
 }
 
+fn clp_name(env: &Env) -> String { format!("factory/{0}/clp", env.contract.address) }
+
 /// ## Description
 /// Bond received LP token on behalf of the user.
 pub fn bond(
-    deps: DepsMut,
+    deps: DepsMut<KujiraQuery>,
     env: Env,
     info: MessageInfo,
-    sender_addr: String,
-    amount: Uint128,
-) -> Result<Response, ContractError> {
-    let staker_addr = deps.api.addr_validate(&sender_addr)?;
+    sender_addr: Option<String>,
+) -> Result<Response<KujiraMsg>, ContractError> {
+    let staker_addr = match sender_addr {
+        None => info.sender.clone(),
+        Some(sender_addr) => deps.api.addr_validate(&sender_addr)?,
+    };
 
     let config = CONFIG.load(deps.storage)?;
 
-    // only staking token contract can execute this message
-    if config.liquidity_token != info.sender {
-        return Err(ContractError::Unauthorized {});
-    }
+    let fund = match &info.funds[..] {
+        [fund] if fund.denom == config.market_maker.get_lp_name() => fund,
+        _ => return Err(ContractError::InvalidFunds {}),
+    };
 
     bond_internal(
         deps,
         env,
         config,
         staker_addr,
-        amount,
+        fund.amount,
     )
 }
 
 /// Internal bond function used by bond and bond_to
 fn bond_internal(
-    deps: DepsMut,
+    deps: DepsMut<KujiraQuery>,
     env: Env,
     config: Config,
     staker_addr: Addr,
     amount: Uint128,
-) -> Result<Response, ContractError>{
+) -> Result<Response<KujiraMsg>, ContractError>{
 
-    let lp_balance = config.staking_contract.query_deposit(
+    let lp_balance = config.staking.query_stake(
         &deps.querier,
-        &config.liquidity_token,
-        &env.contract.address,
-    )?;
+        env.contract.address.clone(),
+        config.market_maker.get_lp_name().into(),
+    )?.amount;
 
-    let mut messages: Vec<CosmosMsg> = vec![];
-
-    let mut state = STATE.load(deps.storage)?;
+    let clp_supply = KujiraQuerier::new(&deps.querier)
+        .query_supply_of(clp_name(&env).into())?;
 
     // withdraw reward to pending reward; before changing share
     let mut reward_info = REWARD
@@ -156,79 +133,89 @@ fn bond_internal(
         .unwrap_or_default();
 
     // convert amount to share & update
-    let bond_share = state.calc_bond_share(amount, lp_balance, ScalingOperation::Truncate);
-    state.total_bond_share += bond_share;
+    let bond_share = clp_supply.calc_bond_share(amount, lp_balance, ScalingOperation::Truncate);
 
-    let deposit_amount = state.calc_bond_amount(
-        lp_balance + amount,
-        bond_share,
-    );
-
-    let pool_info = config.pair.query_pool_info(&deps.querier)?;
-    reward_info.ensure_deposit_costs(deps.storage)?;
-    reward_info.bond(bond_share, deposit_amount, env.block.time.seconds(), &pool_info)?;
+    let lp_supply = KujiraQuerier::new(&deps.querier)
+        .query_supply_of(config.market_maker.get_lp_name().into())?;
+    let pool_info = config.market_maker.query_pool(&deps.querier)?;
+    reward_info.bond(bond_share, amount, env.block.time.seconds(), &pool_info, lp_supply.amount.amount)?;
 
     REWARD.save(deps.storage, &staker_addr, &reward_info)?;
-    STATE.save(deps.storage, &state)?;
 
-    messages.push(config.staking_contract.deposit_msg(config.liquidity_token.to_string(), amount)?);
-    Ok(Response::new().add_messages(messages).add_attributes(vec![
-        attr("action", "bond"),
-        attr("amount", amount),
-        attr("bond_amount", amount),
-    ]))
+    let stake_msg = config.staking.stake_msg::<KujiraMsg>(
+        Coin { denom: config.market_maker.get_lp_name(), amount },
+        None,
+    )?;
+    let mint_msg = DenomMsg::Mint {
+        recipient: staker_addr,
+        denom: clp_name(&env).into(),
+        amount: bond_share,
+    };
+
+    Ok(Response::default()
+        .add_message(stake_msg)
+        .add_message(mint_msg)
+        .add_attributes(vec![
+            attr("action", "bond"),
+            attr("amount", amount),
+        ]))
 }
 
 /// ## Description
 /// Unbond LP token of sender
 pub fn unbond(
-    deps: DepsMut,
+    deps: DepsMut<KujiraQuery>,
     env: Env,
     info: MessageInfo,
-    amount: Uint128,
-) -> Result<Response, ContractError> {
+) -> Result<Response<KujiraMsg>, ContractError> {
 
-    if amount.is_zero() {
-        return Err(ContractError::InvalidZeroAmount {});
-    }
+    let fund = match &info.funds[..] {
+        [fund] if fund.denom == clp_name(&env) => fund,
+        _ => return Err(ContractError::InvalidFunds {}),
+    };
 
     let staker_addr = info.sender;
-
     let config = CONFIG.load(deps.storage)?;
-    let staking_token = config.liquidity_token;
 
-    let lp_balance = config.staking_contract.query_deposit(
+    let lp_balance = config.staking.query_stake(
         &deps.querier,
-        &staking_token,
-        &env.contract.address,
-    )?;
+        env.contract.address.clone(),
+        config.market_maker.get_lp_name().into(),
+    )?.amount;
 
-    let mut state = STATE.load(deps.storage)?;
+    let clp_supply = KujiraQuerier::new(&deps.querier)
+        .query_supply_of(clp_name(&env).into())?;
     let mut reward_info = REWARD.load(deps.storage, &staker_addr)?;
 
-    let user_balance = reward_info.calc_user_balance(
-        &state,
-        lp_balance,
+    let amount = clp_supply.calc_bond_amount(lp_balance, fund.amount);
+    let amount = reward_info.limit_user_lp(
+        amount,
         env.block.time.seconds(),
     );
 
-    if user_balance < amount {
-        return Err(ContractError::UnbondExceedBalance {});
-    }
-
-    let bond_share = reward_info.bond_share.multiply_ratio_and_ceil(amount, user_balance);
-    state.total_bond_share = state.total_bond_share.checked_sub(bond_share)?;
-    reward_info.unbond(bond_share)?;
+    reward_info.unbond(fund.amount)?;
 
     // update state
-    STATE.save(deps.storage, &state)?;
     REWARD.save(deps.storage, &staker_addr, &reward_info)?;
 
-    Ok(Response::new()
-        .add_messages(vec![
-            config.staking_contract.withdraw_msg(staking_token.to_string(), amount)?,
-            token_asset(staking_token, amount).transfer_msg(&staker_addr)?,
-        ])
+    let burn_msg = DenomMsg::Burn {
+        denom: clp_name(&env).into(),
+        amount: fund.amount
+    };
+    let withdraw_coin = Coin {
+        denom: config.market_maker.get_lp_name(),
+        amount
+    };
+    let withdraw_msg = config.staking.withdraw_msg::<KujiraMsg>(withdraw_coin.clone())?;
+    let transfer_msg = BankMsg::Send {
+        to_address: staker_addr.to_string(),
+        amount: vec![withdraw_coin]
+    };
+
+    Ok(Response::default()
+        .add_message(burn_msg)
+        .add_message(withdraw_msg)
+        .add_message(transfer_msg)
         .add_attributes(vec![
             attr("action", "unbond"),
             attr("staker_addr", staker_addr),
@@ -239,7 +226,7 @@ pub fn unbond(
 /// ## Description
 /// Returns reward info for the staker.
 pub fn query_reward_info(
-    deps: Deps,
+    deps: Deps<KujiraQuery>,
     env: Env,
     staker_addr: String,
 ) -> StdResult<RewardInfoResponse> {
@@ -253,44 +240,45 @@ pub fn query_reward_info(
 }
 
 /// Loads reward info from the storage
-fn read_reward_info(deps: Deps, env: Env, staker_addr: &Addr) -> StdResult<RewardInfoResponseItem> {
-    let mut reward_info = REWARD
+fn read_reward_info(deps: Deps<KujiraQuery>, env: Env, staker_addr: &Addr) -> StdResult<RewardInfoResponseItem> {
+    let reward_info = REWARD
         .may_load(deps.storage, staker_addr)?
         .unwrap_or_default();
-    let state = STATE.load(deps.storage)?;
+    let state = KujiraQuerier::new(&deps.querier)
+        .query_supply_of(clp_name(&env).into())?;
     let config = CONFIG.load(deps.storage)?;
-    let staking_token = config.liquidity_token;
 
-    let lp_balance = config.staking_contract.query_deposit(
+    let lp_balance = config.staking.query_stake(
         &deps.querier,
-        &staking_token,
-        &env.contract.address,
-    )?;
+        env.contract.address.clone(),
+        config.market_maker.get_lp_name().into()
+    )?.amount;
 
-    let bond_amount = reward_info.calc_user_balance(
-        &state,
-        lp_balance,
+    let bond_share = deps.querier.query_balance(staker_addr, clp_name(&env))?.amount;
+    let bond_amount = state.calc_bond_amount(lp_balance, bond_share);
+    let bond_amount = reward_info.limit_user_lp(
+        bond_amount,
         env.block.time.seconds(),
     );
-    let total_share = reward_info.bond_share + reward_info.transfer_share;
-    reward_info.ensure_deposit_costs(deps.storage)?;
+    let total_share = if reward_info.deposit_share < bond_share {
+        bond_share
+    } else {
+        reward_info.deposit_share
+    };
     Ok(RewardInfoResponseItem {
-        staking_token: staking_token.to_string(),
-        bond_share: reward_info.bond_share,
+        staking_token: config.market_maker.get_lp_name(),
+        bond_share,
         bond_amount,
         deposit_amount: if total_share.is_zero() {
             Uint128::zero()
         } else {
             reward_info.deposit_amount
-                .multiply_ratio(reward_info.bond_share, total_share)
+                .multiply_ratio(bond_share, total_share)
         },
         deposit_time: reward_info.deposit_time,
-        deposit_costs: if total_share.is_zero() {
-            vec![]
-        } else {
-            reward_info.deposit_costs.iter()
-                .map(|it| it.multiply_ratio(reward_info.bond_share, total_share))
-                .collect()
-        }
+        deposit_costs: [
+            reward_info.deposit_costs[0].multiply_ratio(bond_share, total_share),
+            reward_info.deposit_costs[1].multiply_ratio(bond_share, total_share),
+        ]
     })
 }

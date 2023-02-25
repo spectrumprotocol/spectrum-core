@@ -1,4 +1,4 @@
-use cosmwasm_std::{attr, Addr, DepsMut, Env, MessageInfo, Response, StdError, StdResult, Storage};
+use cosmwasm_std::{attr, Addr, DepsMut, Env, MessageInfo, Response, StdError, StdResult, Storage, CustomQuery};
 use cw_storage_plus::Item;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -33,14 +33,14 @@ pub struct OwnershipProposal {
 /// `owner` is the current owner.
 ///
 /// `proposal` is the object of type [`OwnershipProposal`].
-pub fn propose_new_owner(
-    deps: DepsMut,
+pub fn propose_new_owner<C: CustomQuery, T>(
+    deps: DepsMut<C>,
     info: MessageInfo,
     env: Env,
     new_owner: String,
     expires_in: u64,
     owner: Addr,
-) -> StdResult<Response> {
+) -> StdResult<Response<T>> {
     // permission check
     if info.sender != owner {
         return Err(StdError::generic_err("Unauthorized"));
@@ -79,11 +79,11 @@ pub fn propose_new_owner(
 /// `owner` is the current owner.
 ///
 /// `proposal` is the object of type [`OwnershipProposal`].
-pub fn drop_ownership_proposal(
-    deps: DepsMut,
+pub fn drop_ownership_proposal<C: CustomQuery, T>(
+    deps: DepsMut<C>,
     info: MessageInfo,
     owner: Addr,
-) -> StdResult<Response> {
+) -> StdResult<Response<T>> {
     // permission check
     if info.sender != owner {
         return Err(StdError::generic_err("Unauthorized"));
@@ -108,11 +108,11 @@ pub fn drop_ownership_proposal(
 /// `proposal` is the object of type [`OwnershipProposal`].
 ///
 /// `cb` is a type of callback function that takes two parameters of type [`DepsMut`] and [`Addr`].
-pub fn claim_ownership(
+pub fn claim_ownership<T>(
     storage: &mut dyn Storage,
     info: MessageInfo,
     env: Env,
-) -> StdResult<Response> {
+) -> StdResult<Response<T>> {
     let p: OwnershipProposal = OWNERSHIP_PROPOSAL
         .load(storage)
         .map_err(|_| StdError::generic_err("Ownership proposal not found"))?;

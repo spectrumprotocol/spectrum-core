@@ -6,7 +6,6 @@ use std::convert::TryInto;
 use cosmwasm_std::{entry_point, to_binary, Binary, Coin, CosmosMsg, Decimal, Decimal256, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult, Uint128, Uint256, Empty};
 use kujira::asset::{Asset, AssetInfo};
 use kujira::denom::Denom;
-use kujira::querier::KujiraQuerier;
 use kujira::query::{KujiraQuery};
 use spectrum::adapters::kujira::market_maker::MarketMaker;
 use spectrum::adapters::pair::Pair;
@@ -302,9 +301,7 @@ fn query_compound_simulation(
         }
     }
 
-    let supply = KujiraQuerier::new(&deps.querier).query_supply_of(
-        format!("factory/{0}/ulp", market_maker.0).into()
-    )?;
+    let supply = market_maker.query_lp_supply(&deps.querier)?;
     let lp_amount = min(
         provide_x.multiply_ratio(supply.amount.amount, pool_x),
         provide_y.multiply_ratio(supply.amount.amount, pool_y),

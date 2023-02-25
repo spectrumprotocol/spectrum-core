@@ -1,9 +1,7 @@
 [workspace]
 members = [
     "packages/*",
-    "contracts/router",
-    "contracts/fees_collector",
-    "contracts/compound_proxy"
+    "contracts/*"
 ]
 
 [profile.release]

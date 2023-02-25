@@ -1,4 +1,5 @@
 use cosmwasm_std::{to_binary, Addr, CosmosMsg, Decimal, StdResult, Uint128, WasmMsg};
+use kujira::msg::KujiraMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -8,7 +9,7 @@ pub struct InstantiateMsg {
     /// The owner address
     pub owner: String,
     /// The LP staking generator contract address
-    pub staking_contract: String,
+    pub staking: String,
     /// The compound proxy contract address
     pub compound_proxy: String,
     /// The controller address to execute compound
@@ -17,16 +18,10 @@ pub struct InstantiateMsg {
     pub fee: Decimal,
     /// The fee collector contract address
     pub fee_collector: String,
-    /// The LP token contract address
-    pub liquidity_token: String,
-    /// the base reward token contract address
-    pub base_reward_token: String,
-    /// The pair contract address
-    pub pair: String,
-
-    /// token info
-    pub name: String,
-    pub symbol: String,
+    /// The market maker contract address
+    pub market_maker: String,
+    /// The router contract address
+    pub router: String,
 }
 
 /// This structure describes the execute messages available in the contract.
@@ -47,10 +42,7 @@ pub enum ExecuteMsg {
         fee_collector: Option<String>,
     },
     /// Unbond LP token
-    Unbond {
-        /// The LP amount to unbond
-        amount: Uint128,
-    },
+    Unbond {},
     /// Compound LP rewards
     Compound {
         /// The minimum expected amount of LP token
@@ -105,8 +97,8 @@ pub enum CallbackMsg {
 // Modified from
 // https://github.com/CosmWasm/cw-plus/blob/v0.8.0/packages/cw20/src/receiver.rs#L23
 impl CallbackMsg {
-    pub fn to_cosmos_msg(&self, contract_addr: &Addr) -> StdResult<CosmosMsg> {
-        Ok(CosmosMsg::Wasm(WasmMsg::Execute {
+    pub fn to_cosmos_msg(&self, contract_addr: &Addr) -> StdResult<CosmosMsg<KujiraMsg>> {
+        Ok(CosmosMsg::<KujiraMsg>::Wasm(WasmMsg::Execute {
             contract_addr: String::from(contract_addr),
             msg: to_binary(&ExecuteMsg::Callback(self.clone()))?,
             funds: vec![],
@@ -122,8 +114,6 @@ pub enum QueryMsg {
     Config {},
     /// Returns the deposited balances
     RewardInfo { staker_addr: String },
-    /// Returns the global state
-    State {},
 }
 
 /// This structure holds the parameters for reward info query response
@@ -149,5 +139,5 @@ pub struct RewardInfoResponseItem {
     /// The weighted average deposit time
     pub deposit_time: u64,
     /// The deposit cost
-    pub deposit_costs: Vec<Uint128>,
+    pub deposit_costs: [Uint128; 2],
 }
