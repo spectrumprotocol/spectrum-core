@@ -76,7 +76,7 @@ pub fn compound(
             if !compound_amount.is_zero() {
                 let compound_asset = asset.info.with_balance(compound_amount);
                 if let AssetInfo::NativeToken { denom } = &asset.info {
-                    compound_funds.push(Coin { denom: denom.clone(), amount: asset.amount });
+                    compound_funds.push(Coin { denom: denom.clone(), amount: compound_asset.amount });
                 } else {
                     let increase_allowance = compound_asset.increase_allowance_msg(
                         config.compound_proxy.0.to_string(),
