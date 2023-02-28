@@ -1,7 +1,7 @@
-use cosmwasm_std::{attr, entry_point, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult, Empty};
-use kujira::msg::{DenomMsg, KujiraMsg};
+use cosmwasm_std::{attr, entry_point, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult, Empty, Order};
+use cw_storage_plus::Bound;
+use kujira::msg::{KujiraMsg};
 use kujira::query::KujiraQuery;
-use spectrum::adapters::kujira::market_maker::MarketMaker;
 use spectrum::adapters::kujira::staking::Staking;
 
 use crate::{
@@ -18,6 +18,7 @@ use spectrum::compound_farm::{
 use spectrum::compound_proxy::Compounder;
 use spectrum::ownership::{claim_ownership, drop_ownership_proposal, propose_new_owner};
 use spectrum::router::Router;
+use crate::state::{POOL, PoolInfo};
 
 /// ## Description
 /// Validates that decimal value is in the range 0 to 1
@@ -50,15 +51,11 @@ pub fn instantiate(
             controller: deps.api.addr_validate(&msg.controller)?,
             fee: msg.fee,
             fee_collector: deps.api.addr_validate(&msg.fee_collector)?,
-            market_maker: MarketMaker(deps.api.addr_validate(&msg.market_maker)?),
             router: Router(deps.api.addr_validate(&msg.router)?),
         },
     )?;
 
-    Ok(Response::default()
-        .add_message(DenomMsg::Create {
-            subdenom: "clp".into(),
-        }))
+    Ok(Response::default())
 }
 
 /// ## Description
@@ -80,6 +77,7 @@ pub fn execute(
         ExecuteMsg::Unbond { } => unbond(deps, env, info),
         ExecuteMsg::Bond { staker_addr } => bond(deps, env, info, staker_addr),
         ExecuteMsg::BondAssets {
+            market_maker,
             minimum_receive,
             no_swap,
             slippage_tolerance,
@@ -87,14 +85,16 @@ pub fn execute(
             deps,
             env,
             info,
+            market_maker,
             minimum_receive,
             no_swap,
             slippage_tolerance,
         ),
         ExecuteMsg::Compound {
+            market_maker,
             minimum_receive,
             slippage_tolerance,
-        } => compound(deps, env, info, minimum_receive, slippage_tolerance),
+        } => compound(deps, env, info, market_maker, minimum_receive, slippage_tolerance),
         ExecuteMsg::ProposeNewOwner { owner, expires_in } => {
             let config = CONFIG.load(deps.storage)?;
 
@@ -128,7 +128,7 @@ pub fn execute(
 /// ## Description
 /// Updates contract config. Returns a [`ContractError`] on failure or the [`CONFIG`] data will be updated.
 #[allow(clippy::too_many_arguments)]
-pub fn update_config(
+fn update_config(
     deps: DepsMut<KujiraQuery>,
     info: MessageInfo,
     compound_proxy: Option<String>,
@@ -195,10 +195,28 @@ pub fn handle_callback(
 pub fn query(deps: Deps<KujiraQuery>, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&CONFIG.load(deps.storage)?),
-        QueryMsg::RewardInfo { staker_addr } => {
-            to_binary(&query_reward_info(deps, env, staker_addr)?)
-        }
+        QueryMsg::RewardInfo { staker_addr, limit, start_after } =>
+            to_binary(&query_reward_info(deps, env, staker_addr, limit, start_after)?),
+        QueryMsg::Pools { limit, start_after } =>
+            to_binary(&query_pools(deps, limit, start_after)?),
     }
+}
+
+const DEFAULT_LIMIT: u8 = 50;
+const MAX_LIMIT: u8 = 50;
+fn query_pools(deps: Deps<KujiraQuery>, limit: Option<u8>, start_after: Option<String>) -> StdResult<Vec<PoolInfo>> {
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+    let start = start_after.map(|s| Bound::ExclusiveRaw(s.into()));
+
+    let pools = POOL
+        .range(deps.storage, start, None, Order::Ascending)
+        .take(limit)
+        .map(|it| {
+            let (_, pool) = it?;
+            Ok(pool)
+        })
+        .collect::<StdResult<_>>()?;
+    Ok(pools)
 }
 
 /// ## Description

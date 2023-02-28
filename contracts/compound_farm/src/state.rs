@@ -2,13 +2,15 @@ use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Addr, Decimal, StdResult, Uint128};
+use cosmwasm_std::{Addr, Coin, Decimal, Env, StdResult, Uint128};
+use kujira::denom::Denom;
 use kujira::query::SupplyResponse;
 use spectrum::adapters::kujira::market_maker::{MarketMaker, PoolResponse};
 use spectrum::adapters::kujira::staking::Staking;
 use spectrum::compound_proxy::Compounder;
 use spectrum::helper::{compute_deposit_time, ScalingUint128};
 use spectrum::router::Router;
+use crate::error::ContractError;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
@@ -18,11 +20,25 @@ pub struct Config {
     pub controller: Addr,
     pub fee: Decimal,
     pub fee_collector: Addr,
-    pub market_maker: MarketMaker,
     pub router: Router,
 }
 
 pub const CONFIG: Item<Config> = Item::new("config");
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct PoolInfo {
+    pub market_maker: MarketMaker,
+    pub denoms: [Denom; 2],
+    pub rewards: Vec<Coin>,
+}
+
+impl PoolInfo {
+    pub fn get_clp_name(&self, env: &Env) -> String {
+        format!("factory/{0}/{1}", env.contract.address, self.market_maker.0)
+    }
+}
+
+pub const POOL: Map<&Addr, PoolInfo> = Map::new("pool");
 
 pub trait SupplyResponseEx {
     fn calc_bond_share(
@@ -110,7 +126,7 @@ impl RewardInfo {
     }
 }
 
-pub const REWARD: Map<&Addr, RewardInfo> = Map::new("reward");
+pub const REWARD: Map<(&Addr, &Addr), RewardInfo> = Map::new("reward");
 
 const DAY: u64 = 86400;
 
@@ -128,4 +144,23 @@ impl RewardInfo {
 pub enum ScalingOperation {
     Truncate,
     Ceil,
+}
+
+pub fn extract_market_maker_from_lp(denom: &String) -> Result<Addr, ContractError> {
+    if denom.starts_with("factory/") && denom.ends_with("/ulp") {
+        let addr = &denom[8..(denom.len() - 12)];
+        Ok(Addr::unchecked(addr))
+    } else {
+        Err(ContractError::InvalidFunds {})
+    }
+}
+
+pub fn extract_market_maker_from_clp(denom: &str, env: &Env) -> Result<Addr, ContractError> {
+    let prefix = format!("factory/{0}", env.contract.address);
+    if denom.starts_with(&prefix) {
+        let addr = &denom[prefix.len()..];
+        Ok(Addr::unchecked(addr))
+    } else {
+        Err(ContractError::InvalidFunds {})
+    }
 }

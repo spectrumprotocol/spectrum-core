@@ -172,9 +172,9 @@ fn get_key(
     let offer = offer.to_string();
     let ask = ask.to_string();
     if offer > ask {
-        (format!("{0}{1}", ask, offer), true)
+        (format!("{0}|{1}", ask, offer), true)
     } else {
-        (format!("{0}{1}", offer, ask), false)
+        (format!("{0}|{1}", offer, ask), false)
     }
 }
 

@@ -1,4 +1,4 @@
-use cosmwasm_std::{to_binary, Addr, CosmosMsg, Decimal, StdResult, Uint128, WasmMsg};
+use cosmwasm_std::{to_binary, Addr, CosmosMsg, Decimal, StdResult, Uint128, WasmMsg, Coin};
 use kujira::msg::KujiraMsg;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -18,8 +18,6 @@ pub struct InstantiateMsg {
     pub fee: Decimal,
     /// The fee collector contract address
     pub fee_collector: String,
-    /// The market maker contract address
-    pub market_maker: String,
     /// The router contract address
     pub router: String,
 }
@@ -45,6 +43,7 @@ pub enum ExecuteMsg {
     Unbond {},
     /// Compound LP rewards
     Compound {
+        market_maker: String,
         /// The minimum expected amount of LP token
         minimum_receive: Option<Uint128>,
         /// Slippage tolerance when providing LP
@@ -52,6 +51,7 @@ pub enum ExecuteMsg {
     },
     /// Bond asset with optimal swap
     BondAssets {
+        market_maker: String,
         /// The minimum expected amount of LP token
         minimum_receive: Option<Uint128>,
         /// The flag to skip optimal swap
@@ -80,7 +80,7 @@ pub enum ExecuteMsg {
 pub enum CallbackMsg {
     Stake {
         /// The previous LP balance in the contract
-        prev_balance: Uint128,
+        prev_balance: Coin,
         /// The minimum expected amount of LP token
         minimum_receive: Option<Uint128>,
     },
@@ -88,7 +88,7 @@ pub enum CallbackMsg {
         /// The address to bond LP
         to: Addr,
         /// The previous LP balance in the contract
-        prev_balance: Uint128,
+        prev_balance: Coin,
         /// The minimum expected amount of LP token
         minimum_receive: Option<Uint128>,
     },
@@ -113,7 +113,8 @@ pub enum QueryMsg {
     /// Returns the contract config
     Config {},
     /// Returns the deposited balances
-    RewardInfo { staker_addr: String },
+    RewardInfo { staker_addr: String, start_after: Option<String>, limit: Option<u8>, },
+    Pools { start_after: Option<String>, limit: Option<u8> }
 }
 
 /// This structure holds the parameters for reward info query response
@@ -122,12 +123,13 @@ pub struct RewardInfoResponse {
     /// The staker address
     pub staker_addr: String,
     /// The detail on reward info
-    pub reward_info: RewardInfoResponseItem,
+    pub reward_infos: Vec<RewardInfoResponseItem>,
 }
 
 /// This structure holds the detail for reward info
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct RewardInfoResponseItem {
+    pub market_maker: Addr,
     /// The LP token contract address
     pub staking_token: String,
     /// The LP token amount bonded

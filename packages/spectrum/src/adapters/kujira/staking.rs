@@ -2,6 +2,8 @@ use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Addr, Coin, CosmosMsg, CustomQuery, QuerierWrapper, StdResult, Timestamp, to_binary, Uint128, WasmMsg};
 use kujira::denom::Denom;
 use kujira::schedule::{Release, Schedule};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 
 #[cw_serde]
 pub struct MigrateMsg {}
@@ -104,12 +106,12 @@ pub struct ScheduleResponse {
     pub amount: Uint128,
 }
 
-#[cw_serde]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct StakeResponse {
     pub owner: Addr,
     pub denom: Denom,
     pub amount: Uint128,
-    pub fills: Vec<Coin>,
+    // pub fills: Vec<Coin>,
 }
 
 #[cw_serde]
@@ -174,6 +176,18 @@ impl Staking {
         denom: Denom,
     ) -> StdResult<StakeResponse> {
         querier.query_wasm_smart(self.0.to_string(), &QueryMsg::Stake {
+            denom,
+            addr
+        })
+    }
+
+    pub fn query_rewards<C: CustomQuery>(
+        &self,
+        querier: &QuerierWrapper<C>,
+        addr: Addr,
+        denom: Denom,
+    ) -> StdResult<Vec<Coin>> {
+        querier.query_wasm_smart(self.0.to_string(), &QueryMsg::Fills {
             denom,
             addr
         })

@@ -37,6 +37,9 @@ pub enum ContractError {
 
     #[error("Duplicated asset")]
     DuplicatedAsset {},
+
+    #[error("Pool existed")]
+    PoolExisted {},
 }
 
 impl From<OverflowError> for ContractError {
