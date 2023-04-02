@@ -45,15 +45,16 @@ pub fn instantiate(
         }
     }
 
+    let factory_addr = deps.api.addr_validate(&msg.factory_addr)?;
     let offer_precision = if let Some(offer_precision) = msg.offer_precision {
         offer_precision
     } else {
-        query_token_precision(&deps.querier, &msg.asset_infos[0])?
+        query_token_precision(&deps.querier, &msg.asset_infos[0], &factory_addr)?
     };
     let ask_precision = if let Some(ask_precision) = msg.ask_precision {
         ask_precision
     } else {
-        query_token_precision(&deps.querier, &msg.asset_infos[msg.asset_infos.len() - 1])?
+        query_token_precision(&deps.querier, &msg.asset_infos[msg.asset_infos.len() - 1], &factory_addr)?
     };
 
     let config = Config {

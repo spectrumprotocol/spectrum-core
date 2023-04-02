@@ -2,7 +2,7 @@ use cosmwasm_std::{Addr, QuerierWrapper, StdResult};
 use cw_storage_plus::Map;
 use astroport::asset::AssetInfo;
 use astroport::generator::UserInfoV2;
-use astroport::restricted_vector::RestrictedVector;
+use astroport::generator::RestrictedVector;
 use spectrum::adapters::generator::Generator;
 
 const USER_INFO: Map<(&Addr, &Addr), UserInfoV2> = Map::new("user_info");
@@ -17,7 +17,7 @@ impl GeneratorEx for Generator {
     fn query_user_info(&self, querier: &QuerierWrapper, lp_token: &Addr, user: &Addr) -> StdResult<Option<UserInfoV2>> {
         let op = USER_INFO.query(querier, self.0.clone(), (lp_token, user))?;
         let result = match op {
-            Some(mut user_info) if !user_info.reward_debt_proxy.is_empty() => {
+            Some(mut user_info) if !user_info.reward_debt_proxy.inner_ref().is_empty() => {
                 let mut reward_debt_proxy = RestrictedVector::default();
                 for (proxy_addr, value) in user_info.reward_debt_proxy.inner_ref() {
                     if let Some(asset_info) = self.query_proxy_reward_asset(querier, proxy_addr)? {

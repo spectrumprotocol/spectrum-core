@@ -23,6 +23,7 @@ pub struct InstantiateMsg {
     pub offer_precision: Option<u8>,
     /// The decimal precision of the ask asset
     pub ask_precision: Option<u8>,
+    pub factory_addr: String,
 }
 
 /// This structure describes the execute messages of the contract.

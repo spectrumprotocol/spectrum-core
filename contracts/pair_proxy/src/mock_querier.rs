@@ -77,6 +77,17 @@ impl WasmMockQuerier {
                 let value = self.raw.get(&(contract_addr.clone(), key.clone()));
                 if let Some(binary) = value {
                     Ok(binary.clone())
+                } else if contract_addr.eq("factory01") {
+                    to_binary(&astroport::factory::Config {
+                        owner: Addr::unchecked("owner"),
+                        token_code_id: 0,
+                        fee_address: None,
+                        generator_address: None,
+                        whitelist_code_id: 0,
+                        coin_registry_address: Addr::unchecked("coin_registry"),
+                    })
+                } else if contract_addr.eq("coin_registry") {
+                    to_binary(&6)
                 } else {
                     Ok(Binary::default())
                 }
@@ -124,9 +135,9 @@ impl WasmMockQuerier {
                      }
                  };
 
-             to_binary(&pair_info)
-             },
-             MockQueryMsg::TokenInfo {
+                to_binary(&pair_info)
+            },
+            MockQueryMsg::TokenInfo {
             } => {
                 to_binary(&cw20::TokenInfoResponse {
                     name: contract_addr.to_string(),

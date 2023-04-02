@@ -16,6 +16,7 @@ pub struct InstantiateMsg {
     pub pair_proxies: Vec<(AssetInfo, String)>,
     /// The slippage tolerance when swapping
     pub slippage_tolerance: Decimal,
+    pub factory_addr: String,
 }
 
 /// This structure describes the execute messages of the contract.

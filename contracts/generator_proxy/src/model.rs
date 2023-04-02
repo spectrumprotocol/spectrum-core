@@ -2,7 +2,7 @@ use cosmwasm_std::{Addr, CosmosMsg, Decimal, StdResult, to_binary, Uint128, Wasm
 use cw20::{Cw20ReceiveMsg};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use astroport::restricted_vector::RestrictedVector;
+use astroport::generator::RestrictedVector;
 use spectrum::adapters::generator::Generator;
 use spectrum::helper::ScalingUint128;
 use crate::astro_gov::{AstroGov, AstroGovUnchecked};
@@ -40,9 +40,9 @@ pub fn zero_address() -> Addr {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct PoolInfo {
     pub total_bond_share: Uint128,
-    pub reward_indexes: RestrictedVector<Addr, Decimal>,
+    pub reward_indexes: RestrictedVector<Decimal>,
     pub prev_reward_user_index: Decimal,
-    pub prev_reward_debt_proxy: RestrictedVector<Addr, Uint128>,
+    pub prev_reward_debt_proxy: RestrictedVector<Uint128>,
     #[serde(default)] pub last_reconcile: u64,
 }
 
@@ -75,8 +75,8 @@ impl PoolInfo {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct UserInfo {
     pub bond_share: Uint128,
-    pub reward_indexes: RestrictedVector<Addr, Decimal>,
-    pub pending_rewards: RestrictedVector<Addr, Uint128>,
+    pub reward_indexes: RestrictedVector<Decimal>,
+    pub pending_rewards: RestrictedVector<Uint128>,
 }
 
 impl UserInfo {
@@ -102,8 +102,8 @@ impl UserInfo {
 pub struct UserInfoResponse {
     pub bond_share: Uint128,
     pub bond_amount: Uint128,
-    pub reward_indexes: RestrictedVector<Addr, Decimal>,
-    pub pending_rewards: RestrictedVector<Addr, Uint128>,
+    pub reward_indexes: RestrictedVector<Decimal>,
+    pub pending_rewards: RestrictedVector<Uint128>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]

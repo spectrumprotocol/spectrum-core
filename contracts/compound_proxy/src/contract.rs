@@ -56,11 +56,13 @@ pub fn instantiate(
     let slippage_tolerance = validate_percentage(msg.slippage_tolerance, "slippage_tolerance")?;
     let pair_contract = deps.api.addr_validate(&msg.pair_contract)?;
     let pair_info = Pair(pair_contract).query_pair_info(&deps.querier)?;
+    let factory_addr = deps.api.addr_validate(&msg.factory_addr)?;
 
     let config = Config {
         pair_info,
         commission_bps,
         slippage_tolerance,
+        factory_addr,
     };
     CONFIG.save(deps.storage, &config)?;
 

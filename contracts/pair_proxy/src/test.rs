@@ -52,6 +52,7 @@ fn create(
         router_type: RouterType::AstroSwap,
         offer_precision: None,
         ask_precision: None,
+        factory_addr: "factory01".to_string(),
     };
     let res = instantiate(deps.as_mut(), env.clone(), info.clone(), instantiate_msg);
     assert_error(res, "Must provide at least 2 assets!");
@@ -69,6 +70,7 @@ fn create(
         router_type: RouterType::AstroSwap,
         offer_precision: None,
         ask_precision: None,
+        factory_addr: "factory01".to_string(),
     };
     let res = instantiate(deps.as_mut(), env.clone(), info.clone(), instantiate_msg);
     assert_error(res, "Duplicated assets in asset infos");
@@ -89,6 +91,7 @@ fn create(
         router_type: RouterType::AstroSwap,
         offer_precision: None,
         ask_precision: None,
+        factory_addr: "factory01".to_string(),
     };
     let res = instantiate(deps.as_mut(), env, info, instantiate_msg);
     assert!(res.is_ok());
@@ -231,7 +234,7 @@ fn swap(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                     },
                 ],
                 minimum_receive: Some(Uint128::from(99u128)),
-                to: Some(USER_1.to_string()),
+                to: Some(Addr::unchecked(USER_1)),
                 max_spread: Some(Decimal::percent(1))
             })?,
             funds: vec![Coin {

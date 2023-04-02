@@ -35,6 +35,7 @@ fn proper_initialization() -> StdResult<()> {
             ),
         ],
         slippage_tolerance: Decimal::percent(1),
+        factory_addr: "factory01".to_string(),
     };
 
     let sender = "addr0000";
@@ -90,6 +91,7 @@ fn compound() -> Result<(), ContractError> {
         commission_bps: 30,
         pair_proxies: vec![],
         slippage_tolerance: Decimal::percent(1),
+        factory_addr: "factory01".to_string(),
     };
 
     let sender = "addr0000";
@@ -236,6 +238,7 @@ fn optimal_swap() -> Result<(), ContractError> {
         commission_bps: 30,
         pair_proxies: vec![],
         slippage_tolerance: Decimal::percent(1),
+        factory_addr: "factory01".to_string(),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -316,6 +319,7 @@ fn provide_liquidity() -> Result<(), ContractError> {
         commission_bps: 30,
         pair_proxies: vec![],
         slippage_tolerance: Decimal::percent(1),
+        factory_addr: "factory01".to_string(),
     };
 
     let info = mock_info("addr0000", &[]);
@@ -497,6 +501,7 @@ fn test_compound_simulation() -> StdResult<()> {
             ),
         ],
         slippage_tolerance: Decimal::percent(1),
+        factory_addr: "factory01".to_string(),
     };
 
     let sender = "addr0000";

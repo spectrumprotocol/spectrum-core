@@ -1,5 +1,5 @@
 use astroport::asset::{PairInfo};
-use cosmwasm_std::{Decimal};
+use cosmwasm_std::{Addr, Decimal};
 use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -14,6 +14,7 @@ pub struct Config {
     pub commission_bps: u64,
     /// The slippage tolerance when providing liquidity
     pub slippage_tolerance: Decimal,
+    pub factory_addr: Addr,
 }
 
 /// Stores config at the given key

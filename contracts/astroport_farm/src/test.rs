@@ -749,7 +749,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
     let res = execute(deps.as_mut(), env.clone(), info, msg.clone());
     assert_error(
         res,
-        "Native token balance mismatch between the argument and the transferred",
+        "No funds sent",
     );
 
     let info = mock_info(
@@ -1951,7 +1951,7 @@ fn poc_native_funds(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>)
     let mut env = mock_env();
     env.block.height = 600;
 
-    // user_1 sends 40_000 ibc/stablecoin 
+    // user_1 sends 40_000 ibc/stablecoin
     let native_send = Coin {
         denom: IBC_TOKEN.to_string(),
         amount: Uint128::from(40_000_u128),
@@ -1984,13 +1984,13 @@ fn poc_native_funds(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>)
     let msg = ExecuteMsg::BondAssets {
         assets: assets.clone(),
         minimum_receive: None,
-        no_swap: None, 
-        slippage_tolerance: None, 
+        no_swap: None,
+        slippage_tolerance: None,
     };
 
     let res = execute(deps.as_mut(), env.clone(), info, msg.clone());
     assert_error(res, "Duplicated asset");
- 
+
     Ok(())
 }
 
@@ -2052,8 +2052,8 @@ fn poc_self_transfer(
 
     // user self-transfer
     let info = mock_info(USER_1, &[]);
-    let msg = ExecuteMsg::Transfer { 
-        recipient: USER_1.to_string(), 
+    let msg = ExecuteMsg::Transfer {
+        recipient: USER_1.to_string(),
         amount: Uint128::from(100000u128),
     };
     execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
@@ -2064,7 +2064,7 @@ fn poc_self_transfer(
     };
     let new_res: RewardInfoResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
 
-    // self transfer should not cause any diff 
+    // self transfer should not cause any diff
     assert_eq!(new_res, res);
 
     Ok(())
