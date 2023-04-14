@@ -533,7 +533,7 @@ mod tests {
             Decimal256::permille(10000_000),
             Decimal256::zero(),
             -2,
-        );
+        ).unwrap();
         assert_eq!(min_receive, Uint128::from(0_12345u128));
 
         let min_receive = compute_minimum_receive(
@@ -541,7 +541,7 @@ mod tests {
             Decimal256::permille(0_001),
             Decimal256::zero(),
             5,
-        );
+        ).unwrap();
         assert_eq!(min_receive, Uint128::from(12345u128));
     }
 }

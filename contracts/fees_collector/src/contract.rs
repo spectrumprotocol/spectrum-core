@@ -3,11 +3,10 @@ use crate::state::{Config, BRIDGES, CONFIG};
 
 use crate::utils::{build_swap_bridge_msg, validate_bridge, BRIDGES_EXECUTION_MAX_DEPTH, BRIDGES_INITIAL_DEPTH};
 
-use cosmwasm_std::{entry_point, to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Order, Response, StdError, StdResult, Uint128, WasmMsg, attr, Addr, Coin, BankMsg};
+use cosmwasm_std::{entry_point, to_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Order, Response, StdError, StdResult, Uint128, WasmMsg, attr, Addr, Coin, BankMsg, Empty};
 use spectrum::fees_collector::{BalancesResponse, CollectSimulationResponse, ExecuteMsg, InstantiateMsg, QueryMsg, AssetWithLimit};
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry;
-use std::io::Empty;
 use kujira::denom::Denom;
 use spectrum::ownership::{claim_ownership, drop_ownership_proposal, propose_new_owner};
 use spectrum::router::Router;
