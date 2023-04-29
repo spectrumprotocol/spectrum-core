@@ -4,23 +4,15 @@
   "description": "This structure describes the parameters for creating a contract.",
   "type": "object",
   "required": [
-    "base_reward_token",
     "compound_proxy",
     "controller",
     "fee",
     "fee_collector",
-    "liquidity_token",
-    "name",
     "owner",
-    "pair",
-    "staking_contract",
-    "symbol"
+    "router",
+    "staking"
   ],
   "properties": {
-    "base_reward_token": {
-      "description": "the base reward token contract address",
-      "type": "string"
-    },
     "compound_proxy": {
       "description": "The compound proxy contract address",
       "type": "string"
@@ -41,27 +33,16 @@
       "description": "The fee collector contract address",
       "type": "string"
     },
-    "liquidity_token": {
-      "description": "The LP token contract address",
-      "type": "string"
-    },
-    "name": {
-      "description": "token info",
-      "type": "string"
-    },
     "owner": {
       "description": "The owner address",
       "type": "string"
     },
-    "pair": {
-      "description": "The pair contract address",
+    "router": {
+      "description": "The router contract address",
       "type": "string"
     },
-    "staking_contract": {
+    "staking": {
       "description": "The LP staking generator contract address",
-      "type": "string"
-    },
-    "symbol": {
       "type": "string"
     }
   },

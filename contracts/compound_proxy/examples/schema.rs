@@ -3,7 +3,7 @@ use std::fs::create_dir_all;
 
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 use spectrum::compound_proxy::{
-    ExecuteMsg, InstantiateMsg, MigrateMsg,
+    ExecuteMsg, InstantiateMsg,
     QueryMsg, CallbackMsg, CompoundSimulationResponse
 };
 
@@ -18,5 +18,4 @@ fn main() {
     export_schema(&schema_for!(CallbackMsg), &out_dir);
     export_schema(&schema_for!(QueryMsg), &out_dir);
     export_schema(&schema_for!(CompoundSimulationResponse), &out_dir);
-    export_schema(&schema_for!(MigrateMsg), &out_dir);
 }

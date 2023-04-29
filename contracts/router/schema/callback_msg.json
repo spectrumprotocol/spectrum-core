@@ -6,54 +6,28 @@
     {
       "type": "object",
       "required": [
-        "stake"
+        "swap"
       ],
       "properties": {
-        "stake": {
+        "swap": {
           "type": "object",
           "required": [
-            "prev_balance"
-          ],
-          "properties": {
-            "minimum_receive": {
-              "description": "The minimum expected amount of LP token",
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/Uint128"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "prev_balance": {
-              "description": "The previous LP balance in the contract",
-              "allOf": [
-                {
-                  "$ref": "#/definitions/Coin"
-                }
-              ]
-            }
-          }
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "required": [
-        "bond_to"
-      ],
-      "properties": {
-        "bond_to": {
-          "type": "object",
-          "required": [
-            "prev_balance",
+            "operations",
+            "previous_balance",
             "to"
           ],
           "properties": {
+            "max_spread": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Decimal256"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "minimum_receive": {
-              "description": "The minimum expected amount of LP token",
               "anyOf": [
                 {
                   "$ref": "#/definitions/Uint128"
@@ -63,21 +37,17 @@
                 }
               ]
             },
-            "prev_balance": {
-              "description": "The previous LP balance in the contract",
-              "allOf": [
-                {
-                  "$ref": "#/definitions/Coin"
-                }
-              ]
+            "operations": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/SwapOperation"
+              }
+            },
+            "previous_balance": {
+              "$ref": "#/definitions/Coin"
             },
             "to": {
-              "description": "The address to bond LP",
-              "allOf": [
-                {
-                  "$ref": "#/definitions/Addr"
-                }
-              ]
+              "$ref": "#/definitions/Addr"
             }
           }
         }
@@ -102,6 +72,35 @@
         },
         "denom": {
           "type": "string"
+        }
+      }
+    },
+    "Decimal256": {
+      "description": "A fixed-point decimal value with 18 fractional digits, i.e. Decimal256(1_000_000_000_000_000_000) == 1.0\n\nThe greatest possible value that can be represented is 115792089237316195423570985008687907853269984665640564039457.584007913129639935 (which is (2^256 - 1) / 10^18)",
+      "type": "string"
+    },
+    "Denom": {
+      "type": "string"
+    },
+    "Pair": {
+      "$ref": "#/definitions/Addr"
+    },
+    "SwapOperation": {
+      "type": "object",
+      "required": [
+        "ask",
+        "offer",
+        "pair"
+      ],
+      "properties": {
+        "ask": {
+          "$ref": "#/definitions/Denom"
+        },
+        "offer": {
+          "$ref": "#/definitions/Denom"
+        },
+        "pair": {
+          "$ref": "#/definitions/Pair"
         }
       }
     },
