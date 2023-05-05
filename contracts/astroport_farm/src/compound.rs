@@ -9,7 +9,7 @@ use crate::{
 };
 
 use cw20::{Expiration};
-use astroport::asset::{AssetInfo, AssetInfoExt, token_asset};
+use astroport::asset::{AssetInfo, AssetInfoExt};
 
 use astroport::querier::query_token_balance;
 use spectrum::adapters::asset::AssetEx;
@@ -33,17 +33,15 @@ pub fn compound(
         return Err(ContractError::Unauthorized {});
     }
 
-    let staking_token = config.liquidity_token;
-
     let pending_token = config.staking_contract.query_pending_token(
         &deps.querier,
-        &staking_token,
+        &config.liquidity_token,
         &env.contract.address,
     )?;
 
     let lp_balance = config.staking_contract.query_deposit(
         &deps.querier,
-        &staking_token,
+        &config.liquidity_token,
         &env.contract.address,
     )?;
 
@@ -56,12 +54,12 @@ pub fn compound(
     let mut compound_rewards: Vec<Asset> = vec![];
 
     let claim_rewards = config.staking_contract.claim_rewards_msg(
-        vec![staking_token.to_string()],
+        vec![config.liquidity_token.to_string()],
     )?;
     messages.push(claim_rewards);
 
     rewards.push(
-        token_asset(config.base_reward_token, pending_token.pending),
+        config.get_base_reward_asset_info(deps.api).with_balance(pending_token.pending),
     );
     if let Some(pending_on_proxy) = pending_token.pending_on_proxy {
         rewards.extend(pending_on_proxy);
@@ -103,7 +101,7 @@ pub fn compound(
         let compound = config.compound_proxy.compound_msg(compound_rewards, compound_funds, None, slippage_tolerance)?;
         messages.push(compound);
 
-        let prev_balance = query_token_balance(&deps.querier, staking_token, &env.contract.address)?;
+        let prev_balance = query_token_balance(&deps.querier, config.liquidity_token, &env.contract.address)?;
         messages.push(
             CallbackMsg::Stake {
                 prev_balance,
@@ -130,9 +128,7 @@ pub fn stake(
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
 
-    let staking_token = config.liquidity_token;
-
-    let balance = query_token_balance(&deps.querier, &staking_token, env.contract.address)?;
+    let balance = query_token_balance(&deps.querier, &config.liquidity_token, env.contract.address)?;
     let amount = balance - prev_balance;
 
     if let Some(minimum_receive) = minimum_receive {
@@ -146,11 +142,11 @@ pub fn stake(
 
     Ok(Response::new()
         .add_message(
-            config.staking_contract.deposit_msg(staking_token.to_string(), amount)?
+            config.staking_contract.deposit_msg(config.liquidity_token.to_string(), amount)?
         )
         .add_attributes(vec![
             attr("action", "stake"),
-            attr("staking_token", staking_token),
+            attr("staking_token", config.liquidity_token),
             attr("amount", amount),
         ]))
 }
