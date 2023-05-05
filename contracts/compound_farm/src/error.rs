@@ -40,9 +40,6 @@ pub enum ContractError {
 
     #[error("Pool existed")]
     PoolExisted {},
-
-    #[error("Current balance is less than previous balance")]
-    BalanceLessThanPreviousBalance {},
 }
 
 impl From<OverflowError> for ContractError {

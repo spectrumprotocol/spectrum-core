@@ -3,7 +3,7 @@ use std::fs::create_dir_all;
 
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 
-use spectrum::router::{ExecuteMsg, InstantiateMsg, QueryMsg, MAX_ASSETS, CallbackMsg, SwapOperation, SwapOperationRequest, Route};
+use spectrum::router::{ExecuteMsg, InstantiateMsg, QueryMsg, CallbackMsg, SwapOperation, SwapOperationRequest, Route};
 
 
 fn main() {

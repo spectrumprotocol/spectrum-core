@@ -61,13 +61,11 @@ pub fn bond_to(
     minimum_receive: Option<Uint128>
 ) -> Result<Response<KujiraMsg>, ContractError> {
 
-    let lp_token = deps.api.addr_validate(&prev_balance.denom)?;
+    let lp_token = &prev_balance.denom;
     let config = CONFIG.load(deps.storage)?;
 
     let balance = &deps.querier.query_balance(&env.contract.address, lp_token)?.amount;
-    let amount = balance.checked_sub(prev_balance.amount).or_else(|_|
-        Err(ContractError::BalanceLessThanPreviousBalance { })
-    )?;
+    let amount = balance.checked_sub(prev_balance.amount)?;
 
     if let Some(minimum_receive) = minimum_receive {
         if amount < minimum_receive {
