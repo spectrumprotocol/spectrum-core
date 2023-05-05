@@ -13,6 +13,9 @@ pub enum ContractError {
     #[error("Unauthorized")]
     Unauthorized {},
 
+    #[error("Gov information is required")]
+    GovRequired {},
+
     #[error("Callbacks cannot be invoked externally")]
     CallbackUnauthorized {},
 

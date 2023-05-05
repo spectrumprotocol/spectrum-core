@@ -1,4 +1,4 @@
-use cosmwasm_std::{Deps, Env, StdResult};
+use cosmwasm_std::{Deps, Env, StdError, StdResult};
 use crate::bond::reconcile_to_user_info;
 use crate::model::{PoolInfo, RewardInfo, StakerInfo, StakerInfoResponse, StakingState, UserInfo, UserInfoResponse};
 use crate::staking::{reconcile_staker_income, reconcile_to_staker_info};
@@ -62,6 +62,8 @@ pub fn query_staker_info(
     reconcile_to_staker_info(&state, &mut staker_info)?;
     staker_info.update_staking(&state);
 
-    let lock = config.astro_gov.query_lock(&deps.querier, env.contract.address)?;
+    let lock = config.astro_gov
+        .ok_or_else(|| StdError::generic_err("Gov required"))?
+        .query_lock(&deps.querier, env.contract.address)?;
     Ok(staker_info.to_response(&state, lock.amount))
 }

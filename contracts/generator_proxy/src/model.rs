@@ -1,7 +1,8 @@
-use cosmwasm_std::{Addr, CosmosMsg, Decimal, StdResult, to_binary, Uint128, WasmMsg};
+use cosmwasm_std::{Addr, Api, CosmosMsg, Decimal, StdResult, to_binary, Uint128, WasmMsg};
 use cw20::{Cw20ReceiveMsg};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use astroport::asset::AssetInfo;
 use astroport::generator::RestrictedVector;
 use spectrum::adapters::generator::Generator;
 use spectrum::helper::ScalingUint128;
@@ -10,7 +11,7 @@ use crate::astro_gov::{AstroGov, AstroGovUnchecked};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub generator: String,
-    pub astro_gov: AstroGovUnchecked,
+    pub astro_gov: Option<AstroGovUnchecked>,
     pub owner: String,
     pub controller: String,
     pub astro_token: String,
@@ -23,7 +24,7 @@ pub struct InstantiateMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
     pub generator: Generator,
-    pub astro_gov: AstroGov,
+    pub astro_gov: Option<AstroGov>,
     pub owner: Addr,
     pub controller: Addr,
     pub astro_token: Addr,
@@ -31,6 +32,16 @@ pub struct Config {
     pub max_quota: Uint128,
     pub staker_rate: Decimal,
     pub boost_fee: Decimal,
+}
+
+impl Config {
+    pub fn get_astro_asset_info(&self, api: &dyn Api) -> AssetInfo {
+        if api.addr_validate(self.astro_token.as_ref()).is_ok() {
+            AssetInfo::Token { contract_addr: self.astro_token.clone() }
+        } else {
+            AssetInfo::NativeToken { denom: self.astro_token.to_string() }
+        }
+    }
 }
 
 pub fn zero_address() -> Addr {
