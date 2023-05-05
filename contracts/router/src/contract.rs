@@ -232,7 +232,7 @@ fn remove_route(
 }
 
 /// ## Description
-/// Performs an swap operation with the specified parameters. CONTRACT - a user must do token approval.
+/// Performs an swap operation with the specified parameters.
 /// Returns an [`ContractError`] on failure, otherwise returns the [`Response`] with the specified attributes if the operation was successful.
 #[allow(clippy::too_many_arguments)]
 fn swap(
@@ -309,9 +309,9 @@ fn compute_minimum_receive(
     decimal_delta: i8,
 ) -> StdResult<Uint128> {
     let dec_adj = match decimal_delta.cmp(&0) {
-        Ordering::Less => Decimal256::from_ratio(1u128, 10u128.pow(-decimal_delta as u32)),
+        Ordering::Less => Decimal256::from_ratio(10u128.pow(-decimal_delta as u32), 1u128),
         Ordering::Equal => Decimal256::one(),
-        Ordering::Greater => Decimal256::from_ratio(10u128.pow(decimal_delta as u32), 1u128),
+        Ordering::Greater => Decimal256::from_ratio(1u128, 10u128.pow(decimal_delta as u32)),
     };
     let micro_price = Decimal256::from_ratio(dec_adj.numerator(), belief_price.numerator());
     let result = Uint256::from(offer_amount) * micro_price * (Decimal256::one() - max_spread);
@@ -527,13 +527,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_minimum_receive() {
+    fn test_minimum_receive() -> StdResult<()> {
         let min_receive = compute_minimum_receive(
             Uint128::from(1234_567u128),
             Decimal256::permille(10000_000),
             Decimal256::zero(),
             -2,
-        ).unwrap();
+        )?;
         assert_eq!(min_receive, Uint128::from(0_12345u128));
 
         let min_receive = compute_minimum_receive(
@@ -541,7 +541,17 @@ mod tests {
             Decimal256::permille(0_001),
             Decimal256::zero(),
             5,
-        ).unwrap();
+        )?;
         assert_eq!(min_receive, Uint128::from(12345u128));
+
+        let min_receive = compute_minimum_receive(
+            Uint128::from(12_34567u128),
+            Decimal256::permille(1000),
+            Decimal256::zero(),
+            0,
+        )?;
+        assert_eq!(min_receive, Uint128::from(12_34567u128));
+
+        Ok(())
     }
 }

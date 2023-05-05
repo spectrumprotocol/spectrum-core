@@ -927,6 +927,7 @@ dependencies = [
  "cosmwasm-std",
  "cw-multi-test",
  "cw-storage-plus",
+ "cw20",
  "kujira",
  "proptest",
  "schemars",

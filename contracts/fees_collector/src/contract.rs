@@ -53,13 +53,13 @@ pub fn execute(
         ExecuteMsg::UpdateBridges { add, remove } => update_bridges(deps, info, add, remove),
         ExecuteMsg::UpdateConfig {
             operator,
-            factory_contract,
+            router,
             target_list,
         } => update_config(
             deps,
             info,
             operator,
-            factory_contract,
+            router,
             target_list,
         ),
         ExecuteMsg::SwapBridgeAssets { assets, depth } => {

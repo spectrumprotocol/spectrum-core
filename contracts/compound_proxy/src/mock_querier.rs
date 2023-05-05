@@ -1,24 +1,23 @@
-use astroport::asset::{PairInfo, AssetInfo};
-use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADDR};
+use cosmwasm_std::testing::{MockApi, MockStorage};
 use cosmwasm_std::{
-    from_binary, from_slice, to_binary, Addr, Coin, Empty, OwnedDeps, Querier, QuerierResult,
-    QueryRequest, SystemError, SystemResult, Uint128, WasmQuery,
+    from_binary, from_slice, to_binary, Addr, BalanceResponse, BankQuery, Binary, Coin,
+    ContractResult, Decimal, OwnedDeps, Querier, QuerierResult, QueryRequest, StdResult,
+    SystemError, SystemResult, Uint128, WasmQuery, StdError, Uint256,
 };
+use kujira::asset::{Asset, AssetInfo};
+use kujira::fin::SimulationResponse;
 use std::collections::HashMap;
 
-use astroport::factory::FeeInfoResponse;
-use astroport::factory::QueryMsg::FeeInfo;
-use astroport::pair::QueryMsg::{Pair, Simulation};
-use cw20::{BalanceResponse, Cw20QueryMsg, TokenInfoResponse};
-use astroport::pair::SimulationResponse;
+use kujira::denom::Denom;
+use kujira::precision::Precision;
+use kujira::query::{BankQuery as KujiraBankQuery, KujiraQuery, SupplyResponse};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use spectrum::adapters::kujira::market_maker::{ConfigResponse, PoolResponse};
+use spectrum::adapters::kujira::staking::StakeResponse;
 
-/// mock_dependencies is a drop-in replacement for cosmwasm_std::testing::mock_dependencies
-/// this uses our CustomQuerier.
-pub fn mock_dependencies(
-    contract_balance: &[Coin],
-) -> OwnedDeps<MockStorage, MockApi, WasmMockQuerier> {
-    let custom_querier: WasmMockQuerier =
-        WasmMockQuerier::new(MockQuerier::new(&[(MOCK_CONTRACT_ADDR, contract_balance)]));
+pub fn mock_dependencies() -> OwnedDeps<MockStorage, MockApi, WasmMockQuerier, KujiraQuery> {
+    let custom_querier: WasmMockQuerier = WasmMockQuerier::new();
 
     OwnedDeps {
         storage: MockStorage::default(),
@@ -29,43 +28,164 @@ pub fn mock_dependencies(
 }
 
 pub struct WasmMockQuerier {
-    base: MockQuerier<Empty>,
-    token_querier: TokenQuerier,
+    supply: HashMap<String, Uint128>,
+    staking_balances: HashMap<String, Uint128>,
+    balances: HashMap<(String, String), Uint128>,
+    rewards: Vec<Coin>,
+    raw: HashMap<(String, Binary), Binary>,
+    prices: HashMap<String, Decimal>, // price of offer asset
 }
 
-#[derive(Clone, Default)]
-pub struct TokenQuerier {
-    // this lets us iterate over all pairs that match the first string
-    balances: HashMap<String, HashMap<String, Uint128>>,
-}
+impl WasmMockQuerier {
+    pub fn new() -> Self {
+        WasmMockQuerier {
+            supply: HashMap::new(),
+            staking_balances: HashMap::new(),
+            balances: HashMap::new(),
+            rewards: vec![],
+            prices: HashMap::new(),
+            raw: HashMap::new(),
+        }
+    }
 
-impl TokenQuerier {
-    pub fn new(balances: &[(&String, &[(&String, &Uint128)])]) -> Self {
-        TokenQuerier {
-            balances: balances_to_map(balances),
+    pub fn set_supply(&mut self, denom: String, amount: Uint128) {
+        self.supply.insert(denom, amount);
+    }
+
+    fn get_supply(&self, denom: String) -> Uint128 {
+        *self.supply.get(&denom).unwrap_or(&Uint128::zero())
+    }
+
+    pub fn set_staking_balance(&mut self, token: String, amount: Uint128) {
+        self.staking_balances.insert(token, amount);
+    }
+
+    fn get_staking_balance(&self, token: String) -> Uint128 {
+        *self
+            .staking_balances
+            .get(&token)
+            .unwrap_or(&Uint128::zero())
+    }
+
+    pub fn set_balance(&mut self, token: String, addr: String, amount: Uint128) {
+        self.balances.insert((token, addr), amount);
+    }
+
+    fn get_balance(&self, token: String, addr: String) -> Uint128 {
+        *self
+            .balances
+            .get(&(token, addr))
+            .unwrap_or(&Uint128::zero())
+    }
+
+    pub fn set_rewards(&mut self, rewards: Vec<Coin>) {
+        self.rewards = rewards;
+    }
+
+    fn get_rewards(&self) -> Vec<Coin> {
+        self.rewards.to_vec()
+    }
+
+    pub fn set_price(&mut self, offer: String, price: Decimal) {
+        self.prices.insert(offer, price);
+    }
+
+    fn get_price(&self, offer: String) -> Option<&Decimal> {
+        self.prices.get(&offer)
+    }
+
+    fn execute_query(&self, request: &QueryRequest<KujiraQuery>) -> QuerierResult {
+        let result = match request {
+            QueryRequest::Custom(KujiraQuery::Bank {
+                0: KujiraBankQuery::Supply { denom },
+            }) => {
+                let amount = self.get_supply(denom.to_string());
+                to_binary(&SupplyResponse {
+                    amount: Coin {
+                        denom: denom.to_string(),
+                        amount,
+                    },
+                })
+            }
+            QueryRequest::Bank(BankQuery::Balance { address, denom }) => {
+                let amount = self.get_balance(denom.clone(), address.clone());
+                to_binary(&BalanceResponse {
+                    amount: Coin {
+                        denom: denom.clone(),
+                        amount,
+                    },
+                })
+            }
+            QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => {
+                self.execute_wasm_query(contract_addr, msg)
+            }
+            QueryRequest::Wasm(WasmQuery::Raw { contract_addr, key }) => {
+                let value = self.raw.get(&(contract_addr.clone(), key.clone()));
+                if let Some(binary) = value {
+                    Ok(binary.clone())
+                } else {
+                    Ok(Binary::default())
+                }
+            }
+            _ => return QuerierResult::Err(SystemError::Unknown {}),
+        };
+        QuerierResult::Ok(ContractResult::from(result))
+    }
+
+    fn execute_wasm_query(&self, _: &String, msg: &Binary) -> StdResult<Binary> {
+        match from_binary(msg)? {
+            MockQueryMsg::Pool {} => to_binary(&PoolResponse {
+                balances: [Uint128::from(10000000u128), Uint128::from(10000000u128)],
+            }),
+            MockQueryMsg::Stake { denom, addr } => {
+                let amount = self.get_staking_balance(denom.clone());
+                to_binary(&StakeResponse {
+                    owner: addr,
+                    denom: Denom::from(denom),
+                    amount,
+                })
+            }
+            MockQueryMsg::Config { .. } => to_binary(&ConfigResponse {
+                owner: Addr::unchecked("owner"),
+                denoms: [Denom::from("ukuji"), Denom::from("ibc/stablecoin")],
+                price_precision: Precision::DecimalPlaces(4u8),
+                decimal_delta: 0,
+                fin_contract: Addr::unchecked("fin"),
+                intervals: vec![Decimal::percent(1)],
+                fee: Decimal::from_ratio(3u128, 1000u128),
+                amp: Decimal::one(),
+            }),
+            MockQueryMsg::Fills { .. } => to_binary(&self.get_rewards()),
+            MockQueryMsg::Simulation { offer_asset } => {
+                let offer = match offer_asset.info {
+                    AssetInfo::NativeToken { denom } => denom.to_string(),
+                };
+                let price = *self.get_price(offer)
+                                    .ok_or_else(|| StdError::generic_err("No price"))?;
+                to_binary(&SimulationResponse {
+                return_amount: Uint256::from(offer_asset.amount * price),
+                spread_amount: Uint256::from(0u128),
+                commission_amount: Uint256::from(0u128),
+            })},
+            
         }
     }
 }
 
-pub(crate) fn balances_to_map(
-    balances: &[(&String, &[(&String, &Uint128)])],
-) -> HashMap<String, HashMap<String, Uint128>> {
-    let mut balances_map: HashMap<String, HashMap<String, Uint128>> = HashMap::new();
-    for (contract_addr, balances) in balances.iter() {
-        let mut contract_balances_map: HashMap<String, Uint128> = HashMap::new();
-        for (addr, balance) in balances.iter() {
-            contract_balances_map.insert(addr.to_string(), **balance);
-        }
-
-        balances_map.insert(contract_addr.to_string(), contract_balances_map);
-    }
-    balances_map
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+enum MockQueryMsg {
+    Stake { denom: String, addr: Addr },
+    Config {},
+    Pool {},
+    Fills { denom: Denom, addr: Addr },
+    Simulation { offer_asset: Asset },
 }
 
 impl Querier for WasmMockQuerier {
     fn raw_query(&self, bin_request: &[u8]) -> QuerierResult {
         // MockQuerier doesn't support Custom, so we ignore it completely here
-        let request: QueryRequest<Empty> = match from_slice(bin_request) {
+        let request: QueryRequest<KujiraQuery> = match from_slice(bin_request) {
             Ok(v) => v,
             Err(e) => {
                 return SystemResult::Err(SystemError::InvalidRequest {
@@ -74,169 +194,6 @@ impl Querier for WasmMockQuerier {
                 })
             }
         };
-        self.handle_query(&request)
-    }
-}
-
-impl WasmMockQuerier {
-    pub fn handle_query(&self, request: &QueryRequest<Empty>) -> QuerierResult {
-        match &request {
-            QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => {
-                if contract_addr == "factory" {
-                    match from_binary(&msg).unwrap() {
-                        FeeInfo { .. } => SystemResult::Ok(
-                            to_binary(&FeeInfoResponse {
-                                fee_address: Some(Addr::unchecked("fee_address")),
-                                total_fee_bps: 30,
-                                maker_fee_bps: 1660,
-                            })
-                            .into(),
-                        ),
-                        _ => panic!("DO NOT ENTER HERE"),
-                    }
-                } else if contract_addr == "pair_contract" {
-                    match from_binary(&msg).unwrap() {
-                        Pair { .. } => SystemResult::Ok(
-                            to_binary(&PairInfo {
-                                asset_infos: vec![
-                                    {
-                                        AssetInfo::Token { contract_addr: Addr::unchecked("token") }
-                                    },
-                                    {
-                                        AssetInfo::NativeToken { denom: "uluna".to_string() }
-                                    },
-                                ],
-                                contract_addr: Addr::unchecked("pair_contract"),
-                                liquidity_token: Addr::unchecked("liquidity_token"),
-                                pair_type: astroport::factory::PairType::Xyk {  },
-                            })
-                            .into(),
-                        ),
-                        _ => panic!("DO NOT ENTER HERE"),
-                    }
-                } else if contract_addr == "pair_contract_2" {
-                    match from_binary(&msg).unwrap() {
-                        Pair { .. } => SystemResult::Ok(
-                            to_binary(&PairInfo {
-                                asset_infos: vec![
-                                    {
-                                        AssetInfo::NativeToken { denom: "uluna".to_string() }
-                                    },
-                                    {
-                                        AssetInfo::NativeToken { denom: "ibc/B3504E092456BA618CC28AC671A71FB08C6CA0FD0BE7C8A5B5A3E2DD933CC9E4".to_string() }
-                                    }
-                                ],
-                                contract_addr: Addr::unchecked("pair_contract_2"),
-                                liquidity_token: Addr::unchecked("liquidity_token"),
-                                pair_type: astroport::factory::PairType::Xyk {  },
-                            })
-                                .into(),
-                        ),
-                        _ => panic!("DO NOT ENTER HERE"),
-                    }
-                } else if contract_addr == "pair_astro_token" {
-                    match from_binary(&msg).unwrap() {
-                        Pair { .. } => SystemResult::Ok(
-                            to_binary(&PairInfo {
-                                asset_infos: vec![
-                                    {
-                                        AssetInfo::Token { contract_addr: Addr::unchecked("astro") }
-                                    },
-                                    {
-                                        AssetInfo::Token { contract_addr: Addr::unchecked("token") }
-                                    },
-                                ],
-                                contract_addr: Addr::unchecked("pair_astro_token"),
-                                liquidity_token: Addr::unchecked("astro_token_lp"),
-                                pair_type: astroport::factory::PairType::Xyk {  },
-                            }).into(),
-                        ),
-                        Simulation { .. } => SystemResult::Ok(
-                            to_binary(&SimulationResponse {
-                                return_amount: Uint128::from(1000000u128),
-                                commission_amount: Uint128::zero(),
-                                spread_amount: Uint128::zero(),
-                            }).into(),
-                        ),
-                        _ => panic!("DO NOT ENTER HERE"),
-                    }
-                } else {
-                    match from_binary(&msg).unwrap() {
-                        Cw20QueryMsg::TokenInfo {} => {
-                            let balances: &HashMap<String, Uint128> =
-                                match self.token_querier.balances.get(contract_addr) {
-                                    Some(balances) => balances,
-                                    None => {
-                                        return SystemResult::Err(SystemError::Unknown {});
-                                    }
-                                };
-
-                            let mut total_supply = Uint128::zero();
-
-                            for balance in balances {
-                                total_supply += *balance.1;
-                            }
-
-                            SystemResult::Ok(
-                                to_binary(&TokenInfoResponse {
-                                    name: "mAPPL".to_string(),
-                                    symbol: "mAPPL".to_string(),
-                                    decimals: 6,
-                                    total_supply,
-                                })
-                                .into(),
-                            )
-                        }
-                        Cw20QueryMsg::Balance { address } => {
-                            let balances: &HashMap<String, Uint128> =
-                                match self.token_querier.balances.get(contract_addr) {
-                                    Some(balances) => balances,
-                                    None => {
-                                        return SystemResult::Err(SystemError::Unknown {});
-                                    }
-                                };
-
-                            let balance = match balances.get(&address) {
-                                Some(v) => v,
-                                None => {
-                                    return SystemResult::Err(SystemError::Unknown {});
-                                }
-                            };
-
-                            SystemResult::Ok(
-                                to_binary(&BalanceResponse { balance: *balance }).into(),
-                            )
-                        }
-                        _ => panic!("DO NOT ENTER HERE"),
-                    }
-                }
-            }
-            _ => self.base.handle_query(request),
-        }
-    }
-}
-
-impl WasmMockQuerier {
-    pub fn new(base: MockQuerier<Empty>) -> Self {
-        WasmMockQuerier {
-            base,
-            token_querier: TokenQuerier::default(),
-        }
-    }
-
-    // configure the mint whitelist mock querier
-    pub fn with_token_balances(&mut self, balances: &[(&String, &[(&String, &Uint128)])]) {
-        self.token_querier = TokenQuerier::new(balances);
-    }
-
-    /*// configure the token owner mock querier
-    pub fn with_tax(&mut self, rate: Decimal, caps: &[(&String, &Uint128)]) {
-        self.tax_querier = TaxQuerier::new(rate, caps);
-    }*/
-
-    pub fn with_balance(&mut self, balances: &[(&String, &[Coin])]) {
-        for (addr, balance) in balances {
-            self.base.update_balance(addr.to_string(), balance.to_vec());
-        }
+        self.execute_query(&request)
     }
 }

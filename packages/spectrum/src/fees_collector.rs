@@ -33,8 +33,8 @@ pub enum ExecuteMsg {
     UpdateConfig {
         /// The operator address
         operator: Option<String>,
-        /// The factory contract address
-        factory_contract: Option<String>,
+        /// The router contract address
+        router: Option<String>,
         /// The list of target address to receive fees in stablecoin
         target_list: Option<Vec<(String, u64)>>,
     },

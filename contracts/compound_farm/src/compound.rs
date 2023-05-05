@@ -149,7 +149,9 @@ pub fn stake(
     let config = CONFIG.load(deps.storage)?;
 
     let balance = deps.querier.query_balance(&env.contract.address, &prev_balance.denom)?.amount;
-    let amount = balance - prev_balance.amount;
+    let amount = balance.checked_sub(prev_balance.amount).or_else(|_|
+        Err(ContractError::BalanceLessThanPreviousBalance { })
+    )?;
 
     if let Some(minimum_receive) = minimum_receive {
         if amount < minimum_receive {

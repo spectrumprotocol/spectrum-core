@@ -35,7 +35,7 @@ fn validate_percentage(value: Decimal, field: &str) -> StdResult<()> {
 /// Returns the [`Response`] with the specified attributes if the operation was successful, or a [`ContractError`] if the contract was not created.
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
-    deps: DepsMut,
+    deps: DepsMut<KujiraQuery>,
     _env: Env,
     _info: MessageInfo,
     msg: InstantiateMsg,

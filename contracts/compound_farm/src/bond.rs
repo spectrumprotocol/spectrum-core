@@ -61,11 +61,13 @@ pub fn bond_to(
     minimum_receive: Option<Uint128>
 ) -> Result<Response<KujiraMsg>, ContractError> {
 
-    let market_maker = MarketMaker(deps.api.addr_validate(&prev_balance.denom)?);
+    let lp_token = deps.api.addr_validate(&prev_balance.denom)?;
     let config = CONFIG.load(deps.storage)?;
 
-    let balance = market_maker.query_lp_balance(&deps.querier, &env.contract.address)?.amount;
-    let amount = balance - prev_balance.amount;
+    let balance = &deps.querier.query_balance(&env.contract.address, lp_token)?.amount;
+    let amount = balance.checked_sub(prev_balance.amount).or_else(|_|
+        Err(ContractError::BalanceLessThanPreviousBalance { })
+    )?;
 
     if let Some(minimum_receive) = minimum_receive {
         if amount < minimum_receive {
@@ -223,7 +225,9 @@ pub fn unbond(
         env.block.time.seconds(),
     );
 
-    reward_info.unbond(fund.amount)?;
+    reward_info.unbond(fund.amount).or_else(|_|
+        Err(ContractError::UnbondExceedBalance {  })
+    )?;
 
     // update state
     REWARD.save(deps.storage, (&staker_addr, &market_maker_addr), &reward_info)?;
@@ -323,10 +327,14 @@ fn read_reward_infos(
                         .multiply_ratio(bond_share, total_share)
                 },
                 deposit_time: reward_info.deposit_time,
-                deposit_costs: [
-                    reward_info.deposit_costs[0].multiply_ratio(bond_share, total_share),
-                    reward_info.deposit_costs[1].multiply_ratio(bond_share, total_share),
-                ]
+                deposit_costs: if total_share.is_zero() {
+                    [Uint128::zero(), Uint128::zero()]
+                } else {
+                    [
+                        reward_info.deposit_costs[0].multiply_ratio(bond_share, total_share),
+                        reward_info.deposit_costs[1].multiply_ratio(bond_share, total_share),
+                    ]
+                }
             })
         })
         .collect::<StdResult<_>>()

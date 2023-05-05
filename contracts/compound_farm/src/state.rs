@@ -148,7 +148,7 @@ pub enum ScalingOperation {
 
 pub fn extract_market_maker_from_lp(denom: &String) -> Result<Addr, ContractError> {
     if denom.starts_with("factory/") && denom.ends_with("/ulp") {
-        let addr = &denom[8..(denom.len() - 12)];
+        let addr = &denom[8..(denom.len() - 4)];
         Ok(Addr::unchecked(addr))
     } else {
         Err(ContractError::InvalidFunds {})
@@ -156,7 +156,7 @@ pub fn extract_market_maker_from_lp(denom: &String) -> Result<Addr, ContractErro
 }
 
 pub fn extract_market_maker_from_clp(denom: &str, env: &Env) -> Result<Addr, ContractError> {
-    let prefix = format!("factory/{0}", env.contract.address);
+    let prefix = format!("factory/{0}/", env.contract.address);
     if denom.starts_with(&prefix) {
         let addr = &denom[prefix.len()..];
         Ok(Addr::unchecked(addr))

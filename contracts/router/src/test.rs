@@ -1,24 +1,22 @@
-use astroport::asset::{Asset, AssetInfo, PairInfo};
-use astroport::factory::PairType;
-use astroport::router::{
-    Cw20HookMsg as RouterCw20HookMsg, ExecuteMsg as RouterExecuteMsg, SwapOperation,
-};
-use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MockStorage, MOCK_CONTRACT_ADDR};
-use cosmwasm_std::{
-    to_binary, Addr, Coin, CosmosMsg, Decimal, OwnedDeps, Response, StdError, Uint128, WasmMsg,
-};
-use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
-use spectrum::adapters::router::{Router, RouterType};
-use spectrum::router::{Cw20HookMsg, ExecuteMsg, InstantiateMsg};
+use std::str::FromStr;
 
-use crate::contract::{execute, instantiate};
+use cosmwasm_std::testing::{mock_env, mock_info, MockApi, MockStorage};
+use cosmwasm_std::{
+    to_binary, Addr, Coin, CosmosMsg, OwnedDeps, Response, StdError, Uint128, WasmMsg, Decimal256, Timestamp, from_binary,
+};
+
+use kujira::denom::Denom;
+use spectrum::router::{ExecuteMsg, InstantiateMsg, QueryMsg, SwapOperationRequest};
+use kujira::fin::ExecuteMsg as FinExecuteMsg;
+use crate::contract::{execute, instantiate, query};
 use crate::error::ContractError;
 use crate::mock_querier::{mock_dependencies, WasmMockQuerier};
 use crate::state::{Config, CONFIG};
 
+const OWNER: &str = "owner";
 const USER_1: &str = "user_1";
 const USER_2: &str = "user_2";
-const ROUTER: &str = "router";
+const USER_3: &str = "user_2";
 const TOKEN_1: &str = "token_1";
 const TOKEN_2: &str = "token_2";
 const IBC_TOKEN: &str = "ibc/stablecoin";
@@ -27,7 +25,10 @@ const IBC_TOKEN: &str = "ibc/stablecoin";
 fn test() -> Result<(), ContractError> {
     let mut deps = mock_dependencies();
     create(&mut deps)?;
+    owner(&mut deps)?;
+    config(&mut deps)?;
     swap(&mut deps)?;
+    // callback(&mut deps)?;
 
     Ok(())
 }
@@ -47,48 +48,7 @@ fn create(
     let info = mock_info(USER_1, &[]);
 
     let instantiate_msg = InstantiateMsg {
-        asset_infos: vec![],
-        router: ROUTER.to_string(),
-        router_type: RouterType::AstroSwap,
-        offer_precision: None,
-        ask_precision: None,
-    };
-    let res = instantiate(deps.as_mut(), env.clone(), info.clone(), instantiate_msg);
-    assert_error(res, "Must provide at least 2 assets!");
-
-    let instantiate_msg = InstantiateMsg {
-        asset_infos: vec![
-            AssetInfo::Token {
-                contract_addr: Addr::unchecked(TOKEN_1),
-            },
-            AssetInfo::Token {
-                contract_addr: Addr::unchecked(TOKEN_1),
-            },
-        ],
-        router: ROUTER.to_string(),
-        router_type: RouterType::AstroSwap,
-        offer_precision: None,
-        ask_precision: None,
-    };
-    let res = instantiate(deps.as_mut(), env.clone(), info.clone(), instantiate_msg);
-    assert_error(res, "Duplicated assets in asset infos");
-
-    let instantiate_msg = InstantiateMsg {
-        asset_infos: vec![
-            AssetInfo::Token {
-                contract_addr: Addr::unchecked(TOKEN_1),
-            },
-            AssetInfo::Token {
-                contract_addr: Addr::unchecked(TOKEN_2),
-            },
-            AssetInfo::NativeToken {
-                denom: IBC_TOKEN.to_string(),
-            },
-        ],
-        router: ROUTER.to_string(),
-        router_type: RouterType::AstroSwap,
-        offer_precision: None,
-        ask_precision: None,
+        owner: USER_1.to_string(),
     };
     let res = instantiate(deps.as_mut(), env, info, instantiate_msg);
     assert!(res.is_ok());
@@ -97,53 +57,165 @@ fn create(
     assert_eq!(
         config,
         Config {
-            pair_info: PairInfo {
-                asset_infos: vec![
-                    AssetInfo::Token {
-                        contract_addr: Addr::unchecked(TOKEN_1),
-                    },
-                    AssetInfo::NativeToken {
-                        denom: IBC_TOKEN.to_string(),
-                    },
-                ],
-                contract_addr: Addr::unchecked(MOCK_CONTRACT_ADDR),
-                liquidity_token: Addr::unchecked(""),
-                pair_type: PairType::Custom("router".to_string())
-            },
-            asset_infos: vec![
-                AssetInfo::Token {
-                    contract_addr: Addr::unchecked(TOKEN_1),
-                },
-                AssetInfo::Token {
-                    contract_addr: Addr::unchecked(TOKEN_2),
-                },
-                AssetInfo::NativeToken {
-                    denom: IBC_TOKEN.to_string(),
-                },
-            ],
-            router: Router(Addr::unchecked(ROUTER)),
-            router_type: RouterType::AstroSwap,
-            offer_precision: 6,
-            ask_precision: 6
+            owner: Addr::unchecked(USER_1.to_string()),
         }
     );
 
     Ok(())
 }
 
+fn owner(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(), ContractError> {
+    let mut env = mock_env();
+    env.block.time = Timestamp::from_seconds(0);
+
+    // new owner
+    let msg = ExecuteMsg::ProposeNewOwner {
+        owner: OWNER.to_string(),
+        expires_in: 100,
+    };
+
+    let info = mock_info(USER_2, &[]);
+
+    // unauthorized check
+    let res = execute(deps.as_mut(), env.clone(), info, msg.clone());
+    assert_error(res, "Unauthorized");
+
+    // claim before a proposal
+    let info = mock_info(USER_2, &[]);
+    let res = execute(
+        deps.as_mut(),
+        env.clone(),
+        info,
+        ExecuteMsg::ClaimOwnership {},
+    );
+    assert_error(res, "Ownership proposal not found");
+
+    // propose new owner
+    let info = mock_info(USER_1, &[]);
+    let res = execute(deps.as_mut(), env.clone(), info, msg.clone());
+    assert!(res.is_ok());
+
+    // drop ownership proposal
+    let info = mock_info(USER_1, &[]);
+    let res = execute(
+        deps.as_mut(),
+        env.clone(),
+        info,
+        ExecuteMsg::DropOwnershipProposal {},
+    );
+    assert!(res.is_ok());
+
+    // ownership proposal dropped
+    let info = mock_info(USER_2, &[]);
+    let res = execute(
+        deps.as_mut(),
+        env.clone(),
+        info,
+        ExecuteMsg::ClaimOwnership {},
+    );
+    assert_error(res, "Ownership proposal not found");
+
+    // propose new owner again
+    let info = mock_info(USER_1, &[]);
+    let res = execute(deps.as_mut(), env.clone(), info, msg);
+    assert!(res.is_ok());
+
+    // unauthorized ownership claim
+    let info = mock_info(USER_3, &[]);
+    let res = execute(
+        deps.as_mut(),
+        env.clone(),
+        info,
+        ExecuteMsg::ClaimOwnership {},
+    );
+    assert_error(res, "Unauthorized");
+
+    env.block.time = Timestamp::from_seconds(101);
+
+    // ownership proposal expired
+    let info = mock_info(OWNER, &[]);
+    let res = execute(
+        deps.as_mut(),
+        env.clone(),
+        info,
+        ExecuteMsg::ClaimOwnership {},
+    );
+    assert_error(res, "Ownership proposal expired");
+
+    env.block.time = Timestamp::from_seconds(100);
+
+    // claim ownership
+    let info = mock_info(OWNER, &[]);
+    let res = execute(
+        deps.as_mut(),
+        env.clone(),
+        info,
+        ExecuteMsg::ClaimOwnership {},
+    )?;
+    assert_eq!(0, res.messages.len());
+
+    // query config
+    let config: Config =
+        from_binary(&query(deps.as_ref(), env.clone(), QueryMsg::Config {})?)?;
+    assert_eq!(OWNER, config.owner);
+    Ok(())
+}
+
+fn create_swap_op(ask: String, offer: String) -> SwapOperationRequest {
+    SwapOperationRequest { pair: get_key(&offer, &ask), offer: Denom::from(offer), ask: Denom::from(ask) }
+}
+
+fn get_key(
+    offer: &String,
+    ask: &String,
+) -> String {
+    if offer > ask {
+        format!("{0}|{1}", ask, offer)
+    } else {
+        format!("{0}|{1}", offer, ask)
+    }
+}
+
+fn config(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(), ContractError> {
+    let env = mock_env();
+
+    let info = mock_info(USER_1, &[]);
+    let msg = ExecuteMsg::UpsertRoute { operations: vec![
+        create_swap_op(TOKEN_2.to_string(), TOKEN_1.to_string()),    
+    ] };
+    // unauthorized check
+    let res = execute(deps.as_mut(), env.clone(), info, msg.clone());
+    assert_error(res, "Unauthorized");
+
+    let info = mock_info(OWNER, &[]);
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
+    assert!(res.is_ok());
+
+    let msg = ExecuteMsg::UpsertRoute { operations: vec![
+        create_swap_op(TOKEN_2.to_string(), IBC_TOKEN.to_string()),    
+    ] };
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
+    assert!(res.is_ok());
+
+    Ok(())
+}
+
+
 fn swap(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(), ContractError> {
     let env = mock_env();
 
-    let info = mock_info(TOKEN_1, &[]);
-    let msg = ExecuteMsg::Receive(Cw20ReceiveMsg {
-        sender: USER_1.to_string(),
-        amount: Uint128::from(100u128),
-        msg: to_binary(&Cw20HookMsg::Swap {
-            belief_price: Some(Decimal::percent(100)),
-            max_spread: Some(Decimal::percent(1)),
-            to: Some(USER_2.to_string()),
-        })?,
-    });
+    let info = mock_info(USER_1, &[
+        Coin {
+            denom: TOKEN_1.to_string(),
+            amount: Uint128::from(100u128),
+        }
+    ]);
+    let msg = ExecuteMsg::Swap {
+        belief_price: Some(Decimal256::percent(100)),
+        max_spread: Some(Decimal256::percent(1)),
+        to: Some(USER_2.to_string()),
+        ask: Denom::from(TOKEN_2.to_string()),
+    };
 
     let res = execute(deps.as_mut(), env.clone(), info, msg)?;
     assert_eq!(
@@ -152,55 +224,32 @@ fn swap(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
             .map(|it| it.msg)
             .collect::<Vec<CosmosMsg>>(),
         [CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: TOKEN_1.to_string(),
-            msg: to_binary(&Cw20ExecuteMsg::Send {
-                contract: ROUTER.to_string(),
-                amount: Uint128::from(100u128),
-                msg: to_binary(&RouterCw20HookMsg::ExecuteSwapOperations {
-                    operations: vec![
-                        SwapOperation::AstroSwap {
-                            offer_asset_info: AssetInfo::Token {
-                                contract_addr: Addr::unchecked(TOKEN_1.to_string())
-                            },
-                            ask_asset_info: AssetInfo::Token {
-                                contract_addr: Addr::unchecked(TOKEN_2.to_string())
-                            }
-                        },
-                        SwapOperation::AstroSwap {
-                            offer_asset_info: AssetInfo::Token {
-                                contract_addr: Addr::unchecked(TOKEN_2.to_string())
-                            },
-                            ask_asset_info: AssetInfo::NativeToken {
-                                denom: IBC_TOKEN.to_string(),
-                            },
-                        },
-                    ],
-                    minimum_receive: Some(Uint128::from(99u128)),
-                    to: Some(USER_2.to_string()),
-                    max_spread: Some(Decimal::percent(1))
-                })?,
+            contract_addr: format!("{0}|{1}", TOKEN_1, TOKEN_2),
+            msg: to_binary(&FinExecuteMsg::Swap {
+                offer_asset: Some(Coin { denom: TOKEN_1.to_string(), amount: Uint128::from(100u128) }),
+                belief_price: Some(Decimal256::from_str("1")?),
+                max_spread: Some(Decimal256::from_str("0.01")?),
+                to: Some(Addr::unchecked(USER_2.to_string())),
             })?,
-            funds: vec![],
+            funds: vec![Coin {
+                denom: TOKEN_1.to_string(),
+                amount: Uint128::from(100u128),
+            }],
         }),]
     );
 
     let info = mock_info(
         USER_1,
         &[Coin {
-            denom: IBC_TOKEN.to_string(),
+            denom: TOKEN_2.to_string(),
             amount: Uint128::from(100u128),
         }],
     );
     let msg = ExecuteMsg::Swap {
-        offer_asset: Asset {
-            info: AssetInfo::NativeToken {
-                denom: IBC_TOKEN.to_string(),
-            },
-            amount: Uint128::from(100u128),
-        },
-        belief_price: Some(Decimal::percent(100)),
-        max_spread: Some(Decimal::percent(1)),
+        belief_price: Some(Decimal256::percent(100)),
+        max_spread: Some(Decimal256::percent(1)),
         to: None,
+        ask: Denom::from(IBC_TOKEN.to_string()),
     };
 
     let res = execute(deps.as_mut(), env, info, msg)?;
@@ -210,32 +259,15 @@ fn swap(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
             .map(|it| it.msg)
             .collect::<Vec<CosmosMsg>>(),
         [CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: ROUTER.to_string(),
-            msg: to_binary(&RouterExecuteMsg::ExecuteSwapOperations {
-                operations: vec![
-                    SwapOperation::AstroSwap {
-                        offer_asset_info: AssetInfo::NativeToken {
-                            denom: IBC_TOKEN.to_string(),
-                        },
-                        ask_asset_info: AssetInfo::Token {
-                            contract_addr: Addr::unchecked(TOKEN_2.to_string())
-                        },
-                    },
-                    SwapOperation::AstroSwap {
-                        offer_asset_info: AssetInfo::Token {
-                            contract_addr: Addr::unchecked(TOKEN_2.to_string())
-                        },
-                        ask_asset_info: AssetInfo::Token {
-                            contract_addr: Addr::unchecked(TOKEN_1.to_string())
-                        }
-                    },
-                ],
-                minimum_receive: Some(Uint128::from(99u128)),
-                to: Some(USER_1.to_string()),
-                max_spread: Some(Decimal::percent(1))
+            contract_addr: format!("{0}|{1}", IBC_TOKEN, TOKEN_2),
+            msg: to_binary(&FinExecuteMsg::Swap {
+                offer_asset: Some(Coin { denom: TOKEN_2.to_string(), amount: Uint128::from(100u128) }),
+                belief_price: Some(Decimal256::from_str("1")?),
+                max_spread: Some(Decimal256::from_str("0.01")?),
+                to: Some(Addr::unchecked(USER_1.to_string())),
             })?,
             funds: vec![Coin {
-                denom: IBC_TOKEN.to_string(),
+                denom: TOKEN_2.to_string(),
                 amount: Uint128::from(100u128),
             }],
         }),]

@@ -34,3 +34,4 @@ kujira = "0.7.21"
 cosmwasm-schema = "1.0.0"
 cw-multi-test = "0.13.4"
 proptest = "0.10.1"
+cw20 = {version = "0.13.4"}

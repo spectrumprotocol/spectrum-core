@@ -17,7 +17,7 @@ use spectrum::router::Router;
 /// Returns the [`Response`] with the specified attributes if the operation was successful, or a [`ContractError`] if the contract was not created.
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
-    deps: DepsMut,
+    deps: DepsMut<KujiraQuery>,
     _env: Env,
     _info: MessageInfo,
     msg: InstantiateMsg,
@@ -36,7 +36,7 @@ pub fn instantiate(
 /// Exposes execute functions available in the contract.
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
-    deps: DepsMut,
+    deps: DepsMut<KujiraQuery>,
     env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
@@ -62,7 +62,7 @@ pub fn execute(
 /// Performs rewards compounding to LP token. Sender must do token approval upon calling this function.
 #[allow(clippy::too_many_arguments)]
 fn compound(
-    deps: DepsMut,
+    deps: DepsMut<KujiraQuery>,
     env: Env,
     info: MessageInfo,
     market_maker: String,
@@ -120,7 +120,7 @@ fn compound(
 /// # Description
 /// Handle the callbacks describes in the [`CallbackMsg`]. Returns an [`ContractError`] on failure, otherwise returns the [`Response`]
 fn handle_callback(
-    deps: DepsMut,
+    deps: DepsMut<KujiraQuery>,
     env: Env,
     info: MessageInfo,
     msg: CallbackMsg,
@@ -147,7 +147,7 @@ fn handle_callback(
 /// # Description
 /// Performs optimal swap of assets in the pair contract.
 fn optimal_swap(
-    deps: DepsMut,
+    deps: DepsMut<KujiraQuery>,
     env: Env,
     _info: MessageInfo,
     pair: Pair,
@@ -206,7 +206,7 @@ fn calculate_optimal_swap(
 /// ## Description
 /// Provides liquidity on the pair contract to get LP token.
 fn provide_liquidity(
-    deps: DepsMut,
+    deps: DepsMut<KujiraQuery>,
     env: Env,
     _info: MessageInfo,
     market_maker: MarketMaker,
