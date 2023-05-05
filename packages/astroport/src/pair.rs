@@ -45,6 +45,7 @@ pub enum ExecuteMsg {
     /// Swap performs a swap in the pool
     Swap {
         offer_asset: Asset,
+        #[serde(skip_serializing_if = "Option::is_none")]
         ask_asset_info: Option<AssetInfo>,
         belief_price: Option<Decimal>,
         max_spread: Option<Decimal>,
@@ -71,6 +72,7 @@ pub enum ExecuteMsg {
 pub enum Cw20HookMsg {
     /// Swap a given amount of asset
     Swap {
+        #[serde(skip_serializing_if = "Option::is_none")]
         ask_asset_info: Option<AssetInfo>,
         belief_price: Option<Decimal>,
         max_spread: Option<Decimal>,
@@ -103,6 +105,7 @@ pub enum QueryMsg {
     #[returns(SimulationResponse)]
     Simulation {
         offer_asset: Asset,
+        #[serde(skip_serializing_if = "Option::is_none")]
         ask_asset_info: Option<AssetInfo>,
     },
     /// Returns information about cumulative prices in a [`ReverseSimulationResponse`] object.
