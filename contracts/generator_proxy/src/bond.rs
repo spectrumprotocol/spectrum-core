@@ -1,14 +1,14 @@
 use std::cmp;
 use std::collections::HashMap;
 use cosmwasm_std::{Addr, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, QuerierWrapper, Response, StdError, StdResult, Uint128};
-use astroport::asset::{Asset, AssetInfo, token_asset};
+use astroport::asset::{Asset, AssetInfo, AssetInfoExt, token_asset};
 use astroport::querier::query_token_balance;
 use crate::error::ContractError;
 use astroport::generator::{PendingTokenResponse, UserInfoV2};
 use astroport::generator::RestrictedVector;
 use spectrum::adapters::asset::AssetEx;
 use crate::astro_generator::GeneratorEx;
-use crate::model::{CallbackMsg, Config, PoolInfo, RewardInfo, UserInfo};
+use crate::model::{CallbackMsg, Config, get_asset_info, PoolInfo, RewardInfo, UserInfo};
 use crate::state::{CONFIG, POOL_INFO, REWARD_INFO, USER_INFO};
 
 pub fn execute_deposit(
@@ -458,7 +458,7 @@ pub fn callback_claim_rewards(
         reward_info.reconciled_amount = reward_info.reconciled_amount.checked_sub(*amount)?;
         REWARD_INFO.save(deps.storage, token, &reward_info)?;
 
-        let asset = token_asset(token.clone(), *amount);
+        let asset = get_asset_info(deps.api, token).with_balance(*amount);
         messages.push(asset.transfer_msg(&staker_addr)?);
     }
     user_info.pending_rewards = RestrictedVector::default();
@@ -539,7 +539,7 @@ pub fn query_pending_token(
         if addr == &config.astro_token {
             pending = *amount;
         } else {
-            pending_on_proxy.push(token_asset(addr.clone(), *amount));
+            pending_on_proxy.push(get_asset_info(deps.api, addr).with_balance(*amount));
         }
     }
 

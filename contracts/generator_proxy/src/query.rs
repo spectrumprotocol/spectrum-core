@@ -1,4 +1,4 @@
-use cosmwasm_std::{Deps, Env, StdError, StdResult};
+use cosmwasm_std::{Addr, Deps, Env, StdError, StdResult};
 use crate::bond::reconcile_to_user_info;
 use crate::model::{PoolInfo, RewardInfo, StakerInfo, StakerInfoResponse, StakingState, UserInfo, UserInfoResponse};
 use crate::staking::{reconcile_staker_income, reconcile_to_staker_info};
@@ -36,7 +36,7 @@ pub fn query_reward_info(
     _env: Env,
     token: String,
 ) -> StdResult<RewardInfo> {
-    let token = deps.api.addr_validate(&token)?;
+    let token = Addr::unchecked(&token);
     REWARD_INFO.load(deps.storage, &token)
 }
 

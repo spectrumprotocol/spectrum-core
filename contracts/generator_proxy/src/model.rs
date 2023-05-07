@@ -34,13 +34,17 @@ pub struct Config {
     pub boost_fee: Decimal,
 }
 
+pub fn get_asset_info(api: &dyn Api, addr: &Addr) -> AssetInfo {
+    if api.addr_validate(addr.as_ref()).is_ok() {
+        AssetInfo::Token { contract_addr: addr.clone() }
+    } else {
+        AssetInfo::NativeToken { denom: addr.to_string() }
+    }
+}
+
 impl Config {
     pub fn get_astro_asset_info(&self, api: &dyn Api) -> AssetInfo {
-        if api.addr_validate(self.astro_token.as_ref()).is_ok() {
-            AssetInfo::Token { contract_addr: self.astro_token.clone() }
-        } else {
-            AssetInfo::NativeToken { denom: self.astro_token.to_string() }
-        }
+        get_asset_info(api, &self.astro_token)
     }
 }
 
