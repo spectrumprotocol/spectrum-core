@@ -13,7 +13,11 @@ use cosmwasm_std::{
     from_binary, to_binary, Addr, Coin, CosmosMsg, Decimal, OwnedDeps, Response, StdError,
     Timestamp, Uint128, WasmMsg,
 };
-use cw20::{AllAccountsResponse, AllAllowancesResponse, AllowanceInfo, AllowanceResponse, BalanceResponse, Cw20ExecuteMsg, Cw20ReceiveMsg, Expiration, Logo, MarketingInfoResponse, MinterResponse, TokenInfoResponse};
+use cw20::{
+    AllAccountsResponse, AllAllowancesResponse, AllowanceInfo, AllowanceResponse, BalanceResponse,
+    Cw20ExecuteMsg, Cw20ReceiveMsg, Expiration, Logo, MarketingInfoResponse, MinterResponse,
+    TokenInfoResponse,
+};
 use spectrum::adapters::generator::Generator;
 use spectrum::adapters::pair::Pair;
 use spectrum::astroport_farm::{
@@ -321,8 +325,7 @@ fn owner(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<
     assert_eq!(0, res.messages.len());
 
     // query config
-    let config: Config =
-        from_binary(&query(deps.as_ref(), env.clone(), QueryMsg::Config {})?)?;
+    let config: Config = from_binary(&query(deps.as_ref(), env.clone(), QueryMsg::Config {})?)?;
     assert_eq!(OWNER, config.owner);
     Ok(())
 }
@@ -388,10 +391,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                     deposit_time: 101,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(100000u128),
-                    deposit_costs: vec![
-                        Uint128::from(100000u128),
-                        Uint128::from(100000u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(100000u128), Uint128::from(100000u128)],
                 }
             }
         }
@@ -450,10 +450,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                     deposit_time: 102,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(50000u128),
-                    deposit_costs: vec![
-                        Uint128::from(50000u128),
-                        Uint128::from(50000u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(50000u128), Uint128::from(50000u128)],
                 }
             }
         }
@@ -492,10 +489,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                     deposit_time: 101,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(120000u128),
-                    deposit_costs: vec![
-                        Uint128::from(100000u128),
-                        Uint128::from(100000u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(100000u128), Uint128::from(100000u128)],
                 }
             }
         }
@@ -517,10 +511,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                     deposit_time: 102,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(60000u128),
-                    deposit_costs: vec![
-                        Uint128::from(50000u128),
-                        Uint128::from(50000u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(50000u128), Uint128::from(50000u128)],
                 }
             }
         }
@@ -594,10 +585,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                     deposit_time: 101,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(60000u128),
-                    deposit_costs: vec![
-                        Uint128::from(50000u128),
-                        Uint128::from(50000u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(50000u128), Uint128::from(50000u128)],
                 }
             }
         }
@@ -619,10 +607,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                     deposit_time: 102,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(60000u128),
-                    deposit_costs: vec![
-                        Uint128::from(50000u128),
-                        Uint128::from(50000u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(50000u128), Uint128::from(50000u128)],
                 }
             }
         }
@@ -704,10 +689,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                     deposit_time: 101,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(60000u128),
-                    deposit_costs: vec![
-                        Uint128::from(50000u128),
-                        Uint128::from(50000u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(50000u128), Uint128::from(50000u128)],
                 }
             }
         }
@@ -747,10 +729,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
     };
 
     let res = execute(deps.as_mut(), env.clone(), info, msg.clone());
-    assert_error(
-        res,
-        "No funds sent",
-    );
+    assert_error(res, "Must send reserve token 'ibc/stablecoin'");
 
     let info = mock_info(
         USER_1,
@@ -940,10 +919,7 @@ fn bond(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                     deposit_time: 33448,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(70000u128),
-                    deposit_costs: vec![
-                        Uint128::from(59999u128),
-                        Uint128::from(59999u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(59999u128), Uint128::from(59999u128)],
                 }
             }
         }
@@ -1001,10 +977,7 @@ fn deposit_time(
                     deposit_time: 300000,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(9999u128),
-                    deposit_costs: vec![
-                        Uint128::from(9999u128),
-                        Uint128::from(9999u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(9999u128), Uint128::from(9999u128)],
                 }
             }
         }
@@ -1028,10 +1001,7 @@ fn deposit_time(
                     deposit_time: 300000,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(10311u128),
-                    deposit_costs: vec![
-                        Uint128::from(9999u128),
-                        Uint128::from(9999u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(9999u128), Uint128::from(9999u128)],
                 }
             }
         }
@@ -1053,10 +1023,7 @@ fn deposit_time(
                     deposit_time: 33448,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(74375u128),
-                    deposit_costs: vec![
-                        Uint128::from(59999u128),
-                        Uint128::from(59999u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(59999u128), Uint128::from(59999u128)],
                 }
             }
         }
@@ -1081,10 +1048,7 @@ fn deposit_time(
                     deposit_time: 300000,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(10624u128),
-                    deposit_costs: vec![
-                        Uint128::from(9999u128),
-                        Uint128::from(9999u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(9999u128), Uint128::from(9999u128)],
                 }
             }
         }
@@ -1147,10 +1111,7 @@ fn deposit_time(
                     deposit_time: 33448,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(74689u128),
-                    deposit_costs: vec![
-                        Uint128::from(59999u128),
-                        Uint128::from(59999u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(59999u128), Uint128::from(59999u128)],
                 }
             }
         }
@@ -1353,9 +1314,7 @@ fn callback(
     Ok(())
 }
 
-fn cw20(
-    deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>,
-) -> Result<(), ContractError> {
+fn cw20(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(), ContractError> {
     let mut env = mock_env();
 
     // no amount cannot transfer
@@ -1397,10 +1356,7 @@ fn cw20(
                     deposit_time: 1571797419,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(199999u128),
-                    deposit_costs: vec![
-                        Uint128::from(199999u128),
-                        Uint128::from(199999u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(199999u128), Uint128::from(199999u128)],
                 }
             }
         }
@@ -1418,15 +1374,14 @@ fn cw20(
             .into_iter()
             .map(|it| it.msg)
             .collect::<Vec<CosmosMsg>>(),
-        []);
+        []
+    );
 
     // send to user2
     let msg = ExecuteMsg::Send {
         amount: Uint128::from(50000u128),
         contract: FEE_COLLECTOR_2.to_string(),
-        msg: to_binary(&Cw20HookMsg::Bond {
-            staker_addr: None,
-        })?,
+        msg: to_binary(&Cw20HookMsg::Bond { staker_addr: None })?,
     };
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg)?;
     assert_eq!(
@@ -1434,19 +1389,16 @@ fn cw20(
             .into_iter()
             .map(|it| it.msg)
             .collect::<Vec<CosmosMsg>>(),
-        [
-            CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: FEE_COLLECTOR_2.to_string(),
-                msg: to_binary(&ExecuteMsg::Receive(Cw20ReceiveMsg {
-                    sender: USER_3.to_string(),
-                    amount: Uint128::from(50000u128),
-                    msg: to_binary(&Cw20HookMsg::Bond {
-                        staker_addr: None,
-                    })?,
-                }))?,
-                funds: vec![],
-            })
-        ]);
+        [CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: FEE_COLLECTOR_2.to_string(),
+            msg: to_binary(&ExecuteMsg::Receive(Cw20ReceiveMsg {
+                sender: USER_3.to_string(),
+                amount: Uint128::from(50000u128),
+                msg: to_binary(&Cw20HookMsg::Bond { staker_addr: None })?,
+            }))?,
+            funds: vec![],
+        })]
+    );
 
     // deposit time is mixed between old & new
     let msg = QueryMsg::RewardInfo {
@@ -1464,10 +1416,7 @@ fn cw20(
                     deposit_time: 811389522,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(138708u128),
-                    deposit_costs: vec![
-                        Uint128::from(124018u128),
-                        Uint128::from(124018u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(124018u128), Uint128::from(124018u128)],
                 }
             }
         }
@@ -1489,10 +1438,7 @@ fn cw20(
                     deposit_time: 1571797419,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(64019u128),
-                    deposit_costs: vec![
-                        Uint128::from(64019u128),
-                        Uint128::from(64019u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(64019u128), Uint128::from(64019u128)],
                 }
             }
         }
@@ -1513,17 +1459,14 @@ fn cw20(
                     deposit_time: 1571797419,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(71960u128),
-                    deposit_costs: vec![
-                        Uint128::from(71960u128),
-                        Uint128::from(71960u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(71960u128), Uint128::from(71960u128)],
                 }
             }
         }
     );
 
     let msg = QueryMsg::Balance {
-        address: FEE_COLLECTOR_2.to_string()
+        address: FEE_COLLECTOR_2.to_string(),
     };
     let res: BalanceResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
     assert_eq!(
@@ -1566,10 +1509,7 @@ fn cw20(
     // mint
     let msg = QueryMsg::Minter {};
     let res: Option<MinterResponse> = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
-    assert_eq!(
-        res,
-        None,
-    );
+    assert_eq!(res, None,);
 
     let msg = ExecuteMsg::Mint {
         recipient: USER_1.to_string(),
@@ -1593,15 +1533,12 @@ fn cw20(
 
     let msg = QueryMsg::DownloadLogo {};
     let res = query(deps.as_ref(), env.clone(), msg).expect_err("should error");
-    assert_eq!(
-        res,
-        StdError::not_found("logo"),
-    );
+    assert_eq!(res, StdError::not_found("logo"),);
 
     let msg = ExecuteMsg::UpdateMarketing {
         project: None,
         description: Some("blah".to_string()),
-        marketing: None
+        marketing: None,
     };
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
     assert_error(res, "Unauthorized");
@@ -1633,10 +1570,7 @@ fn cw20(
                     deposit_time: 1571797419,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(135980u128),
-                    deposit_costs: vec![
-                        Uint128::from(135979u128),
-                        Uint128::from(135979u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(135979u128), Uint128::from(135979u128)],
                 }
             }
         }
@@ -1660,7 +1594,8 @@ fn cw20(
             .into_iter()
             .map(|it| it.msg)
             .collect::<Vec<CosmosMsg>>(),
-        []);
+        []
+    );
 
     deps.querier.set_balance(
         GENERATOR_PROXY.to_string(),
@@ -1683,10 +1618,7 @@ fn cw20(
                     deposit_time: 1571797419,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(32009u128),
-                    deposit_costs: vec![
-                        Uint128::from(32009u128),
-                        Uint128::from(32009u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(32009u128), Uint128::from(32009u128)],
                 }
             }
         }
@@ -1697,7 +1629,7 @@ fn cw20(
     let msg = ExecuteMsg::IncreaseAllowance {
         spender: USER_3.to_string(),
         amount: Uint128::from(100000u128),
-        expires: Some(Expiration::AtHeight(env.block.height + 1))
+        expires: Some(Expiration::AtHeight(env.block.height + 1)),
     };
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
     assert_error(res, "Cannot set to own account");
@@ -1705,7 +1637,7 @@ fn cw20(
     let msg = ExecuteMsg::IncreaseAllowance {
         spender: FEE_COLLECTOR_2.to_string(),
         amount: Uint128::from(100000u128),
-        expires: Some(Expiration::AtHeight(env.block.height + 1))
+        expires: Some(Expiration::AtHeight(env.block.height + 1)),
     };
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg)?;
     assert_eq!(
@@ -1713,11 +1645,12 @@ fn cw20(
             .into_iter()
             .map(|it| it.msg)
             .collect::<Vec<CosmosMsg>>(),
-        []);
+        []
+    );
 
     let msg = QueryMsg::Allowance {
         owner: USER_3.to_string(),
-        spender: FEE_COLLECTOR_2.to_string()
+        spender: FEE_COLLECTOR_2.to_string(),
     };
     let res: AllowanceResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
     assert_eq!(
@@ -1731,19 +1664,17 @@ fn cw20(
     let msg = QueryMsg::AllAllowances {
         owner: USER_3.to_string(),
         start_after: None,
-        limit: None
+        limit: None,
     };
     let res: AllAllowancesResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
     assert_eq!(
         res,
         AllAllowancesResponse {
-            allowances: vec![
-                AllowanceInfo {
-                    spender: FEE_COLLECTOR_2.to_string(),
-                    allowance: Uint128::from(100000u128),
-                    expires: Expiration::AtHeight(env.block.height + 1),
-                }
-            ]
+            allowances: vec![AllowanceInfo {
+                spender: FEE_COLLECTOR_2.to_string(),
+                allowance: Uint128::from(100000u128),
+                expires: Expiration::AtHeight(env.block.height + 1),
+            }]
         }
     );
 
@@ -1788,15 +1719,14 @@ fn cw20(
             .into_iter()
             .map(|it| it.msg)
             .collect::<Vec<CosmosMsg>>(),
-        []);
+        []
+    );
 
     let msg = ExecuteMsg::SendFrom {
         owner: USER_3.to_string(),
         contract: FEE_COLLECTOR_2.to_string(),
         amount: Uint128::from(20000u128),
-        msg: to_binary(&Cw20HookMsg::Bond {
-            staker_addr: None,
-        })?,
+        msg: to_binary(&Cw20HookMsg::Bond { staker_addr: None })?,
     };
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg)?;
     assert_eq!(
@@ -1804,19 +1734,16 @@ fn cw20(
             .into_iter()
             .map(|it| it.msg)
             .collect::<Vec<CosmosMsg>>(),
-        [
-            CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: FEE_COLLECTOR_2.to_string(),
-                msg: to_binary(&ExecuteMsg::Receive(Cw20ReceiveMsg {
-                    sender: FEE_COLLECTOR_2.to_string(),
-                    amount: Uint128::from(20000u128),
-                    msg: to_binary(&Cw20HookMsg::Bond {
-                        staker_addr: None,
-                    })?,
-                }))?,
-                funds: vec![],
-            })
-        ]);
+        [CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: FEE_COLLECTOR_2.to_string(),
+            msg: to_binary(&ExecuteMsg::Receive(Cw20ReceiveMsg {
+                sender: FEE_COLLECTOR_2.to_string(),
+                amount: Uint128::from(20000u128),
+                msg: to_binary(&Cw20HookMsg::Bond { staker_addr: None })?,
+            }))?,
+            funds: vec![],
+        })]
+    );
 
     let msg = QueryMsg::RewardInfo {
         staker_addr: USER_3.to_string(),
@@ -1833,10 +1760,7 @@ fn cw20(
                     deposit_time: 1571797419,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(84764u128),
-                    deposit_costs: vec![
-                        Uint128::from(84764u128),
-                        Uint128::from(84764u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(84764u128), Uint128::from(84764u128)],
                 }
             }
         }
@@ -1852,7 +1776,8 @@ fn cw20(
             .into_iter()
             .map(|it| it.msg)
             .collect::<Vec<CosmosMsg>>(),
-        []);
+        []
+    );
 
     deps.querier.set_balance(
         GENERATOR_PROXY.to_string(),
@@ -1875,10 +1800,7 @@ fn cw20(
                     deposit_time: 1571797419,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(83223u128),
-                    deposit_costs: vec![
-                        Uint128::from(83223u128),
-                        Uint128::from(83223u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(83223u128), Uint128::from(83223u128)],
                 }
             }
         }
@@ -1899,10 +1821,7 @@ fn cw20(
                     deposit_time: 1571797419,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(59157u128),
-                    deposit_costs: vec![
-                        Uint128::from(59156u128),
-                        Uint128::from(59156u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(59156u128), Uint128::from(59156u128)],
                 }
             }
         }
@@ -1920,20 +1839,16 @@ fn cw20(
             .into_iter()
             .map(|it| it.msg)
             .collect::<Vec<CosmosMsg>>(),
-        []);
+        []
+    );
 
     let msg = QueryMsg::AllAllowances {
         owner: USER_3.to_string(),
         start_after: None,
-        limit: None
+        limit: None,
     };
     let res: AllAllowancesResponse = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
-    assert_eq!(
-        res,
-        AllAllowancesResponse {
-            allowances: vec![]
-        }
-    );
+    assert_eq!(res, AllAllowancesResponse { allowances: vec![] });
 
     Ok(())
 }
@@ -1947,17 +1862,25 @@ fn test_duplicate_native_assets() -> Result<(), ContractError> {
     Ok(())
 }
 
-fn poc_native_funds(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(), ContractError> {
+fn poc_native_funds(
+    deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>,
+) -> Result<(), ContractError> {
     let mut env = mock_env();
     env.block.height = 600;
 
     // user_1 sends 40_000 ibc/stablecoin
-    let native_send = Coin {
-        denom: IBC_TOKEN.to_string(),
-        amount: Uint128::from(40_000_u128),
-    };
+    let native_send = [
+        Coin {
+            denom: IBC_TOKEN.to_string(),
+            amount: Uint128::from(40_000_u128),
+        },
+        Coin {
+            denom: ASTRO_TOKEN.to_string(),
+            amount: Uint128::from(30_000_u128),
+        },
+    ];
 
-    let info = mock_info(USER_1, &[native_send.clone(), native_send]);
+    let info = mock_info(USER_1, &native_send);
 
     // user_1 provide duplicate native funds in the `assets` vector
     let assets = vec![
@@ -1971,14 +1894,14 @@ fn poc_native_funds(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>)
             info: AssetInfo::NativeToken {
                 denom: ASTRO_TOKEN.to_string(),
             },
-            amount: Uint128::from(40_000u128),
+            amount: Uint128::from(30_000u128),
         },
         Asset {
             info: AssetInfo::NativeToken {
                 denom: IBC_TOKEN.to_string(),
             },
             amount: Uint128::from(40_000u128),
-        }
+        },
     ];
 
     let msg = ExecuteMsg::BondAssets {
@@ -1989,7 +1912,7 @@ fn poc_native_funds(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>)
     };
 
     let res = execute(deps.as_mut(), env.clone(), info, msg.clone());
-    assert_error(res, "Duplicated asset");
+    assert_error(res, "Native token balance mismatch between the argument and the transferred");
 
     Ok(())
 }
@@ -2004,8 +1927,8 @@ fn test_self_transfer() -> Result<(), ContractError> {
 }
 
 fn poc_self_transfer(
-    deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(), ContractError> {
-
+    deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>,
+) -> Result<(), ContractError> {
     let mut env = mock_env();
     env.block.time = Timestamp::from_seconds(101);
 
@@ -2041,10 +1964,7 @@ fn poc_self_transfer(
                     deposit_time: 101,
                     staking_token: LP_TOKEN.to_string(),
                     bond_amount: Uint128::from(100000u128),
-                    deposit_costs: vec![
-                        Uint128::from(100000u128),
-                        Uint128::from(100000u128),
-                    ],
+                    deposit_costs: vec![Uint128::from(100000u128), Uint128::from(100000u128)],
                 }
             }
         }

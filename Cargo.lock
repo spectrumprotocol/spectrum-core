@@ -18,35 +18,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "ap-native-coin-registry"
-version = "1.0.0"
-source = "git+https://github.com/astroport-fi/astroport-core?branch=merge/release#ff923ddac6b99c10bed53c7af6c8c4a5d2f5995e"
-dependencies = [
- "cosmwasm-schema",
- "cosmwasm-std",
- "cw-storage-plus",
-]
-
-[[package]]
 name = "astroport"
 version = "2.3.0"
 dependencies = [
- "ap-native-coin-registry 1.0.0",
- "cosmwasm-schema",
- "cosmwasm-std",
- "cw-storage-plus",
- "cw-utils",
- "cw20",
- "itertools",
- "uint",
-]
-
-[[package]]
-name = "astroport"
-version = "2.4.0"
-source = "git+https://github.com/astroport-fi/astroport-core?branch=merge/release#ff923ddac6b99c10bed53c7af6c8c4a5d2f5995e"
-dependencies = [
- "ap-native-coin-registry 1.0.0 (git+https://github.com/astroport-fi/astroport-core?branch=merge/release)",
+ "ap-native-coin-registry",
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw-storage-plus",
@@ -60,7 +35,7 @@ dependencies = [
 name = "astroport-generator-proxy-to-spec"
 version = "1.0.0"
 dependencies = [
- "astroport 2.3.0",
+ "astroport",
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw-storage-plus",
@@ -75,7 +50,7 @@ dependencies = [
 name = "astroport-governance"
 version = "1.2.0"
 dependencies = [
- "astroport 2.4.0",
+ "astroport",
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw-storage-plus",
@@ -946,7 +921,7 @@ dependencies = [
 name = "spectrum"
 version = "1.0.0"
 dependencies = [
- "astroport 2.3.0",
+ "astroport",
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw-storage-plus",
@@ -960,7 +935,7 @@ dependencies = [
 name = "spectrum-astroport-farm"
 version = "1.0.0"
 dependencies = [
- "astroport 2.3.0",
+ "astroport",
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw-storage-plus",
@@ -975,7 +950,7 @@ dependencies = [
 name = "spectrum-compound-proxy"
 version = "1.0.0"
 dependencies = [
- "astroport 2.3.0",
+ "astroport",
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw-multi-test",
@@ -992,7 +967,7 @@ dependencies = [
 name = "spectrum-fees-collector"
 version = "1.0.0"
 dependencies = [
- "astroport 2.3.0",
+ "astroport",
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw-multi-test",
@@ -1008,7 +983,7 @@ dependencies = [
 name = "spectrum-generator-proxy"
 version = "1.0.0"
 dependencies = [
- "astroport 2.3.0",
+ "astroport",
  "astroport-governance",
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -1038,7 +1013,7 @@ dependencies = [
 name = "spectrum-pair-proxy"
 version = "1.0.0"
 dependencies = [
- "astroport 2.3.0",
+ "astroport",
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw-multi-test",

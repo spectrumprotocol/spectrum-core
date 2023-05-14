@@ -36,7 +36,7 @@ pub fn query_reward_info(
     _env: Env,
     token: String,
 ) -> StdResult<RewardInfo> {
-    let token = Addr::unchecked(&token);
+    let token = Addr::unchecked(token);
     REWARD_INFO.load(deps.storage, &token)
 }
 

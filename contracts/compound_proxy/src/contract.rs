@@ -116,7 +116,7 @@ pub fn execute(
 pub fn compound(
     deps: DepsMut,
     env: Env,
-    info: MessageInfo,
+    mut info: MessageInfo,
     rewards: Vec<Asset>,
     to: Option<Addr>,
     no_swap: Option<bool>,
@@ -128,7 +128,7 @@ pub fn compound(
     let mut native_reward_map: HashMap<AssetInfo, Uint128> = HashMap::new();
     // Swap reward to asset in the pair
     for reward in rewards {
-        reward.deposit_asset(&info, &env.contract.address, &mut messages)?;
+        reward.deposit_asset(&mut info, &env.contract.address, &mut messages)?;
 
         let pair_proxy = PAIR_PROXY.may_load(deps.storage, reward.info.to_string())?;
         if let Some(pair_proxy) = pair_proxy {
