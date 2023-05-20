@@ -1,5 +1,6 @@
 pub mod asset;
 pub mod common;
+pub mod cosmwasm_ext;
 pub mod factory;
 pub mod generator;
 pub mod generator_proxy;
@@ -7,19 +8,16 @@ pub mod maker;
 pub mod oracle;
 pub mod pair;
 pub mod pair_bonded;
-pub mod pair_stable_bluna;
+pub mod pair_concentrated;
 pub mod querier;
-pub mod restricted_vector;
 pub mod router;
 pub mod staking;
 pub mod token;
 pub mod vesting;
-pub mod whitelist;
 pub mod xastro_token;
 
 #[cfg(test)]
 mod mock_querier;
-
 #[cfg(test)]
 mod testing;
 
@@ -62,19 +60,6 @@ mod decimal_checked_ops {
             }
         }
     }
-}
-
-use cosmwasm_std::{Decimal, Decimal256, StdError, StdResult};
-
-/// ## Description
-/// Converts [`Decimal`] to [`Decimal256`].
-pub fn decimal2decimal256(dec_value: Decimal) -> StdResult<Decimal256> {
-    Decimal256::from_atomics(dec_value.atomics(), dec_value.decimal_places()).map_err(|_| {
-        StdError::generic_err(format!(
-            "Failed to convert Decimal {} to Decimal256",
-            dec_value
-        ))
-    })
 }
 
 pub use decimal_checked_ops::DecimalCheckedOps;

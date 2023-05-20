@@ -5,18 +5,18 @@ use cosmwasm_std::{attr, Addr, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Respo
 use crate::error::ContractError;
 use crate::state::{ScalingOperation, CONFIG, REWARD, STATE, Config};
 
-use cw20::{Expiration};
+use cw20::Expiration;
 
 use spectrum::adapters::asset::AssetEx;
 use spectrum::astroport_farm::{RewardInfoResponse, RewardInfoResponseItem, CallbackMsg};
-use spectrum::helper::{ScalingUint128};
+use spectrum::helper::ScalingUint128;
 
 /// ## Description
 /// Send assets to compound proxy to create LP token and bond received LP token on behalf of sender.
 pub fn bond_assets(
     deps: DepsMut,
     env: Env,
-    info: MessageInfo,
+    mut info: MessageInfo,
     assets: Vec<Asset>,
     minimum_receive: Option<Uint128>,
     no_swap: Option<bool>,
@@ -28,16 +28,8 @@ pub fn bond_assets(
     let mut messages: Vec<CosmosMsg> = vec![];
     let mut funds: Vec<Coin> = vec![];
     
-    let mut low_asset = &assets[0];
-    for asset in assets[1..].iter() {
-        if asset.eq(low_asset) {
-            return Err(ContractError::DuplicatedAsset {});
-        }
-        low_asset = &asset;
-    }
-    
     for asset in assets.iter() {
-        asset.deposit_asset(&info, &env.contract.address, &mut messages)?;
+        asset.deposit_asset(&mut info, &env.contract.address, &mut messages)?;
         if !asset.amount.is_zero() {
             if asset.is_native_token() {
                 funds.push(Coin {

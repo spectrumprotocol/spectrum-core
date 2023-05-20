@@ -120,8 +120,8 @@ pub fn query_compound_simulation(
                 )
             }
             PairType::Stable {} => {
-                let token_precision_0 = query_token_precision(&deps.querier, &asset_a_info)?;
-                let token_precision_1 = query_token_precision(&deps.querier, &asset_b_info)?;
+                let token_precision_0 = query_token_precision(&deps.querier, &asset_a_info, &config.factory_addr)?;
+                let token_precision_1 = query_token_precision(&deps.querier, &asset_b_info, &config.factory_addr)?;
 
                 let greater_precision = token_precision_0.max(token_precision_1);
 
@@ -136,6 +136,7 @@ pub fn query_compound_simulation(
                         &AssetInfo::Token {
                             contract_addr: config.pair_info.liquidity_token,
                         },
+                        &config.factory_addr,
                     )?;
 
                     // Initial share = collateral amount
@@ -192,6 +193,9 @@ pub fn query_compound_simulation(
             }
             PairType::Custom(_) => {
                 return Err(StdError::generic_err("Custom pair type not supported"));
+            }
+            PairType::Concentrated { .. } => {
+                return Err(StdError::generic_err("Concentrated pair type not supported"));
             }
         };
 

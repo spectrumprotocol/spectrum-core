@@ -2,8 +2,9 @@ use cw_storage_plus::{Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Addr, Decimal, StdResult, Storage, Uint128};
+use cosmwasm_std::{Addr, Api, Decimal, StdResult, Storage, Uint128};
 use cw20::AllowanceResponse;
+use astroport::asset::{AssetInfo};
 use astroport::pair::PoolResponse;
 use spectrum::adapters::generator::Generator;
 use spectrum::adapters::pair::Pair;
@@ -31,6 +32,16 @@ pub struct Config {
     #[serde(default)] pub name: String,
     #[serde(default)] pub symbol: String,
     #[serde(default = "default_pair")] pub pair: Pair,
+}
+
+impl Config {
+    pub fn get_base_reward_asset_info(&self, api: &dyn Api) -> AssetInfo {
+        if api.addr_validate(self.base_reward_token.as_ref()).is_ok() {
+            AssetInfo::Token { contract_addr: self.base_reward_token.clone() }
+        } else {
+            AssetInfo::NativeToken { denom: self.base_reward_token.to_string() }
+        }
+    }
 }
 
 pub const CONFIG: Item<Config> = Item::new("config");

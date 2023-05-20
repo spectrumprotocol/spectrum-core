@@ -1,9 +1,6 @@
 use astroport::asset::{PairInfo, AssetInfo};
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADDR};
-use cosmwasm_std::{
-    from_binary, from_slice, to_binary, Addr, Coin, Empty, OwnedDeps, Querier, QuerierResult,
-    QueryRequest, SystemError, SystemResult, Uint128, WasmQuery,
-};
+use cosmwasm_std::{from_binary, from_slice, to_binary, Addr, Coin, Empty, OwnedDeps, Querier, QuerierResult, QueryRequest, SystemError, SystemResult, Uint128, WasmQuery, Binary, ContractResult};
 use std::collections::HashMap;
 
 use astroport::factory::FeeInfoResponse;
@@ -211,6 +208,26 @@ impl WasmMockQuerier {
                     }
                 }
             }
+            QueryRequest::Wasm(WasmQuery::Raw {
+                                   contract_addr,
+                                   key: _key,
+                               }) => {
+                let result = if contract_addr.eq("factory01") {
+                    to_binary(&astroport::factory::Config {
+                        owner: Addr::unchecked("owner"),
+                        token_code_id: 0,
+                        fee_address: None,
+                        generator_address: None,
+                        whitelist_code_id: 0,
+                        coin_registry_address: Addr::unchecked("coin_registry"),
+                    })
+                } else if contract_addr.eq("coin_registry") {
+                    to_binary(&6)
+                } else {
+                    Ok(Binary::default())
+                };
+                SystemResult::Ok(ContractResult::from(result))
+            },
             _ => self.base.handle_query(request),
         }
     }

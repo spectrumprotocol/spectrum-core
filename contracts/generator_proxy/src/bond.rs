@@ -1,14 +1,14 @@
 use std::cmp;
 use std::collections::HashMap;
 use cosmwasm_std::{Addr, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, QuerierWrapper, Response, StdError, StdResult, Uint128};
-use astroport::asset::{Asset, token_asset};
+use astroport::asset::{Asset, AssetInfo, AssetInfoExt, token_asset};
 use astroport::querier::query_token_balance;
 use crate::error::ContractError;
 use astroport::generator::{PendingTokenResponse, UserInfoV2};
-use astroport::restricted_vector::RestrictedVector;
+use astroport::generator::RestrictedVector;
 use spectrum::adapters::asset::AssetEx;
 use crate::astro_generator::GeneratorEx;
-use crate::model::{CallbackMsg, Config, PoolInfo, RewardInfo, UserInfo};
+use crate::model::{CallbackMsg, Config, get_asset_info, PoolInfo, RewardInfo, UserInfo};
 use crate::state::{CONFIG, POOL_INFO, REWARD_INFO, USER_INFO};
 
 pub fn execute_deposit(
@@ -141,13 +141,13 @@ pub fn execute_claim_rewards(
 
 fn fetch_balance(
     querier: &QuerierWrapper,
-    config: &Config,
+    astro_token: &AssetInfo,
     contract_addr: &Addr,
     astro_user_info: &UserInfoV2,
 ) -> StdResult<Vec<(Addr, Uint128)>> {
-    let astro_amount = query_token_balance(querier, &config.astro_token, contract_addr)?;
+    let astro_amount = astro_token.query_pool(querier, contract_addr)?;
     let mut balances: Vec<(Addr, Uint128)> = vec![
-        (config.astro_token.clone(), astro_amount)
+        (Addr::unchecked(astro_token.to_string()), astro_amount)
     ];
     for (token, _) in astro_user_info.reward_debt_proxy.inner_ref() {
         let token_amount = query_token_balance(querier, token, contract_addr)?;
@@ -167,13 +167,14 @@ fn reconcile_claimed_by_others(
     // load
     let pool_info_op = POOL_INFO.may_load(deps.storage, lp_token)?
         .filter(|pool_info| !pool_info.total_bond_share.is_zero());
+    let astro_token = config.get_astro_asset_info(deps.api);
     let mut pool_info = match pool_info_op {
         None => {
-            let balances = fetch_balance(&deps.querier, config, &env.contract.address, astro_user_info)?;
+            let balances = fetch_balance(&deps.querier, &astro_token, &env.contract.address, astro_user_info)?;
             return Ok((true, balances))
         },
         Some(pool_info) if pool_info.last_reconcile == env.block.height => {
-            let balances = fetch_balance(&deps.querier, config, &env.contract.address, astro_user_info)?;
+            let balances = fetch_balance(&deps.querier, &astro_token, &env.contract.address, astro_user_info)?;
             return Ok((false, balances))
         },
         Some(pool_info) => pool_info,
@@ -182,7 +183,7 @@ fn reconcile_claimed_by_others(
     // reconcile astro
     let mut astro_reward = REWARD_INFO.may_load(deps.storage, &config.astro_token)?
         .unwrap_or_default();
-    let astro_amount = query_token_balance(&deps.querier, &config.astro_token, &env.contract.address)?;
+    let astro_amount = astro_token.query_pool(&deps.querier, &env.contract.address)?;
     let add_astro_amount = astro_amount.saturating_sub(astro_reward.reconciled_amount);
     let target_add_astro_amount = (astro_user_info.reward_user_index - pool_info.prev_reward_user_index) * astro_user_info.virtual_amount;
     let net_astro_amount = cmp::min(add_astro_amount, target_add_astro_amount);
@@ -281,7 +282,8 @@ pub fn callback_after_bond_claimed(
     let mut astro_reward = REWARD_INFO.may_load(deps.storage, &config.astro_token)?
         .unwrap_or_default();
     let prev_balance_map: HashMap<_, _> = prev_balances.into_iter().collect();
-    let astro_amount = query_token_balance(&deps.querier, &config.astro_token, &env.contract.address)?;
+    let astro_amount = config.get_astro_asset_info(deps.api)
+        .query_pool(&deps.querier, &env.contract.address)?;
     if let Some(prev_astro_amount) = prev_balance_map.get(&config.astro_token) {
         let net_astro_amount = astro_amount.checked_sub(*prev_astro_amount)?;
         if !net_astro_amount.is_zero() {
@@ -456,7 +458,7 @@ pub fn callback_claim_rewards(
         reward_info.reconciled_amount = reward_info.reconciled_amount.checked_sub(*amount)?;
         REWARD_INFO.save(deps.storage, token, &reward_info)?;
 
-        let asset = token_asset(token.clone(), *amount);
+        let asset = get_asset_info(deps.api, token).with_balance(*amount);
         messages.push(asset.transfer_msg(&staker_addr)?);
     }
     user_info.pending_rewards = RestrictedVector::default();
@@ -498,7 +500,8 @@ pub fn query_pending_token(
     // reconcile astro
     let mut astro_reward = REWARD_INFO.may_load(deps.storage, &config.astro_token)?
         .unwrap_or_default();
-    let astro_amount = query_token_balance(&deps.querier, &config.astro_token, &env.contract.address)?;
+    let astro_amount = config.get_astro_asset_info(deps.api)
+        .query_pool(&deps.querier, &env.contract.address)?;
     let add_astro_amount = astro_amount.saturating_sub(astro_reward.reconciled_amount);
     let target_add_astro_amount = (astro_user_info.reward_user_index - pool_info.prev_reward_user_index) * astro_user_info.virtual_amount;
     let net_astro_amount = cmp::min(add_astro_amount, target_add_astro_amount) + pending_token.pending;
@@ -536,7 +539,7 @@ pub fn query_pending_token(
         if addr == &config.astro_token {
             pending = *amount;
         } else {
-            pending_on_proxy.push(token_asset(addr.clone(), *amount));
+            pending_on_proxy.push(get_asset_info(deps.api, addr).with_balance(*amount));
         }
     }
 

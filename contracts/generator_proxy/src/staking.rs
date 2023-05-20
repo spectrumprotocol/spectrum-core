@@ -1,11 +1,11 @@
 use std::cmp;
 use cosmwasm_std::{Addr, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, QuerierWrapper, Response, StdResult, Uint128};
-use astroport::asset::{token_asset};
-use astroport::querier::query_token_balance;
+use astroport::asset::{AssetInfo, AssetInfoExt, token_asset};
 use astroport_governance::utils::{get_period, WEEK};
 use spectrum::adapters::asset::AssetEx;
+use crate::astro_gov::AstroGov;
 use crate::error::ContractError;
-use crate::model::{CallbackMsg, Config, ExecuteMsg, RewardInfo, StakerInfo, StakingState};
+use crate::model::{CallbackMsg, ExecuteMsg, RewardInfo, StakerInfo, StakingState};
 use crate::state::{CONFIG, REWARD_INFO, STAKER_INFO, STAKING_STATE};
 
 pub fn execute_stake(
@@ -18,12 +18,14 @@ pub fn execute_stake(
 
     // deposited token must be xastro
     let config = CONFIG.load(deps.storage)?;
-    if info.sender != config.astro_gov.xastro_token {
+    let astro_gov = config.astro_gov
+        .ok_or(ContractError::GovRequired {})?;
+    if info.sender != astro_gov.xastro_token {
         return Err(ContractError::Unauthorized {});
     }
 
     // check quota
-    let lock = config.astro_gov.query_lock(&deps.querier, env.contract.address.clone())?;
+    let lock = astro_gov.query_lock(&deps.querier, env.contract.address.clone())?;
     if lock.amount + amount > config.max_quota {
         return Err(ContractError::ExceedQuota(config.max_quota.saturating_sub(lock.amount)));
     }
@@ -31,14 +33,14 @@ pub fn execute_stake(
     // stake to voting escrow
     let mut messages: Vec<CosmosMsg> = vec![];
     if lock.amount.is_zero() {
-        let lock_msg = config.astro_gov.create_lock_msg(amount, WEEK)?;
+        let lock_msg = astro_gov.create_lock_msg(amount, WEEK)?;
         messages.push(lock_msg);
     } else {
         if lock.end <= get_period(env.block.time.seconds())? {
             let relock_msg = ExecuteMsg::Relock {}.to_cosmos_msg(&env.contract.address)?;
             messages.push(relock_msg);
         }
-        let lock_msg = config.astro_gov.extend_lock_amount_msg(amount)?;
+        let lock_msg = astro_gov.extend_lock_amount_msg(amount)?;
         messages.push(lock_msg);
     }
 
@@ -104,7 +106,10 @@ pub fn execute_relock(
     // relock
     let mut astro_reward = REWARD_INFO.load(deps.storage, &config.astro_token)?;
     let mut state = STAKING_STATE.load(deps.storage)?;
-    let lock = config.astro_gov.query_lock(&deps.querier, env.contract.address.clone())?;
+    let astro_token = config.get_astro_asset_info(deps.api);
+    let astro_gov = config.astro_gov
+        .ok_or(ContractError::GovRequired {})?;
+    let lock = astro_gov.query_lock(&deps.querier, env.contract.address.clone())?;
     let lock_amount = lock.amount.checked_sub(state.total_unstaking_amount)?;
     state.total_unstaked_amount += state.total_unstaking_amount;
     state.total_unstaking_amount = Uint128::zero();
@@ -114,7 +119,8 @@ pub fn execute_relock(
     let prev_balance = reconcile_staking_claim_by_others(
         &deps.querier,
         &env,
-        &config,
+        &astro_gov,
+        &astro_token,
         &mut astro_reward,
         &mut state)?;
 
@@ -123,12 +129,12 @@ pub fn execute_relock(
     REWARD_INFO.save(deps.storage, &config.astro_token, &astro_reward)?;
 
     Ok(Response::new()
-        .add_message(config.astro_gov.claim_msg()?)
+        .add_message(astro_gov.claim_msg()?)
         .add_message(CallbackMsg::AfterStakingClaimed {
             prev_balance,
         }.to_cosmos_msg(&env.contract.address)?)
-        .add_message(config.astro_gov.withdraw_msg()?)
-        .add_message(config.astro_gov.create_lock_msg(lock_amount, WEEK)?)
+        .add_message(astro_gov.withdraw_msg()?)
+        .add_message(astro_gov.create_lock_msg(lock_amount, WEEK)?)
     )
 
 }
@@ -136,14 +142,15 @@ pub fn execute_relock(
 fn reconcile_staking_claim_by_others(
     querier: &QuerierWrapper,
     env: &Env,
-    config: &Config,
+    astro_gov: &AstroGov,
+    astro_token: &AssetInfo,
     astro_reward: &mut RewardInfo,
     state: &mut StakingState,
 ) -> StdResult<Uint128> {
 
     // calculate claim
-    let current_period = config.astro_gov.query_last_claim_period(querier, env.contract.address.clone())?;
-    let target_add_astro_amount = config.astro_gov.calc_claim_amount(
+    let current_period = astro_gov.query_last_claim_period(querier, env.contract.address.clone())?;
+    let target_add_astro_amount = astro_gov.calc_claim_amount(
         querier,
         env.contract.address.clone(),
         state.next_claim_period,
@@ -152,7 +159,7 @@ fn reconcile_staking_claim_by_others(
     state.next_claim_period = current_period;
 
     // update amount
-    let astro_amount = query_token_balance(querier, &config.astro_token, &env.contract.address)?;
+    let astro_amount = astro_token.query_pool(querier, &env.contract.address)?;
     let add_astro_amount = astro_amount.saturating_sub(astro_reward.reconciled_amount);
     let net_astro_amount = cmp::min(add_astro_amount, target_add_astro_amount);
     astro_reward.staker_income += net_astro_amount;
@@ -174,11 +181,14 @@ pub fn callback_after_staking_claimed(
     let mut astro_reward = REWARD_INFO.load(deps.storage, &config.astro_token)?;
 
     // calculate claim
-    let current_period = config.astro_gov.query_last_claim_period(&deps.querier, env.contract.address.clone())?;
+    let astro_token = config.get_astro_asset_info(deps.api);
+    let astro_gov = config.astro_gov
+        .ok_or(ContractError::GovRequired {})?;
+    let current_period = astro_gov.query_last_claim_period(&deps.querier, env.contract.address.clone())?;
     state.next_claim_period = current_period;
 
     // update amount
-    let balance = query_token_balance(&deps.querier, &config.astro_token, env.contract.address)?;
+    let balance = astro_token.query_pool(&deps.querier, env.contract.address)?;
     let net_astro_amount = balance.checked_sub(prev_balance)?;
     astro_reward.staker_income += net_astro_amount;
     astro_reward.reconciled_amount += net_astro_amount;
@@ -208,7 +218,9 @@ pub fn execute_request_unstake(
     reconcile_staker_income(&mut astro_reward, &mut state)?;
     reconcile_to_staker_info(&state, &mut staker_info)?;
     staker_info.update_staking(&state);
-    let lock = config.astro_gov.query_lock(&deps.querier, env.contract.address)?;
+    let astro_gov = config.astro_gov
+        .ok_or(ContractError::GovRequired {})?;
+    let lock = astro_gov.query_lock(&deps.querier, env.contract.address)?;
     let share = state.calc_bond_share(lock.amount, amount, true);
     staker_info.bond_share = staker_info.bond_share.checked_sub(share)?;
     staker_info.unstaking_amount += amount;
@@ -248,7 +260,9 @@ pub fn execute_withdraw_unstaked(
     STAKING_STATE.save(deps.storage, &state)?;
 
     // message
-    let transfer_msg = token_asset(config.astro_gov.xastro_token, amount)
+    let astro_gov = config.astro_gov
+        .ok_or(ContractError::GovRequired {})?;
+    let transfer_msg = token_asset(astro_gov.xastro_token, amount)
         .transfer_msg(&info.sender)?;
     Ok(Response::new()
         .add_message(transfer_msg)
@@ -279,7 +293,8 @@ pub fn execute_claim_income(
     STAKING_STATE.save(deps.storage, &state)?;
     REWARD_INFO.save(deps.storage, &config.astro_token, &astro_reward)?;
 
-    let transfer_msg = token_asset(config.astro_token, amount)
+    let transfer_msg = config.get_astro_asset_info(deps.api)
+        .with_balance(amount)
         .transfer_msg(&info.sender)?;
     Ok(Response::new()
         .add_message(transfer_msg)

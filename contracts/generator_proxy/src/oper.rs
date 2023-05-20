@@ -1,5 +1,5 @@
 use cosmwasm_std::{CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult, Uint128};
-use astroport::asset::{token_asset};
+use astroport::asset::{AssetInfoExt};
 use spectrum::adapters::asset::AssetEx;
 use crate::error::ContractError;
 use crate::model::{Config};
@@ -81,7 +81,9 @@ pub fn execute_controller_vote(
         return Err(ContractError::Unauthorized {});
     }
 
-    let vote_msg = config.astro_gov.controller_vote_msg(votes)?;
+    let vote_msg = config.astro_gov
+        .ok_or(ContractError::GovRequired {})?
+        .controller_vote_msg(votes)?;
 
     Ok(Response::new()
         .add_message(vote_msg)
@@ -110,7 +112,11 @@ pub fn execute_send_income(
     REWARD_INFO.save(deps.storage, &config.astro_token, &reward_info)?;
 
     if !fee.is_zero() {
-        messages.push(token_asset(config.astro_token, fee).transfer_msg(&config.fee_collector)?);
+        messages.push(
+            config.get_astro_asset_info(deps.api)
+                .with_balance(fee)
+                .transfer_msg(&config.fee_collector)?
+        );
     }
 
     Ok(Response::new()

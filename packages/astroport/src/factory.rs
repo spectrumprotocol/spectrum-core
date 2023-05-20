@@ -1,12 +1,25 @@
 use crate::asset::{AssetInfo, PairInfo};
+use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Addr, Binary};
-use cw_storage_plus::Map;
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter, Result};
 
-const MAX_TOTAL_FEE_BPS: u16 = 10_000;
-const MAX_MAKER_FEE_BPS: u16 = 10_000;
+/// ## Description
+/// This structure holds the main contract parameters.
+#[cw_serde]
+pub struct Config {
+    /// Address allowed to change contract parameters
+    pub owner: Addr,
+    /// CW20 token contract code identifier
+    pub token_code_id: u64,
+    /// Generator contract address
+    pub generator_address: Option<Addr>,
+    /// Contract address to send governance fees to (the Maker contract)
+    pub fee_address: Option<Addr>,
+    /// CW1 whitelist contract code id used to store 3rd party generator staking rewards
+    pub whitelist_code_id: u64,
+    /// The address of the contract that contains the coins with their precision
+    pub coin_registry_address: Addr,
+}
 
 /// This enum describes available pair types.
 /// ## Available pool types
@@ -16,30 +29,32 @@ const MAX_MAKER_FEE_BPS: u16 = 10_000;
 /// Stable {};
 /// Custom(String::from("Custom"));
 /// ```
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
+#[cw_serde]
 pub enum PairType {
     /// XYK pair type
     Xyk {},
     /// Stable pair type
     Stable {},
+    /// Concentrated liquidity pair type
+    Concentrated {},
     /// Custom pair type
     Custom(String),
 }
 
-// Return a raw encoded string representing the name of each pool type
+/// Returns a raw encoded string representing the name of each pool type
 impl Display for PairType {
     fn fmt(&self, fmt: &mut Formatter) -> Result {
         match self {
             PairType::Xyk {} => fmt.write_str("xyk"),
             PairType::Stable {} => fmt.write_str("stable"),
+            PairType::Concentrated {} => fmt.write_str("concentrated"),
             PairType::Custom(pair_type) => fmt.write_str(format!("custom-{}", pair_type).as_str()),
         }
     }
 }
 
 /// This structure stores a pair type's configuration.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[cw_serde]
 pub struct PairConfig {
     /// ID of contract which is allowed to create pairs of this type
     pub code_id: u64,
@@ -62,12 +77,12 @@ impl PairConfig {
     /// ## Params
     /// `&self` is the type of the caller object.
     pub fn valid_fee_bps(&self) -> bool {
-        self.total_fee_bps <= MAX_TOTAL_FEE_BPS && self.maker_fee_bps <= MAX_MAKER_FEE_BPS
+        self.total_fee_bps <= 10_000 && self.maker_fee_bps <= 10_000
     }
 }
 
 /// This structure stores the basic settings for creating a new factory contract.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[cw_serde]
 pub struct InstantiateMsg {
     /// IDs of contracts that are allowed to instantiate pairs
     pub pair_configs: Vec<PairConfig>,
@@ -81,11 +96,12 @@ pub struct InstantiateMsg {
     pub owner: String,
     /// CW1 whitelist contract code id used to store 3rd party rewards for staking Astroport LP tokens
     pub whitelist_code_id: u64,
+    /// The address of the contract that contains the coins and their accuracy
+    pub coin_registry_address: String,
 }
 
 /// This structure describes the execute messages of the contract.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
+#[cw_serde]
 pub enum ExecuteMsg {
     /// UpdateConfig updates relevant code IDs
     UpdateConfig {
@@ -97,6 +113,8 @@ pub enum ExecuteMsg {
         generator_address: Option<String>,
         /// CW1 whitelist contract code id used to store 3rd party rewards for staking Astroport LP tokens
         whitelist_code_id: Option<u64>,
+        /// The address of the contract that contains the coins and their accuracy
+        coin_registry_address: Option<String>,
     },
     /// UpdatePairConfig updates the config for a pair type.
     UpdatePairConfig {
@@ -134,17 +152,20 @@ pub enum ExecuteMsg {
 }
 
 /// This structure describes the available query messages for the factory contract.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
+#[cw_serde]
+#[derive(QueryResponses)]
 pub enum QueryMsg {
     /// Config returns contract settings specified in the custom [`ConfigResponse`] structure.
+    #[returns(ConfigResponse)]
     Config {},
     /// Pair returns information about a specific pair according to the specified assets.
+    #[returns(PairInfo)]
     Pair {
         /// The assets for which we return a pair
         asset_infos: Vec<AssetInfo>,
     },
     /// Pairs returns an array of pairs and their information according to the specified parameters in `start_after` and `limit` variables.
+    #[returns(PairsResponse)]
     Pairs {
         /// The pair item to start reading from. It is an [`Option`] type that accepts [`AssetInfo`] elements.
         start_after: Option<Vec<AssetInfo>>,
@@ -152,18 +173,21 @@ pub enum QueryMsg {
         limit: Option<u32>,
     },
     /// FeeInfo returns fee parameters for a specific pair. The response is returned using a [`FeeInfoResponse`] structure
+    #[returns(FeeInfoResponse)]
     FeeInfo {
         /// The pair type for which we return fee information. Pair type is a [`PairType`] struct
         pair_type: PairType,
     },
     /// Returns a vector that contains blacklisted pair types
+    #[returns(Vec<PairType>)]
     BlacklistedPairTypes {},
     /// Returns a vector that contains pair addresses that are not migrated
+    #[returns(Vec<Addr>)]
     PairsToMigrate {},
 }
 
 /// A custom struct for each query response that returns general contract settings/configs.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[cw_serde]
 pub struct ConfigResponse {
     /// Addres of owner that is allowed to change contract parameters
     pub owner: Addr,
@@ -177,23 +201,25 @@ pub struct ConfigResponse {
     pub generator_address: Option<Addr>,
     /// CW1 whitelist contract code id used to store 3rd party rewards for staking Astroport LP tokens
     pub whitelist_code_id: u64,
+    /// The address of the contract that contains the coins and their accuracy
+    pub coin_registry_address: Addr,
 }
 
 /// This structure stores the parameters used in a migration message.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[cw_serde]
 pub struct MigrateMsg {
     pub params: Binary,
 }
 
 /// A custom struct for each query response that returns an array of objects of type [`PairInfo`].
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[cw_serde]
 pub struct PairsResponse {
     /// Arrays of structs containing information about multiple pairs
     pub pairs: Vec<PairInfo>,
 }
 
 /// A custom struct for each query response that returns an object of type [`FeeInfoResponse`].
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[cw_serde]
 pub struct FeeInfoResponse {
     /// Contract address to send governance fees to
     pub fee_address: Option<Addr>,
@@ -204,22 +230,10 @@ pub struct FeeInfoResponse {
 }
 
 /// This is an enum used for setting and removing a contract address.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
+#[cw_serde]
 pub enum UpdateAddr {
     /// Sets a new contract address.
     Set(String),
     /// Removes a contract address.
     Remove {},
 }
-
-/// Map which contains a list of all pairs which are able to convert X <> Y assets.
-/// Example: given 3 pools (X, Y), (X,Y,Z) and (X,Y,Z,W), the map will contain the following entries
-/// (pair addresses):  
-/// `ROUTE[X][Y] = [(X,Y), (X,Y,Z), (X,Y,Z,W)]`  
-/// `ROUTE[X][Z] = [(X,Y,Z), (X,Y,Z,W)]`  
-/// `ROUTE[X][W] = [(X,Y,Z,W)]`  
-/// ...  
-///
-/// Notice that `ROUTE[X][Y] = ROUTE[Y][X]`
-pub const ROUTE: Map<(String, String), Vec<Addr>> = Map::new("routes");

@@ -6,7 +6,7 @@ use astroport::generator::{ExecuteMsg as GeneratorExecuteMsg, Cw20HookMsg as Gen
 use astroport_governance::utils::{EPOCH_START, WEEK};
 use astroport_governance::voting_escrow::{Cw20HookMsg as VotingCw20HookMsg, ExecuteMsg as VotingExecuteMsg};
 use astroport_governance::escrow_fee_distributor::{ExecuteMsg as FeeExecuteMsg};
-use astroport::restricted_vector::RestrictedVector;
+use astroport::generator::RestrictedVector;
 use spectrum::adapters::generator::Generator;
 use crate::astro_gov::{AstroGov, AstroGovUnchecked, Lock};
 use crate::contract::{execute, instantiate, query};
@@ -67,12 +67,12 @@ fn create(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result
     let info = mock_info(USER1, &[]);
     let msg = InstantiateMsg {
         astro_token: ASTRO_TOKEN.to_string(),
-        astro_gov: AstroGovUnchecked {
+        astro_gov: Some(AstroGovUnchecked {
             xastro_token: XASTRO_TOKEN.to_string(),
             voting_escrow: VOTING_ESCROW.to_string(),
             fee_distributor: FEE_DISTRIBUTOR.to_string(),
             generator_controller: GENERATOR_CONTROLLER.to_string(),
-        },
+        }),
         owner: USER1.to_string(),
         generator: GENERATOR.to_string(),
         controller: CONTROLLER.to_string(),
@@ -86,12 +86,12 @@ fn create(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result
 
     let msg = InstantiateMsg {
         astro_token: ASTRO_TOKEN.to_string(),
-        astro_gov: AstroGovUnchecked {
+        astro_gov: Some(AstroGovUnchecked {
             xastro_token: XASTRO_TOKEN.to_string(),
             voting_escrow: VOTING_ESCROW.to_string(),
             fee_distributor: FEE_DISTRIBUTOR.to_string(),
             generator_controller: GENERATOR_CONTROLLER.to_string(),
-        },
+        }),
         owner: USER1.to_string(),
         generator: GENERATOR.to_string(),
         controller: CONTROLLER.to_string(),
@@ -151,12 +151,12 @@ fn config(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result
     let res: Config = from_binary(&query(deps.as_ref(), env.clone(), msg)?)?;
     assert_eq!(res, Config {
         astro_token: Addr::unchecked(ASTRO_TOKEN),
-        astro_gov: AstroGov {
+        astro_gov: Some(AstroGov {
             xastro_token: Addr::unchecked(XASTRO_TOKEN),
             voting_escrow: Addr::unchecked(VOTING_ESCROW),
             fee_distributor: Addr::unchecked(FEE_DISTRIBUTOR),
             generator_controller: Addr::unchecked(GENERATOR_CONTROLLER),
-        },
+        }),
         owner: Addr::unchecked(USER1),
         generator: Generator(Addr::unchecked(GENERATOR)),
         controller: Addr::unchecked(CONTROLLER),

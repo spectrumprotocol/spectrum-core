@@ -1,8 +1,9 @@
-use cosmwasm_std::{Addr, CosmosMsg, Decimal, StdResult, to_binary, Uint128, WasmMsg};
+use cosmwasm_std::{Addr, Api, CosmosMsg, Decimal, StdResult, to_binary, Uint128, WasmMsg};
 use cw20::{Cw20ReceiveMsg};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use astroport::restricted_vector::RestrictedVector;
+use astroport::asset::AssetInfo;
+use astroport::generator::RestrictedVector;
 use spectrum::adapters::generator::Generator;
 use spectrum::helper::ScalingUint128;
 use crate::astro_gov::{AstroGov, AstroGovUnchecked};
@@ -10,7 +11,7 @@ use crate::astro_gov::{AstroGov, AstroGovUnchecked};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub generator: String,
-    pub astro_gov: AstroGovUnchecked,
+    pub astro_gov: Option<AstroGovUnchecked>,
     pub owner: String,
     pub controller: String,
     pub astro_token: String,
@@ -23,7 +24,7 @@ pub struct InstantiateMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
     pub generator: Generator,
-    pub astro_gov: AstroGov,
+    pub astro_gov: Option<AstroGov>,
     pub owner: Addr,
     pub controller: Addr,
     pub astro_token: Addr,
@@ -33,6 +34,20 @@ pub struct Config {
     pub boost_fee: Decimal,
 }
 
+pub fn get_asset_info(api: &dyn Api, addr: &Addr) -> AssetInfo {
+    if api.addr_validate(addr.as_ref()).is_ok() {
+        AssetInfo::Token { contract_addr: addr.clone() }
+    } else {
+        AssetInfo::NativeToken { denom: addr.to_string() }
+    }
+}
+
+impl Config {
+    pub fn get_astro_asset_info(&self, api: &dyn Api) -> AssetInfo {
+        get_asset_info(api, &self.astro_token)
+    }
+}
+
 pub fn zero_address() -> Addr {
     Addr::unchecked("")
 }
@@ -40,9 +55,9 @@ pub fn zero_address() -> Addr {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct PoolInfo {
     pub total_bond_share: Uint128,
-    pub reward_indexes: RestrictedVector<Addr, Decimal>,
+    pub reward_indexes: RestrictedVector<Decimal>,
     pub prev_reward_user_index: Decimal,
-    pub prev_reward_debt_proxy: RestrictedVector<Addr, Uint128>,
+    pub prev_reward_debt_proxy: RestrictedVector<Uint128>,
     #[serde(default)] pub last_reconcile: u64,
 }
 
@@ -75,8 +90,8 @@ impl PoolInfo {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct UserInfo {
     pub bond_share: Uint128,
-    pub reward_indexes: RestrictedVector<Addr, Decimal>,
-    pub pending_rewards: RestrictedVector<Addr, Uint128>,
+    pub reward_indexes: RestrictedVector<Decimal>,
+    pub pending_rewards: RestrictedVector<Uint128>,
 }
 
 impl UserInfo {
@@ -102,8 +117,8 @@ impl UserInfo {
 pub struct UserInfoResponse {
     pub bond_share: Uint128,
     pub bond_amount: Uint128,
-    pub reward_indexes: RestrictedVector<Addr, Decimal>,
-    pub pending_rewards: RestrictedVector<Addr, Uint128>,
+    pub reward_indexes: RestrictedVector<Decimal>,
+    pub pending_rewards: RestrictedVector<Uint128>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]

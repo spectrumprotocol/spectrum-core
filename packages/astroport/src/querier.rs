@@ -1,27 +1,20 @@
 use crate::asset::{Asset, AssetInfo, PairInfo};
 use crate::factory::{
-    ConfigResponse as FactoryConfigResponse, FeeInfoResponse, PairType, PairsResponse,
+    Config, ConfigResponse as FactoryConfigResponse, FeeInfoResponse, PairType, PairsResponse,
     QueryMsg as FactoryQueryMsg,
 };
 use crate::pair::{QueryMsg as PairQueryMsg, ReverseSimulationResponse, SimulationResponse};
 
 use cosmwasm_std::{
-    Addr, AllBalanceResponse, BankQuery, Coin, Decimal, QuerierWrapper, QueryRequest, StdResult,
-    Uint128,
+    from_slice, Addr, AllBalanceResponse, BankQuery, Coin, Decimal, QuerierWrapper, QueryRequest,
+    StdError, StdResult, Uint128,
 };
 
 use cw20::{BalanceResponse as Cw20BalanceResponse, Cw20QueryMsg, TokenInfoResponse};
 
-// It's defined at https://github.com/terra-money/core/blob/d8e277626e74f9d6417dcd598574686882f0274c/types/assets/assets.go#L15
-pub const NATIVE_TOKEN_PRECISION: u8 = 6;
-
 /// Returns a native token's balance for a specific account.
-/// ## Params
-/// * **querier** is an object of type [`QuerierWrapper`].
 ///
-/// * **account_addr** is an object of type [`impl Into<String>`].
-///
-/// * **denom** is an object of type [`impl Into<String>`] used to specify the denomination used to return the balance (e.g uluna).
+/// * **denom** specifies the denomination used to return the balance (e.g uluna).
 pub fn query_balance(
     querier: &QuerierWrapper,
     account_addr: impl Into<String>,
@@ -33,10 +26,8 @@ pub fn query_balance(
 }
 
 /// Returns the total balances for all coins at a specified account address.
-/// ## Params
-/// * **querier** is an object of type [`QuerierWrapper`].
 ///
-/// * **account_addr** is an object of type [`Addr`] which is the address for which we query balances.
+/// * **account_addr** address for which we query balances.
 pub fn query_all_balances(querier: &QuerierWrapper, account_addr: Addr) -> StdResult<Vec<Coin>> {
     let all_balances: AllBalanceResponse =
         querier.query(&QueryRequest::Bank(BankQuery::AllBalances {
@@ -46,12 +37,10 @@ pub fn query_all_balances(querier: &QuerierWrapper, account_addr: Addr) -> StdRe
 }
 
 /// Returns a token balance for an account.
-/// ## Params
-/// * **querier** is an object of type [`QuerierWrapper`].
 ///
-/// * **contract_addr** This is the token contract for which we return a balance.
+/// * **contract_addr** token contract for which we return a balance.
 ///
-/// * **account_addr** is the account address for which we return a balance.
+/// * **account_addr** account address for which we return a balance.
 pub fn query_token_balance(
     querier: &QuerierWrapper,
     contract_addr: impl Into<String>,
@@ -73,10 +62,8 @@ pub fn query_token_balance(
 }
 
 /// Returns a token's symbol.
-/// ## Params
-/// * **querier** is an object of type [`QuerierWrapper`].
 ///
-/// * **contract_addr** is a object of type [`impl Into<String>`] which is the token contract address.
+/// * **contract_addr** token contract address.
 pub fn query_token_symbol(
     querier: &QuerierWrapper,
     contract_addr: impl Into<String>,
@@ -88,10 +75,8 @@ pub fn query_token_symbol(
 }
 
 /// Returns the total supply of a specific token.
-/// ## Params
-/// * **querier** is an object of type [`QuerierWrapper`].
 ///
-/// * **contract_addr** is an object of type [`impl Into<String>`] which is the token contract address.
+/// * **contract_addr** token contract address.
 pub fn query_supply(
     querier: &QuerierWrapper,
     contract_addr: impl Into<String>,
@@ -103,29 +88,44 @@ pub fn query_supply(
 }
 
 /// Returns the number of decimals that a token has.
-/// ## Params
-/// * **querier** is an object of type [`QuerierWrapper`].
 ///
-/// * **asset_info** is a reference of type [`AssetInfo`] and contains the asset details for a specific token.
-pub fn query_token_precision(querier: &QuerierWrapper, asset_info: &AssetInfo) -> StdResult<u8> {
-    let decimals = match asset_info {
-        AssetInfo::NativeToken { .. } => NATIVE_TOKEN_PRECISION,
+/// * **asset_info** is an object of type [`AssetInfo`] and contains the asset details for a specific token.
+pub fn query_token_precision(
+    querier: &QuerierWrapper,
+    asset_info: &AssetInfo,
+    factory_addr: &Addr,
+) -> StdResult<u8> {
+    Ok(match asset_info {
+        AssetInfo::NativeToken { denom } => {
+            if let Some(res) = querier.query_wasm_raw(factory_addr, b"config".as_slice())? {
+                let res: Config = from_slice(&res)?;
+                let result = ap_native_coin_registry::COINS_INFO.query(
+                    querier,
+                    res.coin_registry_address,
+                    denom.to_string(),
+                )?;
+
+                if let Some(decimals) = result {
+                    decimals
+                } else {
+                    return Err(StdError::generic_err(format!(
+                        "The {denom} precision was not found"
+                    )));
+                }
+            } else {
+                return Err(StdError::generic_err("The factory config not found!"));
+            }
+        }
         AssetInfo::Token { contract_addr } => {
             let res: TokenInfoResponse =
                 querier.query_wasm_smart(contract_addr, &Cw20QueryMsg::TokenInfo {})?;
 
             res.decimals
         }
-    };
-
-    Ok(decimals)
+    })
 }
 
 /// Returns the configuration for the factory contract.
-/// ## Params
-/// * **querier** is an object of type [`QuerierWrapper`].
-///
-/// * **factory_contract** is an object of type [`impl Into<String>`] which is the Astroport factory contract address.
 pub fn query_factory_config(
     querier: &QuerierWrapper,
     factory_contract: impl Into<String>,
@@ -144,12 +144,8 @@ pub struct FeeInfo {
 }
 
 /// Returns the fee information for a specific pair type.
-/// ## Params
-/// * **querier** is an object of type [`QuerierWrapper`].
 ///
-/// * **factory_contract** is an object of type [`impl Into<String>`].
-///
-/// * **pair_type** is an object of type [`PairType`]. This is the pair type we return information for.
+/// * **pair_type** pair type we query information for.
 pub fn query_fee_info(
     querier: &QuerierWrapper,
     factory_contract: impl Into<String>,
@@ -166,12 +162,6 @@ pub fn query_fee_info(
 }
 
 /// Accepts two tokens as input and returns a pair's information.
-/// ## Params
-/// * **querier** is an object of type [`QuerierWrapper`].
-///
-/// * **factory_contract** is an object of type [`impl Into<String>`] and it's the Astroport factory contract address
-///
-/// * **asset_infos** is an array that contains two items of type [`AssetInfo`].
 pub fn query_pair_info(
     querier: &QuerierWrapper,
     factory_contract: impl Into<String>,
@@ -185,15 +175,8 @@ pub fn query_pair_info(
     )
 }
 
-/// Returns a vector that contains items of type [`PairInfo`] which symbolize pairs instantiated in the Astroport factory
-/// ## Params
-/// * **querier** is an object of type [`QuerierWrapper`].
-///
-/// * **factory_contract** is an object of type [`impl Into<String>`] and represents the Astroport factory contract address.
-///
-/// * **start_after** is an [`Option`] field that contains an array with two items of type [`AssetInfo`].
-///
-/// * **limit** is an [`Option`] field of type [`u32`] which is the maximum amount of pairs for which to return information.
+/// Returns a vector that contains items of type [`PairInfo`] which
+/// symbolize pairs instantiated in the Astroport factory
 pub fn query_pairs_info(
     querier: &QuerierWrapper,
     factory_contract: impl Into<String>,
@@ -207,12 +190,10 @@ pub fn query_pairs_info(
 }
 
 /// Returns information about a swap simulation using a [`SimulationResponse`] object.
-/// ## Params
-/// * **querier** is an object of type [`QuerierWrapper`].
 ///
-/// * **pair_contract** is an object of type [`impl Into<String>`] and represents the address of the pair for which we return swap simulation info.
+/// * **pair_contract** address of the pair for which we return swap simulation info.
 ///
-/// * **offer_asset** is an object of type [`Asset`] and represents the asset that is being swapped.
+/// * **offer_asset** asset that is being swapped.
 pub fn simulate(
     querier: &QuerierWrapper,
     pair_contract: impl Into<String>,
@@ -228,12 +209,10 @@ pub fn simulate(
 }
 
 /// Returns information about a reverse swap simulation using a [`ReverseSimulationResponse`] object.
-/// ## Params
-/// * **querier** is an object of type [`QuerierWrapper`].
 ///
-/// * **pair_contract** is an object of type [`impl Into<String>`] and represents the address of the pair for which we return swap simulation info.
+/// * **pair_contract**  address of the pair for which we return swap simulation info.
 ///
-/// * **ask_asset** is an object of type [`Asset`] and represents the asset that we swap to.
+/// * **ask_asset** represents the asset that we swap to.
 pub fn reverse_simulate(
     querier: &QuerierWrapper,
     pair_contract: impl Into<String>,

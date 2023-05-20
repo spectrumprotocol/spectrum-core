@@ -1,5 +1,5 @@
 use astroport::common::{propose_new_owner, drop_ownership_proposal, claim_ownership};
-use cosmwasm_std::{entry_point, DepsMut, Env, MessageInfo, Response, from_binary, Deps, Binary, to_binary, Empty, StdError, Uint128, Decimal};
+use cosmwasm_std::{entry_point, DepsMut, Env, MessageInfo, Response, from_binary, Deps, Binary, to_binary, Empty, StdError, Uint128, Decimal, Addr};
 use cw20::Cw20ReceiveMsg;
 use astroport_governance::utils::get_period;
 use spectrum::adapters::generator::Generator;
@@ -27,10 +27,14 @@ pub fn instantiate(
 
     let config = Config {
         generator: Generator(deps.api.addr_validate(&msg.generator)?),
-        astro_gov: msg.astro_gov.check(deps.api)?,
+        astro_gov: if let Some(astro_gov) = msg.astro_gov {
+            Some(astro_gov.check(deps.api)?)
+        } else {
+            None
+        },
         owner: deps.api.addr_validate(&msg.owner)?,
         controller: deps.api.addr_validate(&msg.controller)?,
-        astro_token: deps.api.addr_validate(&msg.astro_token)?,
+        astro_token: Addr::unchecked(msg.astro_token),
         fee_collector: deps.api.addr_validate(&msg.fee_collector)?,
         max_quota: msg.max_quota,
         staker_rate: msg.staker_rate,

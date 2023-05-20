@@ -1,7 +1,4 @@
-use cosmwasm_std::{
-    attr, entry_point, from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo,
-    Response, StdError, StdResult, Uint128,
-};
+use cosmwasm_std::{attr, entry_point, from_binary, to_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult, Uint128, Addr};
 
 use crate::{
     bond::{bond, bond_assets, bond_to},
@@ -56,7 +53,7 @@ pub fn instantiate(
             fee: msg.fee,
             fee_collector: deps.api.addr_validate(&msg.fee_collector)?,
             liquidity_token: deps.api.addr_validate(&msg.liquidity_token)?,
-            base_reward_token: deps.api.addr_validate(&msg.base_reward_token)?,
+            base_reward_token: Addr::unchecked(&msg.base_reward_token),
             pair: Pair(deps.api.addr_validate(&msg.pair)?),
             name: msg.name,
             symbol: msg.symbol,

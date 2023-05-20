@@ -27,13 +27,18 @@ pub fn get_period(time: u64) -> StdResult<u64> {
 }
 
 /// Calculates how many periods are in the specified time interval. The time should be in seconds.
-    pub fn get_periods_count(interval: u64) -> u64 {
+pub fn get_periods_count(interval: u64) -> u64 {
     interval / WEEK
 }
 
 /// This trait was implemented to eliminate Decimal rounding problems.
 trait DecimalRoundedCheckedMul {
     fn checked_mul(self, other: Uint128) -> Result<Uint128, OverflowError>;
+}
+
+pub trait DecimalCheckedOps {
+    fn checked_add(self, other: Decimal) -> Result<Decimal, OverflowError>;
+    fn checked_mul_uint128(self, other: Uint128) -> Result<Uint128, OverflowError>;
 }
 
 impl DecimalRoundedCheckedMul for Decimal {
@@ -65,33 +70,29 @@ impl DecimalRoundedCheckedMul for Decimal {
     }
 }
 
-pub trait CheckedMultiplyRatio {
-    fn checked_multiply_ratio<A: Into<u128>, B: Into<u128>>(
-        &self,
-        numerator: A,
-        denominator: B,
-    ) -> StdResult<Uint128>;
-}
-
-impl CheckedMultiplyRatio for Uint128 {
-    fn checked_multiply_ratio<A: Into<u128>, B: Into<u128>>(
-        &self,
-        numerator: A,
-        denominator: B,
-    ) -> StdResult<Uint128> {
-        let numerator: u128 = numerator.into();
-        let denominator: u128 = denominator.into();
-        if denominator == 0 {
-            Err(StdError::generic_err("Division by zero"))
+impl DecimalCheckedOps for Decimal {
+    fn checked_add(self, other: Decimal) -> Result<Decimal, OverflowError> {
+        self.numerator()
+            .checked_add(other.numerator())
+            .map(|_| self + other)
+    }
+    fn checked_mul_uint128(self, other: Uint128) -> Result<Uint128, OverflowError> {
+        if self.is_zero() || other.is_zero() {
+            return Ok(Uint128::zero());
+        }
+        let multiply_ratio = other.full_mul(self.numerator()) / Uint256::from(self.denominator());
+        if multiply_ratio > Uint256::from(Uint128::MAX) {
+            Err(OverflowError::new(
+                cosmwasm_std::OverflowOperation::Mul,
+                self,
+                other,
+            ))
         } else {
-            (self.full_mul(numerator) / Uint256::from(denominator))
-                .try_into()
-                .map_err(Into::into)
+            Ok(multiply_ratio.try_into().unwrap())
         }
     }
 }
 
-/// # Description
 /// Main function used to calculate a user's voting power at a specific period as: previous_power - slope*(x - previous_x).
 pub fn calc_voting_power(
     slope: Uint128,

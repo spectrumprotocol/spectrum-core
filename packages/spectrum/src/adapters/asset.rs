@@ -10,7 +10,7 @@ pub trait AssetEx {
 
     fn deposit_asset(
         &self,
-        info: &MessageInfo,
+        info: &mut MessageInfo,
         recipient: &Addr,
         messages: &mut Vec<CosmosMsg>,
     ) -> StdResult<()>;
@@ -72,7 +72,7 @@ impl AssetEx for Asset {
 
     fn deposit_asset(
         &self,
-        info: &MessageInfo,
+        info: &mut MessageInfo,
         recipient: &Addr,
         messages: &mut Vec<CosmosMsg>,
     ) -> StdResult<()> {
@@ -85,8 +85,19 @@ impl AssetEx for Asset {
             AssetInfo::Token { .. } => {
                 messages.push(self.transfer_from_msg(&info.sender, recipient)?);
             }
-            AssetInfo::NativeToken { .. } => {
-                self.assert_sent_native_token_balance(info)?;
+            AssetInfo::NativeToken { denom } => {
+                let coin = info.funds.iter_mut().find(|it| it.denom.eq(denom));
+                match coin {
+                    Some(coin) => {
+                        if coin.amount != self.amount {
+                            return Err(StdError::generic_err(
+                                "Native token balance mismatch between the argument and the transferred",
+                            ));
+                        }
+                        coin.amount -= self.amount;
+                    },
+                    None => return Err(StdError::generic_err(format!("Must send reserve token '{0}'", denom))),
+                }
             }
         };
         Ok(())
