@@ -125,9 +125,9 @@ fn validate_pair(
         return Err(ContractError::InvalidPair {})
     }
     if invert {
-        Ok(-config.decimal_delta)
+        Ok(-config.decimal_delta.unwrap_or(0))
     } else {
-        Ok(config.decimal_delta)
+        Ok(config.decimal_delta.unwrap_or(0))
     }
 }
 

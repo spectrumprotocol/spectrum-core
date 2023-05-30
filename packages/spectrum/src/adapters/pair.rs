@@ -1,14 +1,41 @@
 use cosmwasm_std::{Addr, Coin, CosmosMsg, CustomQuery, Decimal256, QuerierWrapper, StdResult, to_binary, WasmMsg};
 use kujira::asset::Asset;
-use kujira::fin::{ConfigResponse, ExecuteMsg, QueryMsg, SimulationResponse};
+use kujira::fin::{ExecuteMsg, QueryMsg, SimulationResponse};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Pair(pub Addr);
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct ConfigResponseCustom {
+    /// See [InstantiateMsg::owner]
+    pub owner: Addr,
+
+    /// See [InstantiateMsg::denoms]
+    pub denoms: [cw20::Denom; 2],
+
+    /// See [InstantiateMsg::price_precision]
+    pub price_precision: kujira::precision::Precision,
+
+    /// See [InstantiateMsg::decimal_delta]
+    pub decimal_delta: Option<i8>,
+
+    /// When a book is bootstrapping, it can accept orders but trades are not yet executed
+    pub is_bootstrapping: bool,
+
+    /// See [InstantiateMsg::fee_taker]    
+    pub fee_taker: Option<Decimal256>,
+
+    /// See [InstantiateMsg::fee_maker]
+    pub fee_maker: Option<Decimal256>,
+
+    /// See [InstantiateMsg::fee_maker_negative]
+    pub fee_maker_negative: Option<bool>,
+}
+
 impl Pair {
-    pub fn query_config<C: CustomQuery>(&self, querier: &QuerierWrapper<C>) -> StdResult<ConfigResponse> {
+    pub fn query_config<C: CustomQuery>(&self, querier: &QuerierWrapper<C>) -> StdResult<ConfigResponseCustom> {
         querier.query_wasm_smart(self.0.to_string(), &QueryMsg::Config {})
     }
 
