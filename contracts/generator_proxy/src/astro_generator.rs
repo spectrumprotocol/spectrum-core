@@ -2,7 +2,7 @@ use cosmwasm_std::{Addr, QuerierWrapper, StdResult};
 use cw_storage_plus::Map;
 use astroport::asset::AssetInfo;
 use astroport::generator::UserInfoV2;
-use astroport::generator::RestrictedVector;
+use astroport::restricted_vector::RestrictedVector;
 use spectrum::adapters::generator::Generator;
 
 const USER_INFO: Map<(&Addr, &Addr), UserInfoV2> = Map::new("user_info");

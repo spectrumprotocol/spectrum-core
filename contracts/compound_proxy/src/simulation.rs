@@ -194,9 +194,6 @@ pub fn query_compound_simulation(
             PairType::Custom(_) => {
                 return Err(StdError::generic_err("Custom pair type not supported"));
             }
-            PairType::Concentrated { .. } => {
-                return Err(StdError::generic_err("Concentrated pair type not supported"));
-            }
         };
 
     Ok(CompoundSimulationResponse {

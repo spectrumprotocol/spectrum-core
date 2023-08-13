@@ -5,7 +5,7 @@ use astroport::asset::{Asset, AssetInfo, AssetInfoExt, token_asset};
 use astroport::querier::query_token_balance;
 use crate::error::ContractError;
 use astroport::generator::{PendingTokenResponse, UserInfoV2};
-use astroport::generator::RestrictedVector;
+use astroport::restricted_vector::RestrictedVector;
 use spectrum::adapters::asset::AssetEx;
 use crate::astro_generator::GeneratorEx;
 use crate::model::{CallbackMsg, Config, get_asset_info, PoolInfo, RewardInfo, UserInfo};

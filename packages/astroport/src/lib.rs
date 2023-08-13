@@ -2,22 +2,36 @@ pub mod asset;
 pub mod common;
 pub mod cosmwasm_ext;
 pub mod factory;
+pub mod fee_granter;
 pub mod generator;
 pub mod generator_proxy;
 pub mod maker;
+pub mod native_coin_registry;
+pub mod native_coin_wrapper;
+pub mod observation;
 pub mod oracle;
+pub mod outpost_handler;
 pub mod pair;
 pub mod pair_bonded;
 pub mod pair_concentrated;
+pub mod pair_concentrated_inj;
 pub mod querier;
+pub mod restricted_vector;
 pub mod router;
+pub mod shared_multisig;
 pub mod staking;
 pub mod token;
 pub mod vesting;
+pub mod xastro_outpost_token;
 pub mod xastro_token;
+
+#[cfg(feature = "injective")]
+pub mod injective_ext;
 
 #[cfg(test)]
 mod mock_querier;
+
+pub mod liquidity_manager;
 #[cfg(test)]
 mod testing;
 
@@ -60,6 +74,16 @@ mod decimal_checked_ops {
             }
         }
     }
+}
+
+use cosmwasm_std::{Decimal, Decimal256, StdError, StdResult, Uint128};
+
+/// Converts [`Decimal256`] to [`Decimal`].
+pub fn to_decimal(value: Decimal256) -> StdResult<Decimal> {
+    let atomics = Uint128::try_from(value.atomics())?;
+    Decimal::from_atomics(atomics, value.decimal_places()).map_err(|_| {
+        StdError::generic_err(format!("Failed to convert Decimal256 {} to Decimal", value))
+    })
 }
 
 pub use decimal_checked_ops::DecimalCheckedOps;

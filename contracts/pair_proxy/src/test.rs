@@ -234,7 +234,7 @@ fn swap(deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Result<(
                     },
                 ],
                 minimum_receive: Some(Uint128::from(99u128)),
-                to: Some(Addr::unchecked(USER_1)),
+                to: Some(USER_1.to_string()),
                 max_spread: Some(Decimal::percent(1))
             })?,
             funds: vec![Coin {

@@ -1,19 +1,23 @@
-use cosmwasm_schema::cw_serde;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+
+use crate::cosmwasm_ext::DecimalToInteger;
+use cosmwasm_schema::cw_serde;
+use cosmwasm_std::{
+    coin, from_slice, to_binary, Addr, Api, BankMsg, Coin, ConversionOverflowError, CosmosMsg,
+    CustomMsg, CustomQuery, Decimal256, Fraction, MessageInfo, QuerierWrapper, StdError, StdResult,
+    Uint128, Uint256, WasmMsg,
+};
+use cw20::{Cw20ExecuteMsg, Cw20QueryMsg, MinterResponse};
+use cw_storage_plus::{Key, KeyDeserialize, Prefixer, PrimaryKey};
+use cw_utils::must_pay;
+use itertools::Itertools;
 
 use crate::factory::PairType;
 use crate::pair::QueryMsg as PairQueryMsg;
 use crate::querier::{
     query_balance, query_token_balance, query_token_precision, query_token_symbol,
 };
-use cosmwasm_std::{
-    to_binary, Addr, Api, BankMsg, Coin, ConversionOverflowError, CosmosMsg, Decimal256, Fraction,
-    MessageInfo, QuerierWrapper, StdError, StdResult, Uint128, Uint256, WasmMsg,
-};
-use cw20::{Cw20ExecuteMsg, Cw20QueryMsg, MinterResponse};
-use cw_utils::must_pay;
-use itertools::Itertools;
 
 /// UST token denomination
 pub const UUSD_DENOM: &str = "uusd";
@@ -21,6 +25,8 @@ pub const UUSD_DENOM: &str = "uusd";
 pub const ULUNA_DENOM: &str = "uluna";
 /// Minimum initial LP share
 pub const MINIMUM_LIQUIDITY_AMOUNT: Uint128 = Uint128::new(1_000);
+/// Maximum denom length
+pub const DENOM_MAX_LENGTH: usize = 128;
 
 /// This enum describes a Terra asset (native or CW20).
 #[cw_serde]
@@ -38,6 +44,15 @@ pub struct DecimalAsset {
     pub amount: Decimal256,
 }
 
+impl DecimalAsset {
+    pub fn into_asset(self, precision: impl Into<u32> + Sized) -> StdResult<Asset> {
+        Ok(Asset {
+            info: self.info,
+            amount: self.amount.to_uint(precision)?,
+        })
+    }
+}
+
 impl fmt::Display for Asset {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}{}", self.amount, self.info)
@@ -50,33 +65,13 @@ impl Asset {
         self.info.is_native_token()
     }
 
-    /// Calculates and returns a tax for a chain's native token. For other tokens it returns zero.
-    pub fn compute_tax(&self, _querier: &QuerierWrapper) -> StdResult<Uint128> {
-        // tax rate in Terra is set to zero https://terrawiki.org/en/developers/tx-fees
-        Ok(Uint128::zero())
-    }
-
-    /// Calculates and returns a deducted tax for transferring the native token from the chain. For other tokens it returns an [`Err`].
-    pub fn deduct_tax(&self, querier: &QuerierWrapper) -> StdResult<Coin> {
-        if let AssetInfo::NativeToken { denom } = &self.info {
-            Ok(Coin {
-                denom: denom.to_string(),
-                amount: self.amount.checked_sub(self.compute_tax(querier)?)?,
-            })
-        } else {
-            Err(StdError::generic_err("cannot deduct tax from token asset"))
-        }
-    }
-
-    /// For native tokens of type [`AssetInfo`] uses the default method [`BankMsg::Send`] to send a token amount to a recipient.
-    /// Before the token is sent, we need to deduct a tax.
-    ///
-    /// For a token of type [`AssetInfo`] we use the default method [`Cw20ExecuteMsg::Transfer`] and so there's no need to deduct any other tax.
-    pub fn into_msg(
-        self,
-        querier: &QuerierWrapper,
-        recipient: impl Into<String>,
-    ) -> StdResult<CosmosMsg> {
+    /// For native tokens of type [`AssetInfo`] uses the default method [`BankMsg::Send`] to send a
+    /// token amount to a recipient.
+    /// For a token of type [`AssetInfo`] we use the default method [`Cw20ExecuteMsg::Transfer`].
+    pub fn into_msg<T>(self, recipient: impl Into<String>) -> StdResult<CosmosMsg<T>>
+    where
+        T: CustomMsg,
+    {
         let recipient = recipient.into();
         match &self.info {
             AssetInfo::Token { contract_addr } => Ok(CosmosMsg::Wasm(WasmMsg::Execute {
@@ -89,7 +84,7 @@ impl Asset {
             })),
             AssetInfo::NativeToken { .. } => Ok(CosmosMsg::Bank(BankMsg::Send {
                 to_address: recipient,
-                amount: vec![self.deduct_tax(querier)?],
+                amount: vec![self.as_coin()?],
             })),
         }
     }
@@ -116,6 +111,15 @@ impl Asset {
             info: self.info.clone(),
             amount: Decimal256::with_precision(self.amount, precision.into())?,
         })
+    }
+
+    pub fn as_coin(&self) -> StdResult<Coin> {
+        match &self.info {
+            AssetInfo::Token { .. } => {
+                Err(StdError::generic_err("Cannot convert token asset to coin"))
+            }
+            AssetInfo::NativeToken { denom } => Ok(coin(self.amount.u128(), denom)),
+        }
     }
 }
 
@@ -195,11 +199,40 @@ pub enum AssetInfo {
     NativeToken { denom: String },
 }
 
+impl<'a> PrimaryKey<'a> for &AssetInfo {
+    type Prefix = ();
+
+    type SubPrefix = ();
+
+    type Suffix = Self;
+
+    type SuperSuffix = Self;
+
+    fn key(&self) -> Vec<Key> {
+        vec![Key::Ref(self.as_bytes())]
+    }
+}
+
+impl<'a> Prefixer<'a> for &AssetInfo {
+    fn prefix(&self) -> Vec<Key> {
+        vec![Key::Ref(self.as_bytes())]
+    }
+}
+
+impl KeyDeserialize for &AssetInfo {
+    type Output = AssetInfo;
+
+    #[inline(always)]
+    fn from_vec(value: Vec<u8>) -> StdResult<Self::Output> {
+        from_slice(&value)
+    }
+}
+
 impl fmt::Display for AssetInfo {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            AssetInfo::NativeToken { denom } => write!(f, "{}", denom),
-            AssetInfo::Token { contract_addr } => write!(f, "{}", contract_addr),
+            AssetInfo::NativeToken { denom } => write!(f, "{denom}"),
+            AssetInfo::Token { contract_addr } => write!(f, "{contract_addr}"),
         }
     }
 }
@@ -224,11 +257,14 @@ impl AssetInfo {
     /// Returns the balance of token in a pool.
     ///
     /// * **pool_addr** is the address of the contract whose token balance we check.
-    pub fn query_pool(
+    pub fn query_pool<C>(
         &self,
-        querier: &QuerierWrapper,
+        querier: &QuerierWrapper<C>,
         pool_addr: impl Into<String>,
-    ) -> StdResult<Uint128> {
+    ) -> StdResult<Uint128>
+    where
+        C: CustomQuery,
+    {
         match self {
             AssetInfo::Token { contract_addr, .. } => {
                 query_token_balance(querier, contract_addr, pool_addr)
@@ -238,7 +274,10 @@ impl AssetInfo {
     }
 
     /// Returns the number of decimals that a token has.
-    pub fn decimals(&self, querier: &QuerierWrapper, factory_addr: &Addr) -> StdResult<u8> {
+    pub fn decimals<C>(&self, querier: &QuerierWrapper<C>, factory_addr: &Addr) -> StdResult<u8>
+    where
+        C: CustomQuery,
+    {
         query_token_precision(querier, self, factory_addr)
     }
 
@@ -269,18 +308,50 @@ impl AssetInfo {
         }
     }
 
-    /// Returns [`Ok`] if the token of type [`AssetInfo`] is in lowercase and valid. Otherwise returns [`Err`].
-    /// ## Params
-    /// * **self** is the type of the caller object.
-    ///
-    /// * **api** is a object of type [`Api`]
+    /// Checks that the tokens' denom or contract addr is valid.
     pub fn check(&self, api: &dyn Api) -> StdResult<()> {
-        if let AssetInfo::Token { contract_addr } = self {
-            api.addr_validate(contract_addr.as_str())?;
+        match self {
+            AssetInfo::Token { contract_addr } => {
+                api.addr_validate(contract_addr.as_str())?;
+            }
+            AssetInfo::NativeToken { denom } => {
+                validate_native_denom(denom)?;
+            }
         }
 
         Ok(())
     }
+}
+
+/// Taken from https://github.com/mars-protocol/red-bank/blob/5bb0fe145588352b281803f7b870103bc6832621/packages/utils/src/helpers.rs#L68
+/// Follows cosmos SDK validation logic where denom can be 3 - 128 characters long
+/// and starts with a letter, followed but either a letter, number, or separator ( ‘/' , ‘:' , ‘.’ , ‘_’ , or '-')
+/// reference: https://github.com/cosmos/cosmos-sdk/blob/7728516abfab950dc7a9120caad4870f1f962df5/types/coin.go#L865-L867
+pub fn validate_native_denom(denom: &str) -> StdResult<()> {
+    if denom.len() < 3 || denom.len() > DENOM_MAX_LENGTH {
+        return Err(StdError::generic_err(format!(
+            "Invalid denom length [3,{DENOM_MAX_LENGTH}]: {denom}"
+        )));
+    }
+
+    let mut chars = denom.chars();
+    let first = chars.next().unwrap();
+    if !first.is_ascii_alphabetic() {
+        return Err(StdError::generic_err(format!(
+            "First character is not ASCII alphabetic: {denom}"
+        )));
+    }
+
+    let set = ['/', ':', '.', '_', '-'];
+    for c in chars {
+        if !(c.is_ascii_alphanumeric() || set.contains(&c)) {
+            return Err(StdError::generic_err(format!(
+                "Not all characters are ASCII alphanumeric or one of:  /  :  .  _  -: {denom}"
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 /// This structure stores the main parameters for an Astroport pair
@@ -300,11 +371,14 @@ impl PairInfo {
     /// Returns the balance for each asset in the pool.
     ///
     /// * **contract_addr** is pair's pool address.
-    pub fn query_pools(
+    pub fn query_pools<C>(
         &self,
-        querier: &QuerierWrapper,
+        querier: &QuerierWrapper<C>,
         contract_addr: impl Into<String>,
-    ) -> StdResult<Vec<Asset>> {
+    ) -> StdResult<Vec<Asset>>
+    where
+        C: CustomQuery,
+    {
         let contract_addr = contract_addr.into();
         self.asset_infos
             .iter()
@@ -344,6 +418,7 @@ impl PairInfo {
 }
 
 /// Returns a lowercased, validated address upon success if present.
+#[inline]
 pub fn addr_opt_validate(api: &dyn Api, addr: &Option<String>) -> StdResult<Option<Addr>> {
     addr.as_ref()
         .map(|addr| api.addr_validate(addr))
@@ -353,10 +428,13 @@ pub fn addr_opt_validate(api: &dyn Api, addr: &Option<String>) -> StdResult<Opti
 const TOKEN_SYMBOL_MAX_LENGTH: usize = 4;
 
 /// Returns a formatted LP token name
-pub fn format_lp_token_name(
+pub fn format_lp_token_name<C>(
     asset_infos: &[AssetInfo],
-    querier: &QuerierWrapper,
-) -> StdResult<String> {
+    querier: &QuerierWrapper<C>,
+) -> StdResult<String>
+where
+    C: CustomQuery,
+{
     let mut short_symbols: Vec<String> = vec![];
     for asset_info in asset_infos {
         let short_symbol = match &asset_info {
@@ -439,6 +517,7 @@ pub fn check_swap_parameters(pools: Vec<Uint128>, swap_amount: Uint128) -> StdRe
 /// Trait extension for AssetInfo to produce [`Asset`] objects from [`AssetInfo`].
 pub trait AssetInfoExt {
     fn with_balance(&self, balance: impl Into<Uint128>) -> Asset;
+    fn with_dec_balance(&self, balance: Decimal256) -> DecimalAsset;
 }
 
 impl AssetInfoExt for AssetInfo {
@@ -446,6 +525,13 @@ impl AssetInfoExt for AssetInfo {
         Asset {
             info: self.clone(),
             amount: balance.into(),
+        }
+    }
+
+    fn with_dec_balance(&self, balance: Decimal256) -> DecimalAsset {
+        DecimalAsset {
+            info: self.clone(),
+            amount: balance,
         }
     }
 }
@@ -622,5 +708,39 @@ mod tests {
                 "Supplied coins contain uusd that is not in the input asset vector"
             )
         );
+    }
+
+    #[test]
+    fn native_denom_validation() {
+        let err = validate_native_denom("ab").unwrap_err();
+        assert_eq!(
+            err,
+            StdError::generic_err("Invalid denom length [3,128]: ab")
+        );
+        let err = validate_native_denom("1usd").unwrap_err();
+        assert_eq!(
+            err,
+            StdError::generic_err("First character is not ASCII alphabetic: 1usd")
+        );
+        let err = validate_native_denom("wow@usd").unwrap_err();
+        assert_eq!(
+            err,
+            StdError::generic_err(
+                "Not all characters are ASCII alphanumeric or one of:  /  :  .  _  -: wow@usd"
+            )
+        );
+        let long_denom: String = ['a'].repeat(129).iter().collect();
+        let err = validate_native_denom(&long_denom).unwrap_err();
+        assert_eq!(
+            err,
+            StdError::generic_err("Invalid denom length [3,128]: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        );
+
+        validate_native_denom("uusd").unwrap();
+        validate_native_denom(
+            "ibc/EBD5A24C554198EBAF44979C5B4D2C2D312E6EBAB71962C92F735499C7575839",
+        )
+        .unwrap();
+        validate_native_denom("factory/wasm1jdppe6fnj2q7hjsepty5crxtrryzhuqsjrj95y/uusd").unwrap();
     }
 }

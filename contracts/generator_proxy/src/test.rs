@@ -3,10 +3,10 @@ use cosmwasm_std::testing::{MOCK_CONTRACT_ADDR, mock_env, mock_info, MockApi, Mo
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use astroport::asset::{token_asset};
 use astroport::generator::{ExecuteMsg as GeneratorExecuteMsg, Cw20HookMsg as GeneratorCw20HookMsg, UserInfoV2, PendingTokenResponse};
+use astroport::restricted_vector::RestrictedVector;
 use astroport_governance::utils::{EPOCH_START, WEEK};
 use astroport_governance::voting_escrow::{Cw20HookMsg as VotingCw20HookMsg, ExecuteMsg as VotingExecuteMsg};
 use astroport_governance::escrow_fee_distributor::{ExecuteMsg as FeeExecuteMsg};
-use astroport::generator::RestrictedVector;
 use spectrum::adapters::generator::Generator;
 use crate::astro_gov::{AstroGov, AstroGovUnchecked, Lock};
 use crate::contract::{execute, instantiate, query};

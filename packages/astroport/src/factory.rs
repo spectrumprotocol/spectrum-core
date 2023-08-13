@@ -1,9 +1,12 @@
 use crate::asset::{AssetInfo, PairInfo};
+
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Addr, Binary};
 use std::fmt::{Display, Formatter, Result};
 
-/// ## Description
+const MAX_TOTAL_FEE_BPS: u16 = 10_000;
+const MAX_MAKER_FEE_BPS: u16 = 10_000;
+
 /// This structure holds the main contract parameters.
 #[cw_serde]
 pub struct Config {
@@ -35,8 +38,6 @@ pub enum PairType {
     Xyk {},
     /// Stable pair type
     Stable {},
-    /// Concentrated liquidity pair type
-    Concentrated {},
     /// Custom pair type
     Custom(String),
 }
@@ -47,7 +48,6 @@ impl Display for PairType {
         match self {
             PairType::Xyk {} => fmt.write_str("xyk"),
             PairType::Stable {} => fmt.write_str("stable"),
-            PairType::Concentrated {} => fmt.write_str("concentrated"),
             PairType::Custom(pair_type) => fmt.write_str(format!("custom-{}", pair_type).as_str()),
         }
     }
@@ -74,10 +74,8 @@ pub struct PairConfig {
 
 impl PairConfig {
     /// This method is used to check fee bps.
-    /// ## Params
-    /// `&self` is the type of the caller object.
     pub fn valid_fee_bps(&self) -> bool {
-        self.total_fee_bps <= 10_000 && self.maker_fee_bps <= 10_000
+        self.total_fee_bps <= MAX_TOTAL_FEE_BPS && self.maker_fee_bps <= MAX_MAKER_FEE_BPS
     }
 }
 
@@ -147,8 +145,6 @@ pub enum ExecuteMsg {
     DropOwnershipProposal {},
     /// Used to claim contract ownership.
     ClaimOwnership {},
-    /// MarkAsMigrated marks pairs as migrated
-    MarkAsMigrated { pairs: Vec<String> },
 }
 
 /// This structure describes the available query messages for the factory contract.
@@ -181,9 +177,6 @@ pub enum QueryMsg {
     /// Returns a vector that contains blacklisted pair types
     #[returns(Vec<PairType>)]
     BlacklistedPairTypes {},
-    /// Returns a vector that contains pair addresses that are not migrated
-    #[returns(Vec<Addr>)]
-    PairsToMigrate {},
 }
 
 /// A custom struct for each query response that returns general contract settings/configs.

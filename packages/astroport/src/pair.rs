@@ -1,8 +1,9 @@
+use crate::observation::OracleObservation;
 use cosmwasm_schema::{cw_serde, QueryResponses};
 
 use crate::asset::{Asset, AssetInfo, PairInfo};
 
-use cosmwasm_std::{from_slice, Addr, Binary, Decimal, QuerierWrapper, StdResult, Uint128};
+use cosmwasm_std::{Addr, Binary, Decimal, Uint128, Uint64};
 use cw20::Cw20ReceiveMsg;
 
 /// The default swap slippage
@@ -45,7 +46,6 @@ pub enum ExecuteMsg {
     /// Swap performs a swap in the pool
     Swap {
         offer_asset: Asset,
-        #[serde(skip_serializing_if = "Option::is_none")]
         ask_asset_info: Option<AssetInfo>,
         belief_price: Option<Decimal>,
         max_spread: Option<Decimal>,
@@ -72,7 +72,6 @@ pub enum ExecuteMsg {
 pub enum Cw20HookMsg {
     /// Swap a given amount of asset
     Swap {
-        #[serde(skip_serializing_if = "Option::is_none")]
         ask_asset_info: Option<AssetInfo>,
         belief_price: Option<Decimal>,
         max_spread: Option<Decimal>,
@@ -105,7 +104,6 @@ pub enum QueryMsg {
     #[returns(SimulationResponse)]
     Simulation {
         offer_asset: Asset,
-        #[serde(skip_serializing_if = "Option::is_none")]
         ask_asset_info: Option<AssetInfo>,
     },
     /// Returns information about cumulative prices in a [`ReverseSimulationResponse`] object.
@@ -120,6 +118,15 @@ pub enum QueryMsg {
     /// Returns current D invariant in as a [`u128`] value
     #[returns(Uint128)]
     QueryComputeD {},
+    /// Returns the balance of the specified asset that was in the pool just preceeding the moment of the specified block height creation.
+    #[returns(Option<Uint128>)]
+    AssetBalanceAt {
+        asset_info: AssetInfo,
+        block_height: Uint64,
+    },
+    /// Query price from observations
+    #[returns(OracleObservation)]
+    Observe { seconds_ago: u64 },
 }
 
 /// This struct is used to return a query result with the total amount of LP tokens and assets in a specific pool.
@@ -138,6 +145,10 @@ pub struct ConfigResponse {
     pub block_time_last: u64,
     /// The pool's parameters
     pub params: Option<Binary>,
+    /// The contract owner
+    pub owner: Addr,
+    /// The factory contract address
+    pub factory_addr: Addr,
 }
 
 /// This structure holds the parameters that are returned from a swap simulation response
@@ -165,14 +176,12 @@ pub struct ReverseSimulationResponse {
 /// This structure is used to return a cumulative prices query response.
 #[cw_serde]
 pub struct CumulativePricesResponse {
-    /// The two assets in the pool to query
+    /// The assets in the pool to query
     pub assets: Vec<Asset>,
     /// The total amount of LP tokens currently issued
     pub total_share: Uint128,
-    /// The last value for the token0 cumulative price
-    pub price0_cumulative_last: Uint128,
-    /// The last value for the token1 cumulative price
-    pub price1_cumulative_last: Uint128,
+    /// The vector contains cumulative prices for each pair of assets in the pool
+    pub cumulative_prices: Vec<(AssetInfo, AssetInfo, Uint128)>,
 }
 
 /// This structure describes a migration message.
@@ -180,11 +189,36 @@ pub struct CumulativePricesResponse {
 #[cw_serde]
 pub struct MigrateMsg {}
 
+/// This structure holds XYK pool parameters.
+#[cw_serde]
+pub struct XYKPoolParams {
+    /// Whether asset balances are tracked over blocks or not.
+    /// They will not be tracked if the parameter is ignored.
+    /// It can not be disabled later once enabled.
+    pub track_asset_balances: Option<bool>,
+}
+
+/// This structure stores a XYK pool's configuration.
+#[cw_serde]
+pub struct XYKPoolConfig {
+    /// Whether asset balances are tracked over blocks or not.
+    pub track_asset_balances: bool,
+}
+
+/// This enum stores the option available to enable asset balances tracking over blocks.
+#[cw_serde]
+pub enum XYKPoolUpdateParams {
+    /// Enables asset balances tracking over blocks.
+    EnableAssetBalancesTracking,
+}
+
 /// This structure holds stableswap pool parameters.
 #[cw_serde]
 pub struct StablePoolParams {
     /// The current stableswap pool amplification
     pub amp: u64,
+    /// The contract owner
+    pub owner: Option<String>,
 }
 
 /// This structure stores a stableswap pool's configuration.
@@ -201,26 +235,11 @@ pub enum StablePoolUpdateParams {
     StopChangingAmp {},
 }
 
-/// This function makes raw query to the factory contract and
-/// checks whether the pair needs to update an owner or not.
-pub fn migration_check(
-    querier: QuerierWrapper,
-    factory: &Addr,
-    pair_addr: &Addr,
-) -> StdResult<bool> {
-    if let Some(res) = querier.query_wasm_raw(factory, b"pairs_to_migrate".as_slice())? {
-        let res: Vec<Addr> = from_slice(&res)?;
-        Ok(res.contains(pair_addr))
-    } else {
-        Ok(false)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::asset::native_asset_info;
-    use cosmwasm_std::{from_binary, to_binary};
+    use cosmwasm_std::{from_binary, from_slice, to_binary};
 
     #[cw_serde]
     pub struct LegacyInstantiateMsg {
@@ -234,6 +253,8 @@ mod tests {
     pub struct LegacyConfigResponse {
         pub block_time_last: u64,
         pub params: Option<Binary>,
+        pub factory_addr: Addr,
+        pub owner: Addr,
     }
 
     #[test]
@@ -263,6 +284,8 @@ mod tests {
                 })
                 .unwrap(),
             ),
+            factory_addr: Addr::unchecked(""),
+            owner: Addr::unchecked(""),
         })
         .unwrap();
 

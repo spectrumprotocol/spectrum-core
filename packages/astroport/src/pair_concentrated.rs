@@ -1,10 +1,12 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Addr, Binary, Decimal, Decimal256, Uint128};
+use cosmwasm_std::{Decimal, Decimal256, Uint128, Uint64};
 
 use crate::asset::PairInfo;
 use crate::asset::{Asset, AssetInfo};
+use crate::observation::OracleObservation;
 use crate::pair::{
-    CumulativePricesResponse, PoolResponse, ReverseSimulationResponse, SimulationResponse,
+    ConfigResponse, CumulativePricesResponse, PoolResponse, ReverseSimulationResponse,
+    SimulationResponse,
 };
 
 /// This structure holds concentrated pool parameters.
@@ -30,6 +32,10 @@ pub struct ConcentratedPoolParams {
     pub price_scale: Decimal,
     /// Half-time used for calculating the price oracle.
     pub ma_half_time: u64,
+    /// Whether asset balances are tracked over blocks or not.
+    /// They will not be tracked if the parameter is ignored.
+    /// It can not be disabled later once enabled.
+    pub track_asset_balances: Option<bool>,
 }
 
 /// This structure holds concentrated pool parameters which can be changed immediately.
@@ -60,6 +66,35 @@ pub enum ConcentratedPoolUpdateParams {
     Promote(PromoteParams),
     /// Stops Amp and Gamma update and stores current values.
     StopChangingAmpGamma {},
+    /// Enable asset balances tracking
+    EnableAssetBalancesTracking {},
+}
+
+/// This structure stores a CL pool's configuration.
+#[cw_serde]
+pub struct ConcentratedPoolConfig {
+    /// Amplification coefficient affects trades close to price_scale
+    pub amp: Decimal,
+    /// Affects how gradual the curve changes from constant sum to constant product
+    /// as price moves away from price scale. Low values mean more gradual.
+    pub gamma: Decimal,
+    /// The minimum fee, charged when pool is fully balanced
+    pub mid_fee: Decimal,
+    /// The maximum fee, charged when pool is imbalanced
+    pub out_fee: Decimal,
+    /// Parameter that defines how gradual the fee changes from fee_mid to fee_out
+    /// based on distance from price_scale.
+    pub fee_gamma: Decimal,
+    /// Minimum profit before initiating a new repeg
+    pub repeg_profit_threshold: Decimal,
+    /// Minimum amount to change price_scale when repegging.
+    pub min_price_scale_delta: Decimal,
+    /// 1 x\[0] = price_scale * x\[1].
+    pub price_scale: Decimal,
+    /// Half-time used for calculating the price oracle.
+    pub ma_half_time: u64,
+    /// Whether asset balances are tracked over blocks or not.
+    pub track_asset_balances: bool,
 }
 
 /// This structure describes the query messages available in the contract.
@@ -99,17 +134,16 @@ pub enum QueryMsg {
     /// Query LP token virtual price
     #[returns(Decimal256)]
     LpPrice {},
-}
-
-/// This struct is used to return a query result with the general contract configuration.
-#[cw_serde]
-pub struct ConfigResponse {
-    /// Last timestamp when the cumulative prices in the pool were updated
-    pub block_time_last: u64,
-    /// The pool's parameters
-    pub params: Option<Binary>,
-    /// Pool's owner
-    pub owner: Option<Addr>,
+    /// Returns the balance of the specified asset that was in the pool just preceding the moment
+    /// of the specified block height creation.
+    #[returns(Option<Uint128>)]
+    AssetBalanceAt {
+        asset_info: AssetInfo,
+        block_height: Uint64,
+    },
+    /// Query price from observations
+    #[returns(OracleObservation)]
+    Observe { seconds_ago: u64 },
 }
 
 #[cw_serde]
