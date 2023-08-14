@@ -31,5 +31,6 @@
       "description": "The 3rd party reward token contract address",
       "type": "string"
     }
-  }
+  },
+  "additionalProperties": false
 }

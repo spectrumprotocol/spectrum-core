@@ -11,7 +11,8 @@
       ],
       "properties": {
         "config": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -24,7 +25,8 @@
       ],
       "properties": {
         "deposit": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -37,7 +39,8 @@
       ],
       "properties": {
         "reward": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -50,7 +53,8 @@
       ],
       "properties": {
         "pending_token": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -63,7 +67,8 @@
       ],
       "properties": {
         "reward_info": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

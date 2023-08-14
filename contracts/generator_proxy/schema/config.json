@@ -3,7 +3,6 @@
   "title": "Config",
   "type": "object",
   "required": [
-    "astro_gov",
     "astro_token",
     "boost_fee",
     "controller",
@@ -15,7 +14,14 @@
   ],
   "properties": {
     "astro_gov": {
-      "$ref": "#/definitions/AstroGovBase_for_Addr"
+      "anyOf": [
+        {
+          "$ref": "#/definitions/AstroGovBase_for_Addr"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "astro_token": {
       "$ref": "#/definitions/Addr"

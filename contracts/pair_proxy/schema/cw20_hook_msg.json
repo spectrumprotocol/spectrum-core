@@ -49,7 +49,8 @@
                 "null"
               ]
             }
-          }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -63,17 +64,16 @@
       "properties": {
         "withdraw_liquidity": {
           "type": "object",
-          "required": [
-            "assets"
-          ],
           "properties": {
             "assets": {
+              "default": [],
               "type": "array",
               "items": {
                 "$ref": "#/definitions/Asset"
               }
             }
-          }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -85,7 +85,6 @@
       "type": "string"
     },
     "Asset": {
-      "title": "Description",
       "description": "This enum describes a Terra asset (native or CW20).",
       "type": "object",
       "required": [
@@ -109,10 +108,11 @@
             }
           ]
         }
-      }
+      },
+      "additionalProperties": false
     },
     "AssetInfo": {
-      "description": "This enum describes available Token types. ## Examples ``` # use cosmwasm_std::Addr; # use astroport::asset::AssetInfo::{NativeToken, Token}; Token { contract_addr: Addr::unchecked(\"terra...\") }; NativeToken { denom: String::from(\"uluna\") }; ```",
+      "description": "This enum describes available Token types. ## Examples ``` # use cosmwasm_std::Addr; # use astroport::asset::AssetInfo::{NativeToken, Token}; Token { contract_addr: Addr::unchecked(\"stake...\") }; NativeToken { denom: String::from(\"uluna\") }; ```",
       "oneOf": [
         {
           "description": "Non-native Token",
@@ -130,7 +130,8 @@
                 "contract_addr": {
                   "$ref": "#/definitions/Addr"
                 }
-              }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false
@@ -151,7 +152,8 @@
                 "denom": {
                   "type": "string"
                 }
-              }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false

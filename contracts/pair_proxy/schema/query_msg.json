@@ -11,7 +11,8 @@
       ],
       "properties": {
         "pair": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -24,7 +25,8 @@
       ],
       "properties": {
         "pool": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -37,7 +39,8 @@
       ],
       "properties": {
         "config": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -58,7 +61,8 @@
             "amount": {
               "$ref": "#/definitions/Uint128"
             }
-          }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -89,13 +93,14 @@
             "offer_asset": {
               "$ref": "#/definitions/Asset"
             }
-          }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
     },
     {
-      "description": "Returns information about cumulative prices in a [`CumulativePricesResponse`] object.",
+      "description": "Returns information about cumulative prices in a [`ReverseSimulationResponse`] object.",
       "type": "object",
       "required": [
         "reverse_simulation"
@@ -120,7 +125,8 @@
                 }
               ]
             }
-          }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -133,7 +139,8 @@
       ],
       "properties": {
         "cumulative_prices": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -146,7 +153,58 @@
       ],
       "properties": {
         "query_compute_d": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Returns the balance of the specified asset that was in the pool just preceeding the moment of the specified block height creation.",
+      "type": "object",
+      "required": [
+        "asset_balance_at"
+      ],
+      "properties": {
+        "asset_balance_at": {
+          "type": "object",
+          "required": [
+            "asset_info",
+            "block_height"
+          ],
+          "properties": {
+            "asset_info": {
+              "$ref": "#/definitions/AssetInfo"
+            },
+            "block_height": {
+              "$ref": "#/definitions/Uint64"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Query price from observations",
+      "type": "object",
+      "required": [
+        "observe"
+      ],
+      "properties": {
+        "observe": {
+          "type": "object",
+          "required": [
+            "seconds_ago"
+          ],
+          "properties": {
+            "seconds_ago": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -158,7 +216,6 @@
       "type": "string"
     },
     "Asset": {
-      "title": "Description",
       "description": "This enum describes a Terra asset (native or CW20).",
       "type": "object",
       "required": [
@@ -182,10 +239,11 @@
             }
           ]
         }
-      }
+      },
+      "additionalProperties": false
     },
     "AssetInfo": {
-      "description": "This enum describes available Token types. ## Examples ``` # use cosmwasm_std::Addr; # use astroport::asset::AssetInfo::{NativeToken, Token}; Token { contract_addr: Addr::unchecked(\"terra...\") }; NativeToken { denom: String::from(\"uluna\") }; ```",
+      "description": "This enum describes available Token types. ## Examples ``` # use cosmwasm_std::Addr; # use astroport::asset::AssetInfo::{NativeToken, Token}; Token { contract_addr: Addr::unchecked(\"stake...\") }; NativeToken { denom: String::from(\"uluna\") }; ```",
       "oneOf": [
         {
           "description": "Non-native Token",
@@ -203,7 +261,8 @@
                 "contract_addr": {
                   "$ref": "#/definitions/Addr"
                 }
-              }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false
@@ -224,7 +283,8 @@
                 "denom": {
                   "type": "string"
                 }
-              }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false
@@ -233,6 +293,10 @@
     },
     "Uint128": {
       "description": "A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u128` to get the value out:\n\n``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);\n\nlet b = Uint128::from(42u64); assert_eq!(b.u128(), 42);\n\nlet c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```",
+      "type": "string"
+    },
+    "Uint64": {
+      "description": "A thin wrapper around u64 that is using strings for JSON encoding/decoding, such that the full u64 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.\n\n# Examples\n\nUse `from` to create instances of this and `u64` to get the value out:\n\n``` # use cosmwasm_std::Uint64; let a = Uint64::from(42u64); assert_eq!(a.u64(), 42);\n\nlet b = Uint64::from(70u32); assert_eq!(b.u64(), 70); ```",
       "type": "string"
     }
   }

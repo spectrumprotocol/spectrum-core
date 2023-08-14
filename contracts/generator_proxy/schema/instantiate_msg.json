@@ -3,7 +3,6 @@
   "title": "InstantiateMsg",
   "type": "object",
   "required": [
-    "astro_gov",
     "astro_token",
     "boost_fee",
     "controller",
@@ -15,7 +14,14 @@
   ],
   "properties": {
     "astro_gov": {
-      "$ref": "#/definitions/AstroGovBase_for_String"
+      "anyOf": [
+        {
+          "$ref": "#/definitions/AstroGovBase_for_String"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "astro_token": {
       "type": "string"

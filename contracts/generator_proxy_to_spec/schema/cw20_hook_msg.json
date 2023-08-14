@@ -9,7 +9,8 @@
       ],
       "properties": {
         "deposit": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
